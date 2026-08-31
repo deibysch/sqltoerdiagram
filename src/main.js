@@ -316,6 +316,10 @@ diagram.onHiddenChange = () => { syncHiddenChip(); saveLayoutDebounced(); };
 
 canvas.addEventListener('contextmenu', (e) => {
   e.preventDefault();
+  if (diagram.toolMode === 'pan') {
+    hideCtx();
+    return;
+  }
   const r = canvas.getBoundingClientRect();
   const sx = e.clientX - r.left, sy = e.clientY - r.top;
   const w = diagram.screenToWorld(sx, sy);

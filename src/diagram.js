@@ -1149,7 +1149,8 @@ export class Diagram {
       }
     });
 
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('mouseup', (e) => {
+      if (e.button !== 0) return;
       this._pointerUp();
       c.style.cursor = this.toolMode === 'pan'
         ? 'grab'

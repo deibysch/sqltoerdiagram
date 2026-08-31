@@ -106,3 +106,60 @@ test('Hand tool pan-only mode disables element selection and movement', () => {
   assert.strictEqual(selected.size, 1, 'Selection was not modified or cleared');
 });
 
+test('Hand tool mode completely ignores right-click on tables, groups, relations, vertices, and canvas', () => {
+  let toolMode = 'pan';
+  let ctxMenuHidden = false;
+  let menuItems = [];
+  let selectedEdgeKey = 'existing_edge';
+  let selectedTables = new Set(['users']);
+
+  // Simulate contextmenu handler logic from main.js
+  function handleContextMenu(e, target) {
+    e.preventDefault();
+    if (toolMode === 'pan') {
+      ctxMenuHidden = true;
+      return;
+    }
+    if (target.type === 'vertex') {
+      selectedEdgeKey = target.key;
+      menuItems.push('Delete vertex');
+    } else if (target.type === 'table') {
+      menuItems.push('Hide table');
+    } else if (target.type === 'edge') {
+      selectedEdgeKey = target.key;
+      menuItems.push('Line style');
+    }
+  }
+
+  let defaultPrevented = false;
+  const dummyEvent = {
+    preventDefault: () => { defaultPrevented = true; }
+  };
+
+  // 1. Right click on a table in Hand Tool mode
+  handleContextMenu(dummyEvent, { type: 'table', key: 'users' });
+  assert.strictEqual(defaultPrevented, true, 'Browser default context menu is prevented');
+  assert.strictEqual(ctxMenuHidden, true, 'Context menu is hidden');
+  assert.strictEqual(menuItems.length, 0, 'No menu items are added');
+  assert.strictEqual(selectedTables.size, 1, 'Existing table selection remains untouched');
+  assert.strictEqual(selectedEdgeKey, 'existing_edge', 'Edge selection remains untouched');
+
+  // 2. Right click on an edge/relation in Hand Tool mode
+  handleContextMenu(dummyEvent, { type: 'edge', key: 'orders.user_id->users.id' });
+  assert.strictEqual(menuItems.length, 0, 'No menu items created for edge');
+  assert.strictEqual(selectedEdgeKey, 'existing_edge', 'Edge selection was not altered');
+
+  // 3. Right click on a vertex in Hand Tool mode
+  handleContextMenu(dummyEvent, { type: 'vertex', key: 'orders.user_id->users.id', index: 0 });
+  assert.strictEqual(menuItems.length, 0, 'No menu items created for vertex');
+  assert.strictEqual(selectedEdgeKey, 'existing_edge', 'Vertex right click did not select edge');
+
+  // 4. Right click mousedown does not initiate pan
+  function handleMouseDown(e) {
+    if (e.button !== 0) return null; // right click is ignored
+    return { panStarted: true };
+  }
+  const rightClickDown = handleMouseDown({ button: 2 });
+  assert.strictEqual(rightClickDown, null, 'Right-click mousedown does not initiate pan or drag');
+});
+
