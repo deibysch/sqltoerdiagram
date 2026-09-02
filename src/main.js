@@ -3,6 +3,7 @@ import { parseSchema, FORMATS } from './parse.js';
 import { layout } from './layout.js';
 import { Diagram } from './diagram.js';
 import { exportSVG } from './svg-export.js';
+import { EDGE_COLORS } from './renderer.js';
 import { serialize, SERIALIZERS } from './formats/serialize.js';
 import { applyEdit, addColumn, deleteColumn, toggleConstraint, addTable, deleteTable } from './edit.js';
 import { createVisualEditor } from './visual-editor.js';
@@ -51,12 +52,36 @@ sqlEl.addEventListener('scroll', () => {
 const LAYOUT_KEY = 'dbdiga-layout';
 
 function collectLayout() {
-  const positions = {};
+  const tables = {};
   for (const t of diagram.model.tables) {
-    if (Number.isFinite(t.x)) positions[t.key] = { x: Math.round(t.x), y: Math.round(t.y) };
+    if (Number.isFinite(t.x)) tables[t.key] = { x: Math.round(t.x), y: Math.round(t.y) };
   }
+
+  const groups = {};
+  for (const a of diagram.annotations) {
+    if (a.type === 'group') {
+      groups[a.text || 'Group'] = {
+        color: a.color,
+        note: a.note || '',
+        tables: a.tables || [],
+      };
+    }
+  }
+
+  const connections = {};
+  if (diagram.edgeColors) {
+    for (const [k, col] of diagram.edgeColors.entries()) {
+      if (col) connections[k] = { color: col };
+    }
+  }
+
   return {
-    positions,
+    version: 1,
+    edgeColorMode: diagram.edgeColorMode || 'multi',
+    tables,
+    positions: tables, // backwards compatibility
+    groups,
+    connections,
     camera: { x: Math.round(diagram.cam.x), y: Math.round(diagram.cam.y), scale: +diagram.cam.scale.toFixed(4) },
     annotations: diagram.annotations.map(a => ({ ...a })),
     hidden: [...diagram.hidden],
@@ -64,7 +89,10 @@ function collectLayout() {
   };
 }
 function saveLayout() {
-  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(collectLayout())); } catch { /* quota */ }
+  try {
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify(collectLayout()));
+    if (editorMode === 'layout') updateLayoutTextarea();
+  } catch { /* quota */ }
 }
 let saveTimer = null;
 function saveLayoutDebounced() {
@@ -79,11 +107,20 @@ function loadSavedLayout() {
 }
 // apply saved positions onto a freshly-parsed model; returns true if any matched
 function applyLayoutData(model, data) {
-  if (!data || !data.positions) return false;
+  if (!data) return false;
+  const pos = data.tables || data.positions;
+  if (!pos) return false;
   let placed = 0;
   for (const t of model.tables) {
-    const p = data.positions[t.key];
+    const p = pos[t.key] || pos[t.name];
     if (p && Number.isFinite(p.x)) { t.x = p.x; t.y = p.y; placed++; }
+  }
+  if (data.edgeColorMode) {
+    diagram.setEdgeColorMode(data.edgeColorMode);
+    syncEdgeColorsBtn();
+  }
+  if (data.connections && typeof data.connections === 'object') {
+    diagram.setEdgeColors(data.connections);
   }
   return placed > 0;
 }
@@ -132,24 +169,70 @@ canvas.addEventListener('contextmenu', (e) => {
   const r = canvas.getBoundingClientRect();
   const sx = e.clientX - r.left, sy = e.clientY - r.top;
   const t = diagram.tableAt(sx, sy);
+  const edge = diagram.edgeAt(sx, sy);
   const items = [];
   if (t) {
     const multi = diagram.selected.has(t) && diagram.selected.size > 1;
     items.push({ label: multi ? `Hide ${diagram.selected.size} tables` : 'Hide table', act: () => diagram.hideTable(t) });
-  } else {
-    const link = diagram.linkAt(sx, sy);
-    if (link) items.push({ label: 'Remove link', act: () => diagram.removeManualLink(link) });
+  } else if (edge) {
+    items.push({ header: `${edge.fromTable}.${edge.fromCol} → ${edge.toTable}.${edge.toCol}` });
+    items.push({
+      type: 'palette',
+      colors: EDGE_COLORS,
+      current: edge.customColor,
+      onSelect: (col) => {
+        diagram.setEdgeColor(edge.key, col);
+        saveLayoutDebounced();
+        if (editorMode === 'layout') updateLayoutTextarea();
+      },
+    });
+    if (edge.customColor) {
+      items.push({
+        label: 'Reset connection color (Auto)',
+        act: () => {
+          diagram.setEdgeColor(edge.key, null);
+          saveLayoutDebounced();
+          if (editorMode === 'layout') updateLayoutTextarea();
+        },
+      });
+    }
+    if (edge.isManual && edge.manualLink) {
+      items.push({ label: 'Remove manual link', act: () => diagram.removeManualLink(edge.manualLink) });
+    }
   }
   if (diagram.hiddenCount() > 0) items.push({ label: `Show all hidden (${diagram.hiddenCount()})`, act: () => diagram.showAllHidden() });
   if (diagram.manualLinkCount() > 0) items.push({ label: `Clear manual links (${diagram.manualLinkCount()})`, act: () => diagram.clearManualLinks() });
   if (!items.length) { hideCtx(); return; }
   ctxMenu.innerHTML = '';
   for (const it of items) {
-    const b = document.createElement('button');
-    b.className = 'ctx-item';
-    b.textContent = it.label;
-    b.addEventListener('click', () => { it.act(); hideCtx(); });
-    ctxMenu.appendChild(b);
+    if (it.header) {
+      const h = document.createElement('div');
+      h.className = 'ctx-header';
+      h.textContent = it.header;
+      ctxMenu.appendChild(h);
+    } else if (it.type === 'palette') {
+      const p = document.createElement('div');
+      p.className = 'ctx-palette';
+      for (const col of it.colors) {
+        const dot = document.createElement('button');
+        dot.className = 'ctx-color-dot' + (it.current === col ? ' active' : '');
+        dot.style.background = col;
+        dot.title = col;
+        dot.addEventListener('click', (e) => {
+          e.stopPropagation();
+          it.onSelect(col);
+          hideCtx();
+        });
+        p.appendChild(dot);
+      }
+      ctxMenu.appendChild(p);
+    } else {
+      const b = document.createElement('button');
+      b.className = 'ctx-item';
+      b.textContent = it.label;
+      b.addEventListener('click', () => { it.act(); hideCtx(); });
+      ctxMenu.appendChild(b);
+    }
   }
   ctxMenu.style.left = sx + 'px';
   ctxMenu.style.top = sy + 'px';
@@ -621,21 +704,88 @@ visualEditor = createVisualEditor({
 
 const modeToggle = $('mode-toggle');
 const visualPane = $('visual-editor');
+const layoutPane = $('layout-editor');
+const layoutJsonEl = $('layout-json');
 let editorMode = localStorage.getItem('dbdiga-mode') || 'code';
+
+function generateLayoutJson() {
+  const data = collectLayout();
+  const out = {
+    version: 1,
+    edgeColorMode: diagram.edgeColorMode || 'multi',
+    tables: data.tables,
+    groups: data.groups,
+    connections: data.connections,
+    camera: data.camera,
+  };
+  return JSON.stringify(out, null, 2);
+}
+
+function updateLayoutTextarea() {
+  if (layoutJsonEl && document.activeElement !== layoutJsonEl) {
+    layoutJsonEl.value = generateLayoutJson();
+  }
+}
+
+let layoutJsonDebounce = null;
+if (layoutJsonEl) {
+  layoutJsonEl.addEventListener('input', () => {
+    clearTimeout(layoutJsonDebounce);
+    layoutJsonDebounce = setTimeout(() => {
+      try {
+        const parsed = JSON.parse(layoutJsonEl.value);
+        if (parsed && typeof parsed === 'object') {
+          applyLayoutData(diagram.model, parsed);
+          if (parsed.camera) diagram.setCamera(parsed.camera);
+          diagram.markDirty();
+          saveLayoutDebounced();
+          statusEl.textContent = 'Layout updated';
+          statusEl.className = 'status ok';
+        }
+      } catch (err) {
+        statusEl.textContent = 'Invalid JSON in Layout';
+        statusEl.className = 'status warn';
+      }
+    }, 300);
+  });
+}
+
 function setMode(mode) {
-  editorMode = mode === 'visual' ? 'visual' : 'code';
+  editorMode = mode === 'visual' ? 'visual' : (mode === 'layout' ? 'layout' : 'code');
   localStorage.setItem('dbdiga-mode', editorMode);
   layoutEl.classList.toggle('visual-mode', editorMode === 'visual');
+  layoutEl.classList.toggle('layout-mode', editorMode === 'layout');
   visualPane.hidden = editorMode !== 'visual';
+  if (layoutPane) layoutPane.hidden = editorMode !== 'layout';
   for (const b of modeToggle.querySelectorAll('.seg-btn'))
     b.classList.toggle('active', b.dataset.mode === editorMode);
   if (editorMode === 'visual') visualEditor.render();
+  if (editorMode === 'layout') updateLayoutTextarea();
 }
 modeToggle.addEventListener('click', (e) => {
   const b = e.target.closest('.seg-btn');
   if (b) setMode(b.dataset.mode);
 });
 setMode(editorMode);
+
+// Connection color mode button in topbar
+const btnEdgeColors = $('btn-edge-colors');
+function syncEdgeColorsBtn() {
+  if (!btnEdgeColors) return;
+  const isMulti = diagram.edgeColorMode !== 'single';
+  btnEdgeColors.title = isMulti ? 'Connection colors: Multicolor (Click to switch to Single color)' : 'Connection colors: Single color (Click to switch to Multicolor)';
+  btnEdgeColors.classList.toggle('active', isMulti);
+}
+if (btnEdgeColors) {
+  btnEdgeColors.addEventListener('click', () => {
+    const next = diagram.edgeColorMode === 'single' ? 'multi' : 'single';
+    diagram.setEdgeColorMode(next);
+    syncEdgeColorsBtn();
+    saveLayoutDebounced();
+    if (editorMode === 'layout') updateLayoutTextarea();
+  });
+  syncEdgeColorsBtn();
+}
 
 $('zoom-in').addEventListener('click', () => diagram.zoomBy(1.25));
 $('zoom-out').addEventListener('click', () => diagram.zoomBy(0.8));
@@ -708,7 +858,7 @@ function exportImage(kind) {
     const url = diagram.exportPNG(2);
     if (url) download('schema.png', url);
   } else {
-    const svg = exportSVG(diagram.model, diagram.themeName, diagram.annotations, diagram.hidden);
+    const svg = exportSVG(diagram.model, diagram.themeName, diagram.annotations, diagram.hidden, diagram.edgeColorMode, diagram.edgeColors);
     if (svg) downloadText('schema.svg', svg, 'image/svg+xml');
   }
 }

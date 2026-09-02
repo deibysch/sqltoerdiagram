@@ -52,6 +52,25 @@ export const THEMES = {
   },
 };
 
+export const EDGE_COLORS = [
+  '#4ea8de', // sky blue
+  '#f77f00', // vibrant orange
+  '#06d6a0', // emerald green
+  '#e63946', // coral crimson
+  '#a06cd5', // soft violet / purple
+  '#ffd166', // warm amber gold
+  '#48cae4', // bright cyan
+  '#f72585', // magenta pink
+  '#80ed99', // mint lime
+  '#b5179e', // deep orchid
+  '#3a86ff', // royal blue
+  '#fb8500', // orange peel
+  '#52b788', // seafoam green
+  '#9d4edd', // amethyst purple
+  '#ff758f', // rose pink
+  '#00b4d8', // cerulean blue
+];
+
 // A scratch context for text measurement (no DOM needed for sizing).
 let measureCanvas = null;
 function measureCtx() {

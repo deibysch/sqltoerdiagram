@@ -1,7 +1,7 @@
 // Diagram controller: owns the camera, input handling (pan / zoom / drag),
 // the render loop, edge routing and export. Renders only when dirty and only
 // what is on screen.
-import { THEMES, rasterizeTable, columnY, measureTable, ROW_H, HEADER_H } from './renderer.js';
+import { THEMES, rasterizeTable, columnY, measureTable, ROW_H, HEADER_H, EDGE_COLORS } from './renderer.js';
 import { NOTE_COLORS, GROUP_COLORS, NOTE_ORDER, GROUP_ORDER, makeAnnotation, resolveGroupColor, computeGroupBounds } from './annotations.js';
 import { relationCardinality } from './cardinality.js';
 import { inferLinks as inferLinksCore } from './infer-links.js';
@@ -26,6 +26,8 @@ export class Diagram {
     this.onHiddenChange = null;    // fired when the hidden set changes
     this.onSelectionChange = null; // fired when the selected set changes
     this.manualLinks = [];         // user-drawn / inferred links {from:{table,col},to:{table,col}}
+    this.edgeColorMode = 'multi';  // 'multi' | 'single'
+    this.edgeColors = new Map();   // relKey -> hex/color
     this.hoverConn = null;         // {t, colIndex} — column row showing connector dots
     this.linking = null;           // in-progress link drag {fromKey, fromCol, side, wx, wy, cx, cy}
     this.pan = null;               // active background pan
@@ -620,23 +622,56 @@ export class Diagram {
     // FK relations carry crow's-foot cardinality; manual links stay neutral.
     const byKey = this._tableMap();
     const edges = [];
-    for (const r of this.model.relations) edges.push({ fk: r.fromTable.toLowerCase(), tk: r.toTable.toLowerCase(), fc: r.fromCols[0], tc: r.toCols[0], manual: false, card: relationCardinality(r, byKey) });
-    for (const l of this.manualLinks) edges.push({ fk: l.from.table, tk: l.to.table, fc: l.from.col, tc: l.to.col, manual: true, card: null });
+    for (const r of this.model.relations) {
+      const fk = r.fromTable.toLowerCase();
+      const tk = r.toTable.toLowerCase();
+      const fc = r.fromCols[0];
+      const tc = r.toCols[0];
+      const key = `${fk}.${(fc || '').toLowerCase()}->${tk}.${(tc || '').toLowerCase()}`;
+      edges.push({ fk, tk, fc, tc, manual: false, card: relationCardinality(r, byKey), key });
+    }
+    for (const l of this.manualLinks) {
+      const fk = l.from.table.toLowerCase();
+      const tk = l.to.table.toLowerCase();
+      const fc = l.from.col;
+      const tc = l.to.col;
+      const key = `${fk}.${(fc || '').toLowerCase()}->${tk}.${(tc || '').toLowerCase()}`;
+      edges.push({ fk, tk, fc, tc, manual: true, card: null, key });
+    }
 
+    let idx = 0;
     for (const e of edges) {
       const seg = this._edgeSeg(e.fk, e.fc, e.tk, e.tc, cull);
-      if (!seg) continue;
+      if (!seg) { idx++; continue; }
       seg.manual = e.manual;
       seg.card = e.card;
+      seg.key = e.key;
+
+      const customColor = this.edgeColors.get(e.key);
+      let edgeColor;
+      if (customColor) {
+        edgeColor = customColor;
+      } else if (this.edgeColorMode === 'single') {
+        edgeColor = theme.edge;
+      } else {
+        edgeColor = EDGE_COLORS[idx % EDGE_COLORS.length];
+      }
+      seg.color = edgeColor;
+      idx++;
+
       const connected = focusKey && (seg.fromKey === focusKey || seg.toKey === focusKey);
       if (focusKey) {
         if (connected) { highlighted.push(seg); continue; }
-        this._stroke(seg, theme.edge, 1.2, fadeAlpha, e.manual);
+        this._stroke(seg, edgeColor, 1.2, fadeAlpha, e.manual);
       } else {
-        this._stroke(seg, theme.edge, 1.5, 0.5, e.manual);
+        const baseAlpha = this.edgeColorMode === 'single' ? 0.6 : 0.85;
+        this._stroke(seg, edgeColor, 1.6, baseAlpha, e.manual);
       }
     }
-    for (const seg of highlighted) this._stroke(seg, theme.edgeHi, 2.2, 1, seg.manual);
+    for (const seg of highlighted) {
+      const hiColor = this.edgeColorMode === 'single' && !this.edgeColors.get(seg.key) ? theme.edgeHi : seg.color;
+      this._stroke(seg, hiColor, 2.4, 1, seg.manual);
+    }
     for (const seg of highlighted) this._drawEdgeLabel(seg);   // words, on top of the lines
   }
 
@@ -672,6 +707,7 @@ export class Diagram {
     const s = 1 / cam.scale;
     const mx = (seg.fx + 3 * seg.c1x + 3 * seg.c2x + seg.tx) / 8;
     const my = (seg.fy + seg.ty) / 2;
+    const edgeColor = seg.color || this.theme.edgeHi;
     ctx.save();
     ctx.font = `${11 * s}px ui-sans-serif, system-ui, sans-serif`;
     ctx.textAlign = 'center';
@@ -679,14 +715,14 @@ export class Diagram {
     const text = seg.card.label;
     const w = ctx.measureText(text).width + 10 * s;
     const h = 16 * s;
-    ctx.globalAlpha = 0.92;
+    ctx.globalAlpha = 0.95;
     ctx.fillStyle = this.theme.tableBg;
     roundRectPath(ctx, mx - w / 2, my - h / 2, w, h, 5 * s);
     ctx.fill();
-    ctx.strokeStyle = this.theme.edgeHi;
-    ctx.lineWidth = 1 * s;
+    ctx.strokeStyle = edgeColor;
+    ctx.lineWidth = 1.2 * s;
     ctx.stroke();
-    ctx.fillStyle = this.theme.edgeHi;
+    ctx.fillStyle = edgeColor;
     ctx.fillText(text, mx, my);
     ctx.restore();
   }
@@ -1178,22 +1214,94 @@ export class Diagram {
     this.markDirty();
   }
 
-  // manual link whose curve passes near the point (for right-click delete)
-  linkAt(sx, sy) {
+  setEdgeColorMode(mode) {
+    this.edgeColorMode = mode === 'single' ? 'single' : 'multi';
+    this.markDirty();
+    this.onLayoutChange?.();
+  }
+
+  setEdgeColor(key, color) {
+    if (!key) return;
+    if (color) {
+      this.edgeColors.set(key.toLowerCase(), color);
+    } else {
+      this.edgeColors.delete(key.toLowerCase());
+    }
+    this.markDirty();
+    this.onLayoutChange?.();
+  }
+
+  setEdgeColors(obj) {
+    this.edgeColors.clear();
+    if (!obj || typeof obj !== 'object') return;
+    for (const [k, v] of Object.entries(obj)) {
+      const color = typeof v === 'string' ? v : v?.color;
+      if (color) this.edgeColors.set(k.toLowerCase(), color);
+    }
+    this.markDirty();
+  }
+
+  // Hit-test any edge (model relation or manual link) near the cursor
+  edgeAt(sx, sy) {
     const w = this.screenToWorld(sx, sy);
-    const tol = 7 / this.cam.scale;
+    const tol = 8 / this.cam.scale;
+    const byKey = this._tableMap();
+    const edges = [];
+    for (const r of this.model.relations) {
+      edges.push({
+        fk: r.fromTable.toLowerCase(),
+        tk: r.toTable.toLowerCase(),
+        fc: r.fromCols[0],
+        tc: r.toCols[0],
+        manual: false,
+        fromTable: r.fromTable,
+        toTable: r.toTable,
+        fromCol: r.fromCols[0],
+        toCol: r.toCols[0],
+        key: `${r.fromTable.toLowerCase()}.${(r.fromCols[0] || '').toLowerCase()}->${r.toTable.toLowerCase()}.${(r.toCols[0] || '').toLowerCase()}`,
+      });
+    }
     for (const l of this.manualLinks) {
-      const seg = this._edgeSeg(l.from.table, l.from.col, l.to.table, l.to.col, null);
-      if (!seg) continue;
-      // sample the bezier
-      for (let i = 0; i <= 16; i++) {
-        const u = i / 16, iu = 1 - u;
+      edges.push({
+        fk: l.from.table.toLowerCase(),
+        tk: l.to.table.toLowerCase(),
+        fc: l.from.col,
+        tc: l.to.col,
+        manual: true,
+        link: l,
+        fromTable: l.from.table,
+        toTable: l.to.table,
+        fromCol: l.from.col,
+        toCol: l.to.col,
+        key: `${l.from.table.toLowerCase()}.${(l.from.col || '').toLowerCase()}->${l.to.table.toLowerCase()}.${(l.to.col || '').toLowerCase()}`,
+      });
+    }
+
+    let idx = 0;
+    for (const e of edges) {
+      const seg = this._edgeSeg(e.fk, e.fc, e.tk, e.tc, null);
+      if (!seg) { idx++; continue; }
+      const customColor = this.edgeColors.get(e.key);
+      const autoColor = this.edgeColorMode === 'single' ? this.theme.edge : EDGE_COLORS[idx % EDGE_COLORS.length];
+      const color = customColor || autoColor;
+      idx++;
+
+      for (let i = 0; i <= 20; i++) {
+        const u = i / 20, iu = 1 - u;
         const bx = iu * iu * iu * seg.fx + 3 * iu * iu * u * seg.c1x + 3 * iu * u * u * seg.c2x + u * u * u * seg.tx;
         const by = iu * iu * iu * seg.fy + 3 * iu * iu * u * seg.fy + 3 * iu * u * u * seg.ty + u * u * u * seg.ty;
-        if (Math.hypot(w.x - bx, w.y - by) <= tol) return l;
+        if (Math.hypot(w.x - bx, w.y - by) <= tol) {
+          return { ...e, color, customColor, isManual: e.manual, manualLink: e.link };
+        }
       }
     }
     return null;
+  }
+
+  // manual link whose curve passes near the point (for right-click delete)
+  linkAt(sx, sy) {
+    const hit = this.edgeAt(sx, sy);
+    return (hit && hit.isManual) ? hit.manualLink : null;
   }
 
   removeManualLink(link) {

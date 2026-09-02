@@ -1,5 +1,5 @@
 // Build a standalone SVG string of the current diagram (vector, theme-aware).
-import { THEMES, columnY, ROW_H, HEADER_H } from './renderer.js';
+import { THEMES, columnY, ROW_H, HEADER_H, EDGE_COLORS } from './renderer.js';
 import { NOTE_COLORS, GROUP_COLORS, resolveGroupColor } from './annotations.js';
 import { relationCardinality } from './cardinality.js';
 
@@ -41,7 +41,7 @@ const hexA = (hex, a) => {
   return `rgba(90,167,255,${a})`;
 };
 
-export function exportSVG(model, themeName, annotations = [], hidden = null) {
+export function exportSVG(model, themeName, annotations = [], hidden = null, edgeColorMode = 'multi', edgeColors = null) {
   const theme = THEMES[themeName] || THEMES.dark;
   const isHidden = (k) => !!(hidden && hidden.has(k));
   const ts = model.tables.filter(t => Number.isFinite(t.x) && !isHidden(t.key));
@@ -74,11 +74,25 @@ export function exportSVG(model, themeName, annotations = [], hidden = null) {
   }
 
   // edges
+  let edgeIndex = 0;
   for (const r of model.relations) {
     const from = byKey.get(r.fromTable.toLowerCase());
     const to = byKey.get(r.toTable.toLowerCase());
     if (!from || !to || !Number.isFinite(from.x) || !Number.isFinite(to.x)) continue;
     if (isHidden(from.key) || isHidden(to.key)) continue;
+
+    const relKey = `${from.key}.${(r.fromCols[0] || '').toLowerCase()}->${to.key}.${(r.toCols[0] || '').toLowerCase()}`;
+    const customColor = edgeColors?.get ? edgeColors.get(relKey) : (edgeColors && edgeColors[relKey]?.color);
+    let color;
+    if (customColor) {
+      color = customColor;
+    } else if (edgeColorMode === 'single') {
+      color = theme.edge;
+    } else {
+      color = EDGE_COLORS[edgeIndex % EDGE_COLORS.length];
+    }
+    edgeIndex++;
+
     const fy = from.y + columnY(from, r.fromCols[0]);
     const ty = to.y + columnY(to, r.toCols[0]);
     const fromRight = (from.x + from.w / 2) < (to.x + to.w / 2);
@@ -87,10 +101,10 @@ export function exportSVG(model, themeName, annotations = [], hidden = null) {
     const dx = Math.max(28, Math.abs(tx - fx) * 0.4);
     const c1x = fx + (fromRight ? dx : -dx);
     const c2x = tx + (fromRight ? -dx : dx);
-    parts.push(`<path d="M ${fx} ${fy} C ${c1x} ${fy}, ${c2x} ${ty}, ${tx} ${ty}" fill="none" stroke="${theme.edge}" stroke-width="1.5"/>`);
+    parts.push(`<path d="M ${fx} ${fy} C ${c1x} ${fy}, ${c2x} ${ty}, ${tx} ${ty}" fill="none" stroke="${color}" stroke-width="1.5"/>`);
     const card = relationCardinality(r, byKey);
-    parts.push(svgMarker(fx, fy, Math.sign(c1x - fx) || 1, card.from, theme.edge));
-    parts.push(svgMarker(tx, ty, Math.sign(c2x - tx) || 1, card.to, theme.edge));
+    parts.push(svgMarker(fx, fy, Math.sign(c1x - fx) || 1, card.from, color));
+    parts.push(svgMarker(tx, ty, Math.sign(c2x - tx) || 1, card.to, color));
   }
 
   // tables

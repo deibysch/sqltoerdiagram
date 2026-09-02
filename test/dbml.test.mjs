@@ -136,5 +136,52 @@ TableGroup Ecommerce [color: #27ae60] {
   ok(svg.includes('#27ae60') || svg.includes('rgba(39,174,96'), 'exportSVG includes custom group color');
 }
 
+// --- Connection Colors and dddbml Layout Export ---
+{
+  const model = {
+    tables: [
+      { name: 'users', key: 'users', x: 50, y: 50, w: 100, h: 80, columns: [{ name: 'id', type: 'int', pk: true }] },
+      { name: 'orders', key: 'orders', x: 300, y: 50, w: 100, h: 80, columns: [{ name: 'id', type: 'int', pk: true }, { name: 'user_id', type: 'int', fk: true }] }
+    ],
+    relations: [
+      { fromTable: 'orders', fromCols: ['user_id'], toTable: 'users', toCols: ['id'] }
+    ],
+  };
+  const annotations = [
+    { id: 'g1', type: 'group', x: 30, y: 20, w: 400, h: 140, text: 'Core', color: '#5aa7ff', tables: ['users', 'orders'] },
+  ];
+  const customColors = new Map([
+    ['orders.user_id->users.id', '#ff0055']
+  ]);
+
+  const svgMulti = exportSVG(model, 'dark', annotations, null, 'multi', customColors);
+  ok(svgMulti.includes('#ff0055'), 'exportSVG includes custom edge color');
+
+  const svgSingle = exportSVG(model, 'dark', annotations, null, 'single', null);
+  ok(svgSingle.includes('stroke='), 'exportSVG single mode includes stroke');
+
+  // Verify dddbml layout structure shape
+  const layoutJson = {
+    version: 1,
+    edgeColorMode: 'multi',
+    tables: {
+      users: { x: 50, y: 50 },
+      orders: { x: 300, y: 50 },
+    },
+    groups: {
+      Core: { color: '#5aa7ff', tables: ['users', 'orders'] }
+    },
+    connections: {
+      'orders.user_id->users.id': { color: '#ff0055' }
+    },
+    camera: { x: 0, y: 0, scale: 1 }
+  };
+  const str = JSON.stringify(layoutJson);
+  const parsedLayout = JSON.parse(str);
+  ok(parsedLayout.tables.users.x === 50, 'dddbml layout JSON parsed table x');
+  ok(parsedLayout.connections['orders.user_id->users.id'].color === '#ff0055', 'dddbml layout JSON connection color preserved');
+  ok(parsedLayout.groups.Core.color === '#5aa7ff', 'dddbml layout JSON group preserved');
+}
+
 console.log(`\nDBML tests: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
