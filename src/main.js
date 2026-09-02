@@ -253,6 +253,20 @@ canvas.addEventListener('contextmenu', (e) => {
         },
       });
     }
+
+    const currentRouting = diagram.edgeRoutings.get(edge.key) || 'default';
+    items.push({
+      label: `Line Style: ${currentRouting === 'default' ? 'Default (' + diagram.edgeRouting + ')' : currentRouting}`,
+      act: () => {
+        const styles = ['default', 'curved', 'straight', 'ortho-sharp', 'ortho-rounded'];
+        const nextIdx = (styles.indexOf(currentRouting) + 1) % styles.length;
+        const nextStyle = styles[nextIdx];
+        diagram.setIndividualEdgeRouting(edge.key, nextStyle === 'default' ? null : nextStyle);
+        saveLayoutDebounced();
+        if (editorMode === 'layout') updateLayoutTextarea();
+      },
+    });
+
     if (edge.isManual && edge.manualLink) {
       items.push({ label: 'Remove manual link', act: () => diagram.removeManualLink(edge.manualLink) });
     }
