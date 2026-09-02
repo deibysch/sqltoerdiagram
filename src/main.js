@@ -201,6 +201,8 @@ canvas.addEventListener('contextmenu', (e) => {
   const items = [];
 
   if (vHit && vHit.isWaypoint) {
+    diagram.selectedEdgeKey = vHit.key;
+    diagram.markDirty();
     items.push({
       label: 'Delete this vertex',
       act: () => {
@@ -213,6 +215,8 @@ canvas.addEventListener('contextmenu', (e) => {
     const multi = diagram.selected.has(t) && diagram.selected.size > 1;
     items.push({ label: multi ? `Hide ${diagram.selected.size} tables` : 'Hide table', act: () => diagram.hideTable(t) });
   } else if (edge) {
+    diagram.selectedEdgeKey = edge.key;
+    diagram.markDirty();
     items.push({ header: `${edge.fromTable}.${edge.fromCol} → ${edge.toTable}.${edge.toCol}` });
     items.push({
       type: 'palette',

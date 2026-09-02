@@ -275,3 +275,99 @@ export function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
   const projY = y1 + t * (y2 - y1);
   return { dist: Math.hypot(px - projX, py - projY), x: projX, y: projY, t };
 }
+
+/**
+ * Calculate accurate distance from point (px, py) to any routed connection path.
+ * Returns { minDist, nearestPoint, insertIndex }
+ */
+export function distanceToRoute(px, py, style, p1, p2, waypoints = []) {
+  const pts = [p1, ...(waypoints || []), p2];
+
+  if (style === 'straight') {
+    let minDist = Infinity;
+    let bestPt = { x: p1.x, y: p1.y };
+    let bestSegment = 0;
+
+    for (let i = 0; i < pts.length - 1; i++) {
+      const res = pointToSegmentDistance(px, py, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y);
+      if (res.dist < minDist) {
+        minDist = res.dist;
+        bestPt = { x: res.x, y: res.y };
+        bestSegment = i;
+      }
+    }
+    return { minDist, nearestPoint: bestPt, insertIndex: bestSegment + 1 };
+  }
+
+  if (style === 'curved') {
+    let minDist = Infinity;
+    let bestPt = { x: p1.x, y: p1.y };
+    let bestSegment = 0;
+
+    if (!waypoints || !waypoints.length) {
+      const fromRight = (p1.nx === 1) || (p1.nx === undefined && p1.x <= p2.x);
+      const dx = Math.max(28, Math.abs(p2.x - p1.x) * 0.4);
+      const c1x = p1.x + (p1.nx !== undefined ? p1.nx * dx : (fromRight ? dx : -dx));
+      const c1y = p1.y + (p1.ny !== undefined ? p1.ny * dx : 0);
+      const c2x = p2.x + (p2.nx !== undefined ? p2.nx * dx : (fromRight ? -dx : dx));
+      const c2y = p2.y + (p2.ny !== undefined ? p2.ny * dx : 0);
+
+      // Sample cubic bezier
+      let prevX = p1.x, prevY = p1.y;
+      const steps = 24;
+      for (let i = 1; i <= steps; i++) {
+        const u = i / steps;
+        const iu = 1 - u;
+        const curX = iu * iu * iu * p1.x + 3 * iu * iu * u * c1x + 3 * iu * u * u * c2x + u * u * u * p2.x;
+        const curY = iu * iu * iu * p1.y + 3 * iu * iu * u * c1y + 3 * iu * u * u * c2y + u * u * u * p2.y;
+        const res = pointToSegmentDistance(px, py, prevX, prevY, curX, curY);
+        if (res.dist < minDist) {
+          minDist = res.dist;
+          bestPt = { x: res.x, y: res.y };
+          bestSegment = 0;
+        }
+        prevX = curX;
+        prevY = curY;
+      }
+      return { minDist, nearestPoint: bestPt, insertIndex: 0 };
+    } else {
+      // Smooth curve through waypoints
+      for (let s = 0; s < pts.length - 1; s++) {
+        const a = pts[s];
+        const b = pts[s + 1];
+        let prevX = a.x, prevY = a.y;
+        const steps = 12;
+        for (let i = 1; i <= steps; i++) {
+          const u = i / steps;
+          const curX = (1 - u) * a.x + u * b.x;
+          const curY = (1 - u) * a.y + u * b.y;
+          const res = pointToSegmentDistance(px, py, prevX, prevY, curX, curY);
+          if (res.dist < minDist) {
+            minDist = res.dist;
+            bestPt = { x: res.x, y: res.y };
+            bestSegment = s;
+          }
+          prevX = curX;
+          prevY = curY;
+        }
+      }
+      return { minDist, nearestPoint: bestPt, insertIndex: bestSegment + 1 };
+    }
+  }
+
+  // Orthogonal styles
+  const ortho = buildOrthogonalPoints(p1, p2, waypoints);
+  let minDist = Infinity;
+  let bestPt = { x: p1.x, y: p1.y };
+  let bestSegment = 0;
+
+  for (let i = 0; i < ortho.length - 1; i++) {
+    const res = pointToSegmentDistance(px, py, ortho[i].x, ortho[i].y, ortho[i + 1].x, ortho[i + 1].y);
+    if (res.dist < minDist) {
+      minDist = res.dist;
+      bestPt = { x: res.x, y: res.y };
+      bestSegment = Math.min(waypoints ? waypoints.length : 0, Math.floor((i / Math.max(1, ortho.length - 1)) * (pts.length - 1)));
+    }
+  }
+  return { minDist, nearestPoint: bestPt, insertIndex: bestSegment + 1 };
+}
