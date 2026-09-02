@@ -185,7 +185,15 @@ TableGroup Ecommerce [color: #27ae60] {
 
 // --- Routing Styles, Waypoints and Perimeter Anchors ---
 {
-  const { getTableAnchor, buildOrthogonalPoints, buildSVGPath, pointToSegmentDistance } = await import('../src/routing.js');
+  const {
+    getTableAnchor,
+    buildOrthogonalPoints,
+    getOrthogonalSegments,
+    moveOrthogonalSegment,
+    moveOrthogonalCorner,
+    buildSVGPath,
+    pointToSegmentDistance,
+  } = await import('../src/routing.js');
 
   const table = { x: 100, y: 100, w: 200, h: 100, columns: [{ name: 'id' }] };
   const targetRight = { x: 400, y: 150 };
@@ -200,16 +208,24 @@ TableGroup Ecommerce [color: #27ae60] {
   const manualAnchor = getTableAnchor(table, 'id', null, { side: 'bottom', offset: 0.5 });
   ok(manualAnchor.side === 'bottom' && manualAnchor.x === 200 && manualAnchor.y === 200, 'getTableAnchor custom bottom anchor');
 
-  // Orthogonal points
+  // Orthogonal points & segments (dbdiagram.io model)
   const p1 = { x: 100, y: 100, nx: 1, ny: 0 };
-  const p2 = { x: 300, y: 200, nx: -1, ny: 0 };
-  const waypoints = [{ x: 200, y: 150 }];
-  const orthoPts = buildOrthogonalPoints(p1, p2, waypoints);
-  ok(orthoPts.length >= 3, 'buildOrthogonalPoints produced multi-point step path');
+  const p2 = { x: 400, y: 300, nx: -1, ny: 0 };
+  const { segments, points } = getOrthogonalSegments(p1, p2, []);
+  ok(segments.length >= 3, 'getOrthogonalSegments produced segments');
+
+  // Move vertical segment (e.g. middle segment at index 1)
+  const movedWaypoints = moveOrthogonalSegment(p1, p2, [], 1, 320, 200);
+  ok(movedWaypoints.length >= 2, 'moveOrthogonalSegment updated orthogonal waypoints');
+  ok(movedWaypoints[0].x === 320, 'moveOrthogonalSegment shifted vertical segment X');
+
+  // Corner movement
+  const movedCorner = moveOrthogonalCorner(p1, p2, movedWaypoints, 0, 310, 120);
+  ok(movedCorner.length >= 2, 'moveOrthogonalCorner updated corners orthogonally');
 
   // SVG Paths
-  const svgStraight = buildSVGPath('straight', p1, p2, waypoints);
-  ok(svgStraight.startsWith('M 100 100 L 200 150 L 300 200'), 'buildSVGPath straight path');
+  const svgStraight = buildSVGPath('straight', p1, p2, [{ x: 200, y: 150 }]);
+  ok(svgStraight.startsWith('M 100 100 L 200 150 L 400 300'), 'buildSVGPath straight path');
 
   const svgOrtho = buildSVGPath('ortho-sharp', p1, p2, []);
   ok(svgOrtho.startsWith('M 100 100'), 'buildSVGPath ortho-sharp path');

@@ -65,71 +65,231 @@ export function getTableAnchor(table, colName, targetPoint = null, anchorConfig 
 }
 
 /**
+ * Simplify and deduplicate orthogonal points sequence (merges collinear points and removes zero-length zigzags).
+ */
+export function cleanOrthogonalPoints(points) {
+  if (!points || points.length <= 2) return points ? [...points] : [];
+
+  // Step 1: Remove duplicate adjacent points
+  const noDups = [];
+  for (const p of points) {
+    if (!noDups.length) {
+      noDups.push({ x: Math.round(p.x), y: Math.round(p.y), nx: p.nx, ny: p.ny });
+      continue;
+    }
+    const prev = noDups[noDups.length - 1];
+    if (Math.hypot(p.x - prev.x, p.y - prev.y) > 0.5) {
+      noDups.push({ x: Math.round(p.x), y: Math.round(p.y), nx: p.nx, ny: p.ny });
+    }
+  }
+
+  // Step 2: Merge collinear segments (3 points in a row with same X or same Y)
+  const merged = [];
+  for (let i = 0; i < noDups.length; i++) {
+    const cur = noDups[i];
+    if (merged.length < 2) {
+      merged.push(cur);
+      continue;
+    }
+    const p1 = merged[merged.length - 2];
+    const p2 = merged[merged.length - 1];
+
+    const isCollinearX = Math.abs(p1.x - p2.x) < 1 && Math.abs(p2.x - cur.x) < 1;
+    const isCollinearY = Math.abs(p1.y - p2.y) < 1 && Math.abs(p2.y - cur.y) < 1;
+
+    if (isCollinearX || isCollinearY) {
+      merged[merged.length - 1] = cur; // replace middle point
+    } else {
+      merged.push(cur);
+    }
+  }
+
+  return merged;
+}
+
+/**
  * Generate orthogonal 90-degree step points between two endpoints with optional waypoints.
  */
 export function buildOrthogonalPoints(p1, p2, waypoints = []) {
-  const pts = [p1, ...(waypoints || []), p2];
-  const ortho = [];
+  if (waypoints && waypoints.length) {
+    // Connect p1 -> w1 -> w2 ... -> p2, ensuring each transition is 90°
+    const raw = [p1, ...waypoints, p2];
+    const ortho = [];
+
+    for (let i = 0; i < raw.length - 1; i++) {
+      const a = raw[i];
+      const b = raw[i + 1];
+      if (i === 0) ortho.push({ x: a.x, y: a.y, nx: a.nx, ny: a.ny });
+
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+
+      if (Math.abs(dx) < 1 || Math.abs(dy) < 1) {
+        ortho.push({ x: b.x, y: b.y, nx: b.nx, ny: b.ny });
+        continue;
+      }
+
+      // If transition between two waypoints is not aligned, insert intermediate 90° corner
+      const isStart = i === 0;
+      const isEnd = i === raw.length - 2;
+
+      if (isStart && Math.abs(a.nx || 0) === 1) {
+        ortho.push({ x: b.x, y: a.y });
+      } else if (isStart && Math.abs(a.ny || 0) === 1) {
+        ortho.push({ x: a.x, y: b.y });
+      } else if (isEnd && Math.abs(b.nx || 0) === 1) {
+        ortho.push({ x: a.x, y: b.y });
+      } else if (isEnd && Math.abs(b.ny || 0) === 1) {
+        ortho.push({ x: b.x, y: a.y });
+      } else {
+        ortho.push({ x: a.x, y: b.y });
+      }
+      ortho.push({ x: b.x, y: b.y, nx: b.nx, ny: b.ny });
+    }
+    return cleanOrthogonalPoints(ortho);
+  }
+
+  // Default automatic S-bend or L-bend
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+
+  const nxa = p1.nx ?? (dx >= 0 ? 1 : -1);
+  const nya = p1.ny ?? 0;
+  const nxb = p2.nx ?? (dx >= 0 ? -1 : 1);
+  const nyb = p2.ny ?? 0;
+
+  const ortho = [{ x: p1.x, y: p1.y, nx: nxa, ny: nya }];
+
+  if (Math.abs(nxa) === 1 && Math.abs(nxb) === 1) {
+    // Both exit/enter horizontally: S-bend or U-bend
+    const midX = (nxa === 1 && nxb === -1 && dx > 40)
+      ? p1.x + dx / 2
+      : (nxa === -1 && nxb === 1 && dx < -40)
+      ? p1.x + dx / 2
+      : p1.x + nxa * Math.max(30, Math.abs(dx) * 0.4);
+
+    ortho.push({ x: midX, y: p1.y });
+    ortho.push({ x: midX, y: p2.y });
+  } else if (Math.abs(nya) === 1 && Math.abs(nyb) === 1) {
+    // Both exit/enter vertically
+    const midY = p1.y + nya * Math.max(30, Math.abs(dy) * 0.4);
+    ortho.push({ x: p1.x, y: midY });
+    ortho.push({ x: p2.x, y: midY });
+  } else if (Math.abs(nxa) === 1) {
+    ortho.push({ x: p2.x, y: p1.y });
+  } else {
+    ortho.push({ x: p1.x, y: p2.y });
+  }
+
+  ortho.push({ x: p2.x, y: p2.y, nx: nxb, ny: nyb });
+  return cleanOrthogonalPoints(ortho);
+}
+
+/**
+ * Extract all horizontal and vertical segments from an orthogonal route.
+ */
+export function getOrthogonalSegments(p1, p2, waypoints = []) {
+  const pts = buildOrthogonalPoints(p1, p2, waypoints);
+  const segments = [];
 
   for (let i = 0; i < pts.length - 1; i++) {
     const a = pts[i];
     const b = pts[i + 1];
+    const isVertical = Math.abs(a.x - b.x) <= Math.abs(a.y - b.y);
+    const mid = {
+      x: Math.round((a.x + b.x) / 2),
+      y: Math.round((a.y + b.y) / 2),
+    };
+    segments.push({
+      index: i,
+      isVertical,
+      p1: a,
+      p2: b,
+      mid,
+      length: Math.hypot(b.x - a.x, b.y - a.y),
+    });
+  }
+  return { points: pts, segments };
+}
 
-    if (i === 0) ortho.push({ x: a.x, y: a.y });
+/**
+ * Move a whole orthogonal segment along its perpendicular axis (like in dbdiagram.io):
+ * - Vertical segment shifts in X
+ * - Horizontal segment shifts in Y
+ * Returns new list of waypoints.
+ */
+export function moveOrthogonalSegment(p1, p2, waypoints, segIndex, mouseX, mouseY) {
+  const pts = buildOrthogonalPoints(p1, p2, waypoints);
+  if (segIndex < 0 || segIndex >= pts.length - 1) return waypoints || [];
 
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
+  const a = pts[segIndex];
+  const b = pts[segIndex + 1];
+  const isVertical = Math.abs(a.x - b.x) <= Math.abs(a.y - b.y);
 
-    if (Math.abs(dx) < 1 || Math.abs(dy) < 1) {
-      ortho.push({ x: b.x, y: b.y });
-      continue;
-    }
-
-    const nxa = a.nx ?? (dx >= 0 ? 1 : -1);
-    const nya = a.ny ?? 0;
-    const nxb = b.nx ?? (dx >= 0 ? -1 : 1);
-    const nyb = b.ny ?? 0;
-
-    // Step routing heuristic
-    if (Math.abs(nxa) === 1 && Math.abs(nxb) === 1) {
-      // Both exit/enter horizontally: S-bend or U-bend
-      const midX = (a.nx === 1 && b.nx === -1 && dx > 40)
-        ? a.x + dx / 2
-        : (a.nx === -1 && b.nx === 1 && dx < -40)
-        ? a.x + dx / 2
-        : a.x + (a.nx || 1) * Math.max(24, Math.abs(dx) * 0.4);
-
-      ortho.push({ x: midX, y: a.y });
-      ortho.push({ x: midX, y: b.y });
-    } else if (Math.abs(nya) === 1 && Math.abs(nyb) === 1) {
-      // Both exit/enter vertically
-      const midY = a.y + (a.ny || 1) * Math.max(24, Math.abs(dy) * 0.4);
-      ortho.push({ x: a.x, y: midY });
-      ortho.push({ x: b.x, y: midY });
-    } else if (Math.abs(nxa) === 1) {
-      // a is horizontal, b is vertical
-      ortho.push({ x: b.x, y: a.y });
+  if (isVertical) {
+    const targetX = Math.round(mouseX);
+    if (segIndex === 0) {
+      // First segment is vertical: create step from p1
+      pts.splice(1, 0, { x: targetX, y: a.y }, { x: targetX, y: b.y });
+    } else if (segIndex === pts.length - 2) {
+      // Last segment is vertical: create step into p2
+      pts.splice(segIndex + 1, 0, { x: targetX, y: a.y }, { x: targetX, y: b.y });
     } else {
-      // a is vertical, b is horizontal
-      ortho.push({ x: a.x, y: b.y });
+      a.x = targetX;
+      b.x = targetX;
     }
-
-    ortho.push({ x: b.x, y: b.y });
-  }
-
-  // Deduplicate adjacent identical points
-  const clean = [];
-  for (const p of ortho) {
-    if (!clean.length) {
-      clean.push(p);
-      continue;
-    }
-    const prev = clean[clean.length - 1];
-    if (Math.hypot(p.x - prev.x, p.y - prev.y) > 0.5) {
-      clean.push(p);
+  } else {
+    const targetY = Math.round(mouseY);
+    if (segIndex === 0) {
+      // First segment is horizontal: create step from p1
+      pts.splice(1, 0, { x: a.x, y: targetY }, { x: b.x, y: targetY });
+    } else if (segIndex === pts.length - 2) {
+      // Last segment is horizontal: create step into p2
+      pts.splice(segIndex + 1, 0, { x: a.x, y: targetY }, { x: b.x, y: targetY });
+    } else {
+      a.y = targetY;
+      b.y = targetY;
     }
   }
-  return clean;
+
+  const cleaned = cleanOrthogonalPoints(pts);
+  return cleaned.slice(1, -1);
+}
+
+/**
+ * Move a corner vertex in orthogonal mode while keeping connected segments horizontal/vertical.
+ */
+export function moveOrthogonalCorner(p1, p2, waypoints, cornerIndex, mouseX, mouseY) {
+  const pts = buildOrthogonalPoints(p1, p2, waypoints);
+  const k = cornerIndex + 1; // index inside pts
+  if (k < 1 || k >= pts.length - 1) return waypoints || [];
+
+  const cur = pts[k];
+  const prev = pts[k - 1];
+  const next = pts[k + 1];
+
+  const targetX = Math.round(mouseX);
+  const targetY = Math.round(mouseY);
+
+  const prevIsHoriz = Math.abs(prev.y - cur.y) <= Math.abs(prev.x - cur.x);
+  if (prevIsHoriz) {
+    prev.y = targetY;
+  } else {
+    prev.x = targetX;
+  }
+
+  const nextIsHoriz = Math.abs(next.y - cur.y) <= Math.abs(next.x - cur.x);
+  if (nextIsHoriz) {
+    next.y = targetY;
+  } else {
+    next.x = targetX;
+  }
+
+  cur.x = targetX;
+  cur.y = targetY;
+
+  const cleaned = cleanOrthogonalPoints(pts);
+  return cleaned.slice(1, -1);
 }
 
 /**
@@ -360,14 +520,28 @@ export function distanceToRoute(px, py, style, p1, p2, waypoints = []) {
   let minDist = Infinity;
   let bestPt = { x: p1.x, y: p1.y };
   let bestSegment = 0;
+  let isVertical = false;
+  let segMid = { x: p1.x, y: p1.y };
 
   for (let i = 0; i < ortho.length - 1; i++) {
-    const res = pointToSegmentDistance(px, py, ortho[i].x, ortho[i].y, ortho[i + 1].x, ortho[i + 1].y);
+    const a = ortho[i];
+    const b = ortho[i + 1];
+    const res = pointToSegmentDistance(px, py, a.x, a.y, b.x, b.y);
     if (res.dist < minDist) {
       minDist = res.dist;
       bestPt = { x: res.x, y: res.y };
-      bestSegment = Math.min(waypoints ? waypoints.length : 0, Math.floor((i / Math.max(1, ortho.length - 1)) * (pts.length - 1)));
+      bestSegment = i;
+      isVertical = Math.abs(a.x - b.x) <= Math.abs(a.y - b.y);
+      segMid = { x: Math.round((a.x + b.x) / 2), y: Math.round((a.y + b.y) / 2) };
     }
   }
-  return { minDist, nearestPoint: bestPt, insertIndex: bestSegment + 1 };
+  return {
+    minDist,
+    nearestPoint: bestPt,
+    insertIndex: bestSegment + 1,
+    segmentIndex: bestSegment,
+    isVertical,
+    segMid,
+    totalSegments: ortho.length - 1,
+  };
 }

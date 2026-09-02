@@ -3,7 +3,7 @@
 // what is on screen.
 import { THEMES, rasterizeTable, columnY, measureTable, ROW_H, HEADER_H, EDGE_COLORS } from './renderer.js';
 import { NOTE_COLORS, GROUP_COLORS, NOTE_ORDER, GROUP_ORDER, makeAnnotation, resolveGroupColor, computeGroupBounds } from './annotations.js';
-import { ROUTING_STYLES, getTableAnchor, drawRoutePath, distanceToRoute, pointToSegmentDistance, buildOrthogonalPoints } from './routing.js';
+import { ROUTING_STYLES, getTableAnchor, drawRoutePath, distanceToRoute, pointToSegmentDistance, buildOrthogonalPoints, getOrthogonalSegments, moveOrthogonalSegment, moveOrthogonalCorner, cleanOrthogonalPoints } from './routing.js';
 import { relationCardinality } from './cardinality.js';
 import { inferLinks as inferLinksCore } from './infer-links.js';
 
@@ -34,6 +34,7 @@ export class Diagram {
     this.edgeWaypoints = new Map();// relKey -> [{ x, y }, ...]
     this.edgeAnchors = new Map();  // relKey -> { fromAnchor: { side, offset }, toAnchor: { side, offset } }
     this.vertexDrag = null;        // active waypoint drag
+    this.segmentDrag = null;       // active orthogonal segment drag (dbdiagram.io style)
     this.anchorDrag = null;        // active anchor drag along table perimeter
     this.selectedEdgeKey = null;   // selected connection for waypoint editing
     this.hoverEdge = null;         // edge under cursor {key, ...}
@@ -621,6 +622,7 @@ export class Diagram {
     const p2 = getTableAnchor(to, toCol, targetForTo, anchorCfg?.toAnchor);
 
     const routingStyle = this.edgeRoutings.get(key) || this.edgeRouting || 'curved';
+    const isOrthogonal = routingStyle === 'ortho-sharp' || routingStyle === 'ortho-rounded';
 
     return {
       p1, p2,
@@ -630,7 +632,18 @@ export class Diagram {
       fromTable: from, toTable: to,
       waypoints,
       routingStyle,
+      isOrthogonal,
     };
+  }
+
+  _edgeSegForDrag(key) {
+    if (!key) return null;
+    const parts = key.split('->');
+    if (parts.length !== 2) return null;
+    const [fPart, tPart] = parts;
+    const [fTable, fCol] = fPart.split('.');
+    const [tTable, tCol] = tPart.split('.');
+    return this._edgeSeg(fTable, fCol, tTable, tCol, null, key);
   }
 
   _drawEdges(vx0, vy0, vx1, vy1) {
@@ -706,7 +719,7 @@ export class Diagram {
 
   _strokeRoute(seg, color, width, alpha, dashed, isSelectedEdge = false, isHoveredEdge = false) {
     const { ctx, cam } = this;
-    const { p1, p2, waypoints, routingStyle, card } = seg;
+    const { p1, p2, waypoints, routingStyle, card, isOrthogonal } = seg;
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
@@ -728,23 +741,68 @@ export class Diagram {
       dot(ctx, p2.x, p2.y, 3 / cam.scale);
     }
 
-    // If edge is selected or hovered, draw vertex handles
+    // If edge is selected or hovered, draw handles
     if (isSelectedEdge || isHoveredEdge) {
       const s = 1 / cam.scale;
-      const r = (isSelectedEdge ? 5.5 : 4.5) * s;
-      if (waypoints && waypoints.length) {
-        for (let i = 0; i < waypoints.length; i++) {
-          const pt = waypoints[i];
-          const isHoveredVertex = this.hoverVertex?.key === seg.key && this.hoverVertex?.index === i && this.hoverVertex?.isWaypoint;
+
+      if (isOrthogonal) {
+        // Orthogonal mode (dbdiagram.io style): segment midpoint handles + corner dots
+        const { segments, points } = getOrthogonalSegments(p1, p2, waypoints);
+
+        // 1) Segment midpoint handles (interactive sliding bars)
+        for (const segment of segments) {
+          const isHoveredSeg = (this.hoverEdge?.key === seg.key && this.hoverEdge?.segmentIndex === segment.index) ||
+                               (this.segmentDrag?.key === seg.key && this.segmentDrag?.segIndex === segment.index);
+          const barW = segment.isVertical ? 6 * s : (isHoveredSeg ? 18 * s : 14 * s);
+          const barH = segment.isVertical ? (isHoveredSeg ? 18 * s : 14 * s) : 6 * s;
+          const rx = barW / 2, ry = barH / 2;
+
           ctx.beginPath();
-          ctx.arc(pt.x, pt.y, isHoveredVertex ? r * 1.3 : r, 0, Math.PI * 2);
-          ctx.fillStyle = isHoveredVertex ? '#ffe600' : (isSelectedEdge ? '#ffffff' : 'rgba(255,255,255,0.85)');
+          if (ctx.roundRect) {
+            ctx.roundRect(segment.mid.x - rx, segment.mid.y - ry, barW, barH, 3 * s);
+          } else {
+            ctx.rect(segment.mid.x - rx, segment.mid.y - ry, barW, barH);
+          }
+          ctx.fillStyle = isHoveredSeg ? '#ffe600' : (isSelectedEdge ? '#ffffff' : 'rgba(255,255,255,0.85)');
           ctx.fill();
-          ctx.strokeStyle = color;
-          ctx.lineWidth = (isHoveredVertex ? 2.5 : 2) * s;
+          ctx.strokeStyle = isHoveredSeg ? '#000000' : color;
+          ctx.lineWidth = 1.5 * s;
           ctx.stroke();
         }
+
+        // 2) Corner dots (intermediate corners)
+        if (points.length > 2) {
+          for (let i = 1; i < points.length - 1; i++) {
+            const pt = points[i];
+            const isHoveredVertex = this.hoverVertex?.key === seg.key && this.hoverVertex?.index === (i - 1) && this.hoverVertex?.isWaypoint;
+            const r = (isHoveredVertex ? 5.5 : 4) * s;
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+            ctx.fillStyle = isHoveredVertex ? '#ffe600' : '#ffffff';
+            ctx.fill();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.8 * s;
+            ctx.stroke();
+          }
+        }
+      } else {
+        // Curved / Straight mode: circular waypoint handles
+        const r = (isSelectedEdge ? 5.5 : 4.5) * s;
+        if (waypoints && waypoints.length) {
+          for (let i = 0; i < waypoints.length; i++) {
+            const pt = waypoints[i];
+            const isHoveredVertex = this.hoverVertex?.key === seg.key && this.hoverVertex?.index === i && this.hoverVertex?.isWaypoint;
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, isHoveredVertex ? r * 1.3 : r, 0, Math.PI * 2);
+            ctx.fillStyle = isHoveredVertex ? '#ffe600' : (isSelectedEdge ? '#ffffff' : 'rgba(255,255,255,0.85)');
+            ctx.fill();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = (isHoveredVertex ? 2.5 : 2) * s;
+            ctx.stroke();
+          }
+        }
       }
+
       // Anchor handles on table edge
       const isHoveredFrom = this.hoverVertex?.key === seg.key && this.hoverVertex?.isAnchor && this.hoverVertex?.isFrom;
       const isHoveredTo = this.hoverVertex?.key === seg.key && this.hoverVertex?.isAnchor && !this.hoverVertex?.isFrom;
@@ -861,18 +919,30 @@ export class Diagram {
 
       if (changed) this.markDirty();
 
-      if (vHit) c.style.cursor = 'move';
-      else if (eHit) c.style.cursor = 'pointer';
-      else if (this._connectorAt(sx, sy)) c.style.cursor = 'crosshair';
-      else if (this._annoChromeAt(sx, sy) || this._addButtonAt(sx, sy)) c.style.cursor = 'pointer';
-      else if (t) c.style.cursor = 'grab';
-      else if (this._noteAt(sx, sy) || this._groupAt(sx, sy)) c.style.cursor = 'grab';
-      else c.style.cursor = 'default';
+      if (vHit) {
+        c.style.cursor = 'move';
+      } else if (eHit) {
+        if (eHit.isOrthogonal) {
+          c.style.cursor = eHit.isVertical ? 'ew-resize' : 'ns-resize';
+        } else {
+          c.style.cursor = 'pointer';
+        }
+      } else if (this._connectorAt(sx, sy)) {
+        c.style.cursor = 'crosshair';
+      } else if (this._annoChromeAt(sx, sy) || this._addButtonAt(sx, sy)) {
+        c.style.cursor = 'pointer';
+      } else if (t) {
+        c.style.cursor = 'grab';
+      } else if (this._noteAt(sx, sy) || this._groupAt(sx, sy)) {
+        c.style.cursor = 'grab';
+      } else {
+        c.style.cursor = 'default';
+      }
     });
 
     window.addEventListener('mouseup', () => {
       this._pointerUp();
-      c.style.cursor = this.hoverVertex ? 'move' : (this.hoverEdge ? 'pointer' : (this.hover ? 'grab' : 'default'));
+      c.style.cursor = this.hoverVertex ? 'move' : (this.hoverEdge ? (this.hoverEdge.isOrthogonal ? (this.hoverEdge.isVertical ? 'ew-resize' : 'ns-resize') : 'pointer') : (this.hover ? 'grab' : 'default'));
     });
 
     // ---- touch (mobile): 1 finger = drag/pan, 2 fingers = pinch-zoom + pan ----
@@ -989,7 +1059,7 @@ export class Diagram {
     const vHit = this.vertexAt(sx, sy);
     if (vHit) {
       if (vHit.isWaypoint) {
-        this.vertexDrag = { key: vHit.key, index: vHit.index, moved: false };
+        this.vertexDrag = { key: vHit.key, index: vHit.index, isOrthogonal: vHit.isOrthogonal, moved: false };
         this.selectedEdgeKey = vHit.key;
         this.selected = new Set();
         this.pinned = null;
@@ -1007,9 +1077,12 @@ export class Diagram {
       }
     }
 
-    // 0b) Edge line click
+    // 0b) Edge line click (or orthogonal segment drag)
     const edge = this.edgeAt(sx, sy);
     if (edge) {
+      if (edge.isOrthogonal) {
+        this.segmentDrag = { key: edge.key, segIndex: edge.segmentIndex, isVertical: edge.isVertical, p1: edge.p1, p2: edge.p2, moved: false };
+      }
       this.selectedEdgeKey = edge.key;
       this.selected = new Set();
       this.pinned = null;
@@ -1108,11 +1181,46 @@ export class Diagram {
 
   // returns true if an active drag/pan/resize consumed the move
   _pointerMove(sx, sy) {
+    if (this.segmentDrag) {
+      const w = this.screenToWorld(sx, sy);
+      const seg = this._edgeSegForDrag(this.segmentDrag.key);
+      if (seg) {
+        const nextWaypoints = moveOrthogonalSegment(
+          seg.p1,
+          seg.p2,
+          this.edgeWaypoints.get(this.segmentDrag.key),
+          this.segmentDrag.segIndex,
+          w.x,
+          w.y
+        );
+        this.setEdgeWaypoints(this.segmentDrag.key, nextWaypoints);
+        this.segmentDrag.moved = true;
+        this.markDirty();
+      }
+      return true;
+    }
     if (this.vertexDrag) {
       const w = this.screenToWorld(sx, sy);
-      this.moveWaypoint(this.vertexDrag.key, this.vertexDrag.index, Math.round(w.x), Math.round(w.y));
-      this.vertexDrag.moved = true;
-      this.markDirty();
+      if (this.vertexDrag.isOrthogonal) {
+        const seg = this._edgeSegForDrag(this.vertexDrag.key);
+        if (seg) {
+          const nextWaypoints = moveOrthogonalCorner(
+            seg.p1,
+            seg.p2,
+            this.edgeWaypoints.get(this.vertexDrag.key),
+            this.vertexDrag.index,
+            w.x,
+            w.y
+          );
+          this.setEdgeWaypoints(this.vertexDrag.key, nextWaypoints);
+          this.vertexDrag.moved = true;
+          this.markDirty();
+        }
+      } else {
+        this.moveWaypoint(this.vertexDrag.key, this.vertexDrag.index, Math.round(w.x), Math.round(w.y));
+        this.vertexDrag.moved = true;
+        this.markDirty();
+      }
       return true;
     }
     if (this.anchorDrag) {
@@ -1210,6 +1318,11 @@ export class Diagram {
   }
 
   _pointerUp() {
+    if (this.segmentDrag) {
+      if (this.segmentDrag.moved) this.onLayoutChange?.();
+      this.segmentDrag = null;
+      return;
+    }
     if (this.vertexDrag) {
       if (this.vertexDrag.moved) this.onLayoutChange?.();
       this.vertexDrag = null;
@@ -1506,10 +1619,12 @@ export class Diagram {
 
     // 1) Test waypoints of all edges (or selected edge first)
     for (const [key, pts] of this.edgeWaypoints.entries()) {
+      const seg = this._edgeSegForDrag(key);
+      const isOrthogonal = seg?.isOrthogonal;
       for (let i = 0; i < pts.length; i++) {
         const pt = pts[i];
         if (Math.hypot(w.x - pt.x, w.y - pt.y) <= tol) {
-          return { key, index: i, x: pt.x, y: pt.y, isWaypoint: true };
+          return { key, index: i, x: pt.x, y: pt.y, isWaypoint: true, isOrthogonal };
         }
       }
     }
@@ -1517,19 +1632,13 @@ export class Diagram {
     // 2) Test anchors of active (selected or hovered) edge
     const activeKey = this.selectedEdgeKey || this.hoverEdge?.key;
     if (activeKey) {
-      const parts = activeKey.split('->');
-      if (parts.length === 2) {
-        const [fPart, tPart] = parts;
-        const [fTable, fCol] = fPart.split('.');
-        const [tTable, tCol] = tPart.split('.');
-        const seg = this._edgeSeg(fTable, fCol, tTable, tCol, null, activeKey);
-        if (seg) {
-          if (Math.hypot(w.x - seg.p1.x, w.y - seg.p1.y) <= tol) {
-            return { key: activeKey, isAnchor: true, isFrom: true, table: seg.fromTable, x: seg.p1.x, y: seg.p1.y };
-          }
-          if (Math.hypot(w.x - seg.p2.x, w.y - seg.p2.y) <= tol) {
-            return { key: activeKey, isAnchor: true, isFrom: false, table: seg.toTable, x: seg.p2.x, y: seg.p2.y };
-          }
+      const seg = this._edgeSegForDrag(activeKey);
+      if (seg) {
+        if (Math.hypot(w.x - seg.p1.x, w.y - seg.p1.y) <= tol) {
+          return { key: activeKey, isAnchor: true, isFrom: true, table: seg.fromTable, x: seg.p1.x, y: seg.p1.y };
+        }
+        if (Math.hypot(w.x - seg.p2.x, w.y - seg.p2.y) <= tol) {
+          return { key: activeKey, isAnchor: true, isFrom: false, table: seg.toTable, x: seg.p2.x, y: seg.p2.y };
         }
       }
     }
@@ -1594,6 +1703,10 @@ export class Diagram {
           p2: seg.p2,
           waypoints,
           routingStyle: seg.routingStyle,
+          isOrthogonal: seg.isOrthogonal,
+          segmentIndex: res.segmentIndex,
+          isVertical: res.isVertical,
+          segMid: res.segMid,
           nearestPoint: res.nearestPoint,
           insertIndex: res.insertIndex,
         };
