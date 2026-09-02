@@ -48,7 +48,7 @@ function dbmlType(t) {
   // bare single-token types stay unquoted; anything with spaces gets quoted
   return /^[\w()]+$/.test(s) ? s : dq(s);
 }
-export function toDBML(model) {
+export function toDBML(model, annotations = []) {
   const L = [];
   for (const t of model.tables) {
     L.push('Table ' + dq(t.name) + ' {');
@@ -69,6 +69,53 @@ export function toDBML(model) {
     if (!fc || !tc) continue;
     L.push('Ref: ' + dq(r.fromTable) + '.' + dq(fc) + ' > ' + dq(r.toTable) + '.' + dq(tc));
   }
+  if (model.relations.length) L.push('');
+
+  // Groups from annotations or model.groups
+  const byKey = new Map(model.tables.map(t => [t.key, t]));
+  const groupAnnotations = Array.isArray(annotations) ? annotations.filter(a => a.type === 'group') : [];
+  if (groupAnnotations.length) {
+    for (const a of groupAnnotations) {
+      let memberNames = [];
+      if (Array.isArray(a.tables) && a.tables.length) {
+        memberNames = a.tables.map(k => byKey.get(String(k).toLowerCase())?.name).filter(Boolean);
+      } else {
+        for (const t of model.tables) {
+          if (Number.isFinite(t.x) && t.x >= a.x - 10 && t.x + t.w <= a.x + a.w + 10 &&
+              t.y >= a.y - 10 && t.y + t.h <= a.y + a.h + 10) {
+            memberNames.push(t.name);
+          }
+        }
+      }
+      if (!memberNames.length) continue;
+      const settings = [];
+      if (a.color && a.color !== 'blue') settings.push('color: ' + a.color);
+      if (a.note) settings.push('note: ' + dq(a.note));
+      const setStr = settings.length ? ' [' + settings.join(', ') + ']' : '';
+      L.push('TableGroup ' + dq(a.text || 'Group') + setStr + ' {');
+      for (const name of memberNames) {
+        L.push('  ' + dq(name));
+      }
+      L.push('}');
+      L.push('');
+    }
+  } else if (Array.isArray(model.groups) && model.groups.length) {
+    for (const g of model.groups) {
+      const memberNames = (g.tables || []).map(k => byKey.get(String(k).toLowerCase())?.name || k);
+      if (!memberNames.length) continue;
+      const settings = [];
+      if (g.color && g.color !== 'blue') settings.push('color: ' + g.color);
+      if (g.note) settings.push('note: ' + dq(g.note));
+      const setStr = settings.length ? ' [' + settings.join(', ') + ']' : '';
+      L.push('TableGroup ' + dq(g.name || 'Group') + setStr + ' {');
+      for (const name of memberNames) {
+        L.push('  ' + dq(name));
+      }
+      L.push('}');
+      L.push('');
+    }
+  }
+
   return L.join('\n').trim() + '\n';
 }
 
@@ -114,7 +161,8 @@ export const SERIALIZERS = {
   plantuml: { label: 'PlantUML', ext: 'puml', fn: toPlantUML },
 };
 
-export function serialize(model, fmt) {
+export function serialize(model, fmt, annotations = []) {
   const s = SERIALIZERS[fmt];
-  return s ? s.fn(model) : '';
+  return s ? s.fn(model, annotations) : '';
 }
+

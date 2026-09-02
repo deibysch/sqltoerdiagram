@@ -2,7 +2,7 @@
 // the render loop, edge routing and export. Renders only when dirty and only
 // what is on screen.
 import { THEMES, rasterizeTable, columnY, measureTable, ROW_H, HEADER_H } from './renderer.js';
-import { NOTE_COLORS, GROUP_COLORS, NOTE_ORDER, GROUP_ORDER, makeAnnotation } from './annotations.js';
+import { NOTE_COLORS, GROUP_COLORS, NOTE_ORDER, GROUP_ORDER, makeAnnotation, resolveGroupColor, computeGroupBounds } from './annotations.js';
 import { relationCardinality } from './cardinality.js';
 import { inferLinks as inferLinksCore } from './infer-links.js';
 
@@ -288,7 +288,7 @@ export class Diagram {
   _drawGroup(a, cull) {
     if (!this._annoVisible(a, cull)) return;
     const { ctx, cam } = this;
-    const color = GROUP_COLORS[a.color] || GROUP_COLORS.blue;
+    const color = resolveGroupColor(a.color);
     ctx.save();
     roundRectPath(ctx, a.x, a.y, a.w, a.h, 12);
     ctx.fillStyle = hexA(color, 0.08);
@@ -424,6 +424,22 @@ export class Diagram {
     this.onLayoutChange?.();
   }
 
+  _fitGroupsForTable(tableKey) {
+    if (!this.annotations?.length || !tableKey) return;
+    const tk = String(tableKey).toLowerCase();
+    for (const a of this.annotations) {
+      if (a.type === 'group' && Array.isArray(a.tables) && a.tables.includes(tk)) {
+        const bounds = computeGroupBounds(a, this.model.tables);
+        if (bounds) {
+          a.x = bounds.x;
+          a.y = bounds.y;
+          a.w = bounds.w;
+          a.h = bounds.h;
+        }
+      }
+    }
+  }
+
   // topmost note, then group (notes render above groups)
   _annoAt(sx, sy) {
     return this._noteAt(sx, sy) || this._groupAt(sx, sy);
@@ -454,7 +470,17 @@ export class Diagram {
     this.pinned = null; this.pinnedKeys = null;
     const ai = this.annotations.indexOf(a);
     this.annotations.splice(ai, 1); this.annotations.push(a);
-    this.annoDrag = { a, dx: w.x - a.x, dy: w.y - a.y, moved: false };
+
+    const tableOffsets = [];
+    if (a.type === 'group' && a.tables && a.tables.length) {
+      const keys = new Set(a.tables.map(k => String(k).toLowerCase()));
+      for (const t of this.model.tables) {
+        if (keys.has(t.key) && Number.isFinite(t.x)) {
+          tableOffsets.push({ t, ox: t.x - a.x, oy: t.y - a.y });
+        }
+      }
+    }
+    this.annoDrag = { a, dx: w.x - a.x, dy: w.y - a.y, moved: false, tableOffsets };
     this.markDirty();
   }
 
@@ -910,7 +936,11 @@ export class Diagram {
     if (this.dragGroup) {
       const w = this.screenToWorld(sx, sy);
       const dx = w.x - this.dragGroup.ax, dy = w.y - this.dragGroup.ay;
-      for (const it of this.dragGroup.items) { it.t.x = it.sx0 + dx; it.t.y = it.sy0 + dy; }
+      for (const it of this.dragGroup.items) {
+        it.t.x = it.sx0 + dx;
+        it.t.y = it.sy0 + dy;
+        this._fitGroupsForTable(it.t.key);
+      }
       this.dragGroup.moved = true;
       this.markDirty();
       return true;
@@ -932,8 +962,16 @@ export class Diagram {
     }
     if (this.annoDrag) {
       const w = this.screenToWorld(sx, sy);
-      this.annoDrag.a.x = w.x - this.annoDrag.dx;
-      this.annoDrag.a.y = w.y - this.annoDrag.dy;
+      const newX = w.x - this.annoDrag.dx;
+      const newY = w.y - this.annoDrag.dy;
+      this.annoDrag.a.x = newX;
+      this.annoDrag.a.y = newY;
+      if (this.annoDrag.tableOffsets && this.annoDrag.tableOffsets.length) {
+        for (const { t, ox, oy } of this.annoDrag.tableOffsets) {
+          t.x = newX + ox;
+          t.y = newY + oy;
+        }
+      }
       this.annoDrag.moved = true;
       this.markDirty();
       return true;
@@ -942,6 +980,7 @@ export class Diagram {
       const w = this.screenToWorld(sx, sy);
       this.drag.t.x = w.x - this.drag.dx;
       this.drag.t.y = w.y - this.drag.dy;
+      this._fitGroupsForTable(this.drag.t.key);
       this.drag.moved = true;
       this.markDirty();
       return true;
@@ -1440,8 +1479,16 @@ function inside(w, a) { return w.x >= a.x && w.x <= a.x + a.w && w.y >= a.y && w
 
 // #rrggbb -> rgba() with alpha
 function hexA(hex, a) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  if (!hex || typeof hex !== 'string') return `rgba(90,167,255,${a})`;
+  if (hex.startsWith('rgba') || hex.startsWith('hsla')) return hex;
+  if (hex.startsWith('rgb(')) return hex.replace('rgb(', 'rgba(').replace(')', `,${a})`);
+  let s = hex.replace('#', '');
+  if (s.length === 3) s = s.split('').map(c => c + c).join('');
+  if (s.length === 6) {
+    const n = parseInt(s, 16);
+    if (!Number.isNaN(n)) return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+  return `rgba(90,167,255,${a})`;
 }
 // single-line truncate to width
 function clip(ctx, text, maxW) {

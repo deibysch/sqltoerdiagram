@@ -39,7 +39,7 @@ export function layout(model, opts = {}, hidden = null) {
     if (f !== t) { bump(f); bump(t); }
   }
 
-  const g = new dagre.graphlib.Graph({ multigraph: true });
+  const g = new dagre.graphlib.Graph({ compound: true, multigraph: true });
   g.setGraph({
     rankdir: dir,
     nodesep: preset.nodesep,
@@ -55,6 +55,20 @@ export function layout(model, opts = {}, hidden = null) {
   for (const t of model.tables) {
     if (isHidden(t.key)) continue;             // hidden tables aren't laid out
     g.setNode(t.key, { width: t.w, height: t.h });
+  }
+
+  if (model.groups && Array.isArray(model.groups)) {
+    for (let i = 0; i < model.groups.length; i++) {
+      const grp = model.groups[i];
+      const grpId = 'grp_' + i;
+      g.setNode(grpId, { label: grp.name, clusterNode: true });
+      for (const tName of grp.tables || []) {
+        const key = String(tName).toLowerCase();
+        if (g.hasNode(key) && !isHidden(key)) {
+          g.setParent(key, grpId);
+        }
+      }
+    }
   }
   let e = 0;
   for (const r of model.relations) {

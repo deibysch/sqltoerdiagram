@@ -95,5 +95,55 @@ export function parseDBML(text) {
     else rels.push({ fromTable: aT, fromCols: [aC], toTable: bT, toCols: [bC] });
   }
 
-  return finalize(tables, rels);
+  // --- TableGroup blocks: TableGroup name [color: #hex, note: '...'] { table1 table2 } ---
+  const groups = [];
+  const groupRe = /\bTableGroup\b\s+((?:[^\s{\[]+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`))(?:\s*\[([^\]]*)\])?\s*\{/gi;
+  while ((m = groupRe.exec(t))) {
+    const rawName = m[1];
+    const settingsStr = m[2] || '';
+    const name = unq(rawName);
+    const b = balanced(t, m.index, '{', '}');
+    if (!b) continue;
+    const body = t.slice(b[0], b[1]);
+
+    let color = 'blue';
+    const colorMatch = /color:\s*['"]?(#[0-9a-fA-F]{3,8}|[a-zA-Z0-9_-]+)['"]?/i.exec(settingsStr);
+    if (colorMatch) {
+      color = colorMatch[1];
+    }
+    let note = '';
+    const noteMatch = /note:\s*(?:'([^']*)'|"([^"]*)"|`([^`]*)`|([^,\]]+))/i.exec(settingsStr);
+    if (noteMatch) {
+      note = (noteMatch[1] || noteMatch[2] || noteMatch[3] || noteMatch[4] || '').trim();
+    }
+
+    const memberTables = [];
+    for (let line of body.split('\n')) {
+      line = line.trim();
+      if (!line || line.startsWith('//') || line.startsWith('/*')) continue;
+      if (/^Note\b/i.test(line)) {
+        const nm = /^Note(?:\s*:\s*(?:'([^']*)'|"([^"]*)"|`([^`]*)`)|(?:\s*\{([\s\S]*?)\}))?/i.exec(line);
+        if (nm && !note) {
+          note = (nm[1] || nm[2] || nm[3] || nm[4] || '').trim();
+        }
+        continue;
+      }
+      if (line === '}' || line.startsWith('}')) continue;
+      const firstToken = line.split(/\s+/)[0];
+      if (firstToken) {
+        const tName = bare(firstToken);
+        if (tName) memberTables.push(tName);
+      }
+    }
+
+    groups.push({
+      name,
+      color,
+      note,
+      tables: memberTables,
+    });
+  }
+
+  return finalize(tables, rels, groups);
 }
+

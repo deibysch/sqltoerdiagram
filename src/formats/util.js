@@ -25,7 +25,7 @@ export function addColumn(table, col) {
 }
 
 // rels: [{ fromTable, fromCols, toTable, toCols }]  (names, not keys)
-export function finalize(tables, rels) {
+export function finalize(tables, rels, groups = []) {
   const byKey = new Map(tables.map((t) => [t.key, t]));
   const resolved = [];
   const seen = new Set();
@@ -49,7 +49,7 @@ export function finalize(tables, rels) {
       refSpan: null,
     });
   }
-  return { tables, relations: resolved, errors: [] };
+  return { tables, relations: resolved, errors: [], groups: groups || [] };
 }
 
 // Return [innerStart, innerEnd, afterClose] for the bracket group whose opening

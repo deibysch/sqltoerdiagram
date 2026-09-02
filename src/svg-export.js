@@ -1,6 +1,6 @@
 // Build a standalone SVG string of the current diagram (vector, theme-aware).
 import { THEMES, columnY, ROW_H, HEADER_H } from './renderer.js';
-import { NOTE_COLORS, GROUP_COLORS } from './annotations.js';
+import { NOTE_COLORS, GROUP_COLORS, resolveGroupColor } from './annotations.js';
 import { relationCardinality } from './cardinality.js';
 
 // Crow's-foot cardinality marker at a line endpoint (world coords).
@@ -29,8 +29,16 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const hexA = (hex, a) => {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  if (!hex || typeof hex !== 'string') return `rgba(90,167,255,${a})`;
+  if (hex.startsWith('rgba') || hex.startsWith('hsla')) return hex;
+  if (hex.startsWith('rgb(')) return hex.replace('rgb(', 'rgba(').replace(')', `,${a})`);
+  let s = hex.replace('#', '');
+  if (s.length === 3) s = s.split('').map(c => c + c).join('');
+  if (s.length === 6) {
+    const n = parseInt(s, 16);
+    if (!Number.isNaN(n)) return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+  return `rgba(90,167,255,${a})`;
 };
 
 export function exportSVG(model, themeName, annotations = [], hidden = null) {
@@ -60,7 +68,7 @@ export function exportSVG(model, themeName, annotations = [], hidden = null) {
   // group boxes (behind everything)
   for (const a of annotations) {
     if (a.type !== 'group') continue;
-    const color = GROUP_COLORS[a.color] || GROUP_COLORS.blue;
+    const color = resolveGroupColor(a.color);
     parts.push(`<rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" rx="12" fill="${hexA(color, 0.08)}" stroke="${hexA(color, 0.7)}" stroke-width="1.5"/>`);
     if (a.text) parts.push(`<text x="${a.x + 10}" y="${a.y + 16}" dominant-baseline="middle" font-weight="600" font-size="13" fill="${color}">${esc(a.text)}</text>`);
   }

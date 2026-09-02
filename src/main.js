@@ -9,7 +9,7 @@ import { createVisualEditor } from './visual-editor.js';
 import { DIALECTS, DEFAULT_DIALECT } from './dialects.js';
 import { highlightSQL } from './highlight.js';
 import { encodeShare, decodeShare } from './share.js';
-import { sanitizeAnnotations } from './annotations.js';
+import { sanitizeAnnotations, computeGroupBounds, newId } from './annotations.js';
 import { EXAMPLE_SQL } from './examples.js';
 
 const $ = (id) => document.getElementById(id);
@@ -251,6 +251,39 @@ const layoutOpts = {
 let formatChoice = localStorage.getItem('dbdiga-format') || 'auto';
 if (!FORMATS[formatChoice]) formatChoice = 'auto';
 
+function syncModelGroups(model, existingAnnotations = []) {
+  if (!model || !Array.isArray(model.groups) || !model.groups.length) {
+    return existingAnnotations;
+  }
+  const notes = existingAnnotations.filter(a => a.type === 'note');
+  const existingGroups = existingAnnotations.filter(a => a.type === 'group');
+
+  const groupsOut = [];
+  for (const g of model.groups) {
+    const memberKeys = (g.tables || []).map(k => String(k).toLowerCase());
+    const bounds = computeGroupBounds({ tables: memberKeys }, model.tables);
+    const existing = existingGroups.find(a => (a.text || '').toLowerCase() === (g.name || '').toLowerCase());
+    const id = existing?.id || newId();
+    const color = g.color || existing?.color || 'blue';
+    const x = bounds ? bounds.x : (existing?.x ?? 40);
+    const y = bounds ? bounds.y : (existing?.y ?? 40);
+    const w = bounds ? bounds.w : (existing?.w ?? 320);
+    const h = bounds ? bounds.h : (existing?.h ?? 240);
+
+    groupsOut.push({
+      id,
+      type: 'group',
+      x, y, w, h,
+      text: g.name || 'Group',
+      color,
+      note: g.note || '',
+      tables: memberKeys,
+    });
+  }
+
+  return [...groupsOut, ...notes];
+}
+
 function rebuild({ arrange = false, restore = null } = {}) {
   const sql = sqlEl.value;
   localStorage.setItem('dbdiga-sql', sql);
@@ -281,19 +314,34 @@ function rebuild({ arrange = false, restore = null } = {}) {
 
   if (arrange) {
     layout(result, layoutOpts, diagram.hidden);
+    if (result.groups?.length) {
+      diagram.setAnnotations(syncModelGroups(result, diagram.annotations));
+    }
     diagram.fit();
   } else if (restore) {
     diagram.setHidden(restore.hidden);               // restore hidden tables before placing
     diagram.setManualLinks(restore.manualLinks);     // restore user-drawn / inferred links
     placeNewTables(result);                          // tables not in the saved layout
-    diagram.setAnnotations(sanitizeAnnotations(restore.annotations));
+    let annos = sanitizeAnnotations(restore.annotations);
+    if (result.groups?.length && !annos.some(a => a.type === 'group')) {
+      annos = syncModelGroups(result, annos);
+    }
+    diagram.setAnnotations(annos);
     if (restore.camera) diagram.setCamera(restore.camera);
     else diagram.fit();
   } else if (firstRender) {
     layout(result, layoutOpts, diagram.hidden);
+    if (result.groups?.length) {
+      diagram.setAnnotations(syncModelGroups(result, diagram.annotations));
+    }
     diagram.fit();
   } else if (structureChanged) {
     placeNewTables(result);                          // keep manual layout, place only new tables
+    if (result.groups?.length) {
+      diagram.setAnnotations(syncModelGroups(result, diagram.annotations));
+    }
+  } else if (result.groups?.length) {
+    diagram.setAnnotations(syncModelGroups(result, diagram.annotations));
   }
 
   diagram.markDirty();
@@ -678,7 +726,7 @@ exportMenu.addEventListener('click', (e) => {
   if (kind === 'png' || kind === 'svg') { exportImage(kind); return; }
   const s = SERIALIZERS[kind];
   if (!s) return;
-  const text = serialize(diagram.model, kind);
+  const text = serialize(diagram.model, kind, diagram.annotations);
   showCodeModal(`Export — ${s.label}`, text, `schema.${s.ext}`, s.label.toLowerCase());
 });
 document.addEventListener('click', () => { exportMenu.hidden = true; });
