@@ -3,6 +3,7 @@
 // what is on screen.
 import { THEMES, rasterizeTable, columnY, measureTable, ROW_H, HEADER_H, EDGE_COLORS } from './renderer.js';
 import { NOTE_COLORS, GROUP_COLORS, NOTE_ORDER, GROUP_ORDER, makeAnnotation, resolveGroupColor, computeGroupBounds } from './annotations.js';
+import { ROUTING_STYLES, getTableAnchor, drawRoutePath, pointToSegmentDistance, buildOrthogonalPoints } from './routing.js';
 import { relationCardinality } from './cardinality.js';
 import { inferLinks as inferLinksCore } from './infer-links.js';
 
@@ -28,6 +29,13 @@ export class Diagram {
     this.manualLinks = [];         // user-drawn / inferred links {from:{table,col},to:{table,col}}
     this.edgeColorMode = 'multi';  // 'multi' | 'single'
     this.edgeColors = new Map();   // relKey -> hex/color
+    this.edgeRouting = 'curved';   // 'curved' | 'straight' | 'ortho-sharp' | 'ortho-rounded'
+    this.edgeRoutings = new Map(); // relKey -> routing style override
+    this.edgeWaypoints = new Map();// relKey -> [{ x, y }, ...]
+    this.edgeAnchors = new Map();  // relKey -> { fromAnchor: { side, offset }, toAnchor: { side, offset } }
+    this.vertexDrag = null;        // active waypoint drag
+    this.anchorDrag = null;        // active anchor drag along table perimeter
+    this.selectedEdgeKey = null;   // selected connection for waypoint editing
     this.hoverConn = null;         // {t, colIndex} — column row showing connector dots
     this.linking = null;           // in-progress link drag {fromKey, fromCol, side, wx, wy, cx, cy}
     this.pan = null;               // active background pan
@@ -590,24 +598,37 @@ export class Diagram {
     ctx.stroke();
   }
 
-  // bezier segment between two table columns (or null if not drawable / off-screen)
-  _edgeSeg(fromKey, fromCol, toKey, toCol, cull) {
+  // Compute connection endpoint anchors and route data for an edge
+  _edgeSeg(fromKey, fromCol, toKey, toCol, cull, key = '') {
     const byKey = this._tableMap();
     const from = byKey.get(fromKey), to = byKey.get(toKey);
     if (!from || !to || !Number.isFinite(from.x) || !Number.isFinite(to.x)) return null;
     if (this.hidden.has(from.key) || this.hidden.has(to.key)) return null;
-    const fy = from.y + columnY(from, fromCol);
-    const ty = to.y + columnY(to, toCol);
-    const fromRight = (from.x + from.w / 2) < (to.x + to.w / 2);
-    const fx = fromRight ? from.x + from.w : from.x;
-    const tx = fromRight ? to.x : to.x + to.w;
-    if (cull) {
-      const minX = Math.min(fx, tx), maxX = Math.max(fx, tx);
-      const minY = Math.min(fy, ty), maxY = Math.max(fy, ty);
-      if (maxX < cull.x0 || minX > cull.x1 || maxY < cull.y0 || minY > cull.y1) return null;
-    }
-    const dx = Math.max(28, Math.abs(tx - fx) * 0.4);
-    return { fx, fy, tx, ty, c1x: fx + (fromRight ? dx : -dx), c2x: tx + (fromRight ? -dx : dx), fromKey, toKey };
+
+    const waypoints = this.edgeWaypoints.get(key) || [];
+    const anchorCfg = this.edgeAnchors.get(key);
+
+    const targetForFrom = waypoints.length
+      ? waypoints[0]
+      : (to ? { x: to.x + to.w / 2, y: to.y + to.h / 2 } : null);
+    const targetForTo = waypoints.length
+      ? waypoints[waypoints.length - 1]
+      : (from ? { x: from.x + from.w / 2, y: from.y + from.h / 2 } : null);
+
+    const p1 = getTableAnchor(from, fromCol, targetForFrom, anchorCfg?.fromAnchor);
+    const p2 = getTableAnchor(to, toCol, targetForTo, anchorCfg?.toAnchor);
+
+    const routingStyle = this.edgeRoutings.get(key) || this.edgeRouting || 'curved';
+
+    return {
+      p1, p2,
+      fx: p1.x, fy: p1.y, tx: p2.x, ty: p2.y,
+      c1x: p1.x + (p1.nx || 1) * 30, c2x: p2.x + (p2.nx || -1) * 30,
+      fromKey, toKey,
+      fromTable: from, toTable: to,
+      waypoints,
+      routingStyle,
+    };
   }
 
   _drawEdges(vx0, vy0, vx1, vy1) {
@@ -641,7 +662,7 @@ export class Diagram {
 
     let idx = 0;
     for (const e of edges) {
-      const seg = this._edgeSeg(e.fk, e.fc, e.tk, e.tc, cull);
+      const seg = this._edgeSeg(e.fk, e.fc, e.tk, e.tc, cull, e.key);
       if (!seg) { idx++; continue; }
       seg.manual = e.manual;
       seg.card = e.card;
@@ -659,44 +680,74 @@ export class Diagram {
       seg.color = edgeColor;
       idx++;
 
-      const connected = focusKey && (seg.fromKey === focusKey || seg.toKey === focusKey);
-      if (focusKey) {
+      const isSelectedEdge = this.selectedEdgeKey === e.key;
+      const connected = (focusKey && (seg.fromKey === focusKey || seg.toKey === focusKey)) || isSelectedEdge;
+      if (focusKey || this.selectedEdgeKey) {
         if (connected) { highlighted.push(seg); continue; }
-        this._stroke(seg, edgeColor, 1.2, fadeAlpha, e.manual);
+        this._strokeRoute(seg, edgeColor, 1.2, fadeAlpha, e.manual, isSelectedEdge);
       } else {
         const baseAlpha = this.edgeColorMode === 'single' ? 0.6 : 0.85;
-        this._stroke(seg, edgeColor, 1.6, baseAlpha, e.manual);
+        this._strokeRoute(seg, edgeColor, 1.6, baseAlpha, e.manual, isSelectedEdge);
       }
     }
     for (const seg of highlighted) {
+      const isSelectedEdge = this.selectedEdgeKey === seg.key;
       const hiColor = this.edgeColorMode === 'single' && !this.edgeColors.get(seg.key) ? theme.edgeHi : seg.color;
-      this._stroke(seg, hiColor, 2.4, 1, seg.manual);
+      this._strokeRoute(seg, hiColor, 2.4, 1, seg.manual, isSelectedEdge);
     }
     for (const seg of highlighted) this._drawEdgeLabel(seg);   // words, on top of the lines
   }
 
-  _stroke(seg, color, width, alpha, dashed) {
+  _strokeRoute(seg, color, width, alpha, dashed, isSelectedEdge = false) {
     const { ctx, cam } = this;
+    const { p1, p2, waypoints, routingStyle, card } = seg;
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
     ctx.lineWidth = width / cam.scale;
     if (dashed) ctx.setLineDash([6 / cam.scale, 5 / cam.scale]);
     ctx.beginPath();
-    ctx.moveTo(seg.fx, seg.fy);
-    ctx.bezierCurveTo(seg.c1x, seg.fy, seg.c2x, seg.ty, seg.tx, seg.ty);
+    drawRoutePath(ctx, routingStyle, p1, p2, waypoints, 8);
     ctx.stroke();
     if (dashed) ctx.setLineDash([]);
-    if (seg.card) {
+
+    if (card) {
       // markers sit just outside each table, pointing along the line
       const s = 1 / cam.scale;
       const mw = Math.max(width, 1.4) / cam.scale;
-      drawMarker(ctx, seg.fx, seg.fy, Math.sign(seg.c1x - seg.fx) || 1, seg.card.from, s, mw);
-      drawMarker(ctx, seg.tx, seg.ty, Math.sign(seg.c2x - seg.tx) || 1, seg.card.to, s, mw);
+      drawMarker(ctx, p1.x, p1.y, p1.nx || 1, card.from, s, mw);
+      drawMarker(ctx, p2.x, p2.y, p2.nx || -1, card.to, s, mw);
     } else {
-      dot(ctx, seg.fx, seg.fy, 3 / cam.scale);
-      dot(ctx, seg.tx, seg.ty, 3 / cam.scale);
+      dot(ctx, p1.x, p1.y, 3 / cam.scale);
+      dot(ctx, p2.x, p2.y, 3 / cam.scale);
     }
+
+    // If edge is selected or highlighted, draw vertex handles
+    if (isSelectedEdge) {
+      const s = 1 / cam.scale;
+      const r = 5 * s;
+      if (waypoints && waypoints.length) {
+        for (const pt of waypoints) {
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2 * s;
+          ctx.stroke();
+        }
+      }
+      // Anchor handles on table edge
+      ctx.beginPath();
+      ctx.arc(p1.x, p1.y, 4 * s, 0, Math.PI * 2);
+      ctx.arc(p2.x, p2.y, 4 * s, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.2 * s;
+      ctx.stroke();
+    }
+
     ctx.globalAlpha = 1;
   }
 
@@ -869,10 +920,27 @@ export class Diagram {
       this._zoomAt(sx, sy, factor);
     }, { passive: false });
 
-    // double-click: edit annotation text, else a table/column, else zoom in
+    // double-click: vertex deletion, or new vertex creation on edge, else inline edit
     c.addEventListener('dblclick', (e) => {
       const r = c.getBoundingClientRect();
-      this._editAt(e.clientX - r.left, e.clientY - r.top);
+      const sx = e.clientX - r.left, sy = e.clientY - r.top;
+      const vHit = this.vertexAt(sx, sy);
+      if (vHit && vHit.isWaypoint) {
+        this.removeWaypoint(vHit.key, vHit.index);
+        this.markDirty();
+        this.onLayoutChange?.();
+        return;
+      }
+      const eHit = this.edgeAt(sx, sy);
+      if (eHit) {
+        const w = this.screenToWorld(sx, sy);
+        this.addWaypoint(eHit.key, Math.round(w.x), Math.round(w.y), eHit.insertIndex);
+        this.selectedEdgeKey = eHit.key;
+        this.markDirty();
+        this.onLayoutChange?.();
+        return;
+      }
+      this._editAt(sx, sy);
     });
   }
 
@@ -880,6 +948,22 @@ export class Diagram {
   // `additive` (Shift) drives multi-select: Shift+click toggles a table,
   // Shift+drag on empty draws a marquee box.
   _pointerDown(sx, sy, additive = false, allowConnect = true) {
+    // 0) Vertex handle (waypoint / anchor)
+    const vHit = this.vertexAt(sx, sy);
+    if (vHit) {
+      if (vHit.isWaypoint) {
+        this.vertexDrag = { key: vHit.key, index: vHit.index, moved: false };
+        this.selectedEdgeKey = vHit.key;
+        this.markDirty();
+        return;
+      } else if (vHit.isAnchor) {
+        this.anchorDrag = { key: vHit.key, isFrom: vHit.isFrom, table: vHit.table, moved: false };
+        this.selectedEdgeKey = vHit.key;
+        this.markDirty();
+        return;
+      }
+    }
+
     // 1) chrome of the selected annotation (colour dots / delete / resize)
     const chrome = this._annoChromeAt(sx, sy);
     if (chrome) {
@@ -910,6 +994,7 @@ export class Diagram {
     const t = this.tableAt(sx, sy);
     if (t) {
       if (this.selectedAnno) this.selectedAnno = null;
+      if (this.selectedEdgeKey) { this.selectedEdgeKey = null; }
       if (additive) {                                   // Shift+click toggles selection
         if (this.selected.has(t)) this.selected.delete(t);
         else this.selected.add(t);
@@ -937,7 +1022,22 @@ export class Diagram {
     }
     // 5) a group box (grabbable anywhere that isn't a table)
     const group = this._groupAt(sx, sy);
-    if (group) { this._grabAnno(group, sx, sy); return; }
+    if (group) {
+      if (this.selectedEdgeKey) { this.selectedEdgeKey = null; }
+      this._grabAnno(group, sx, sy);
+      return;
+    }
+
+    // 5b) an edge line selection
+    const edge = this.edgeAt(sx, sy);
+    if (edge) {
+      this.selectedEdgeKey = edge.key;
+      this.markDirty();
+      return;
+    } else {
+      if (this.selectedEdgeKey) { this.selectedEdgeKey = null; this.markDirty(); }
+    }
+
     // 6) empty space -> Shift+drag marquee-selects; otherwise pan
     if (this.selectedAnno) { this.selectedAnno = null; this.markDirty(); }
     const w = this.screenToWorld(sx, sy);
@@ -963,6 +1063,39 @@ export class Diagram {
 
   // returns true if an active drag/pan/resize consumed the move
   _pointerMove(sx, sy) {
+    if (this.vertexDrag) {
+      const w = this.screenToWorld(sx, sy);
+      this.moveWaypoint(this.vertexDrag.key, this.vertexDrag.index, Math.round(w.x), Math.round(w.y));
+      this.vertexDrag.moved = true;
+      this.markDirty();
+      return true;
+    }
+    if (this.anchorDrag) {
+      const w = this.screenToWorld(sx, sy);
+      const t = this.anchorDrag.table;
+      if (t) {
+        const dLeft = Math.abs(w.x - t.x);
+        const dRight = Math.abs(w.x - (t.x + t.w));
+        const dTop = Math.abs(w.y - t.y);
+        const dBottom = Math.abs(w.y - (t.y + t.h));
+        const minD = Math.min(dLeft, dRight, dTop, dBottom);
+        let side = 'right', offset = 0.5;
+        if (minD === dLeft) {
+          side = 'left'; offset = (w.y - t.y) / t.h;
+        } else if (minD === dRight) {
+          side = 'right'; offset = (w.y - t.y) / t.h;
+        } else if (minD === dTop) {
+          side = 'top'; offset = (w.x - t.x) / t.w;
+        } else {
+          side = 'bottom'; offset = (w.x - t.x) / t.w;
+        }
+        offset = Math.max(0.05, Math.min(0.95, offset));
+        this.setEdgeAnchor(this.anchorDrag.key, side, offset, this.anchorDrag.isFrom);
+        this.anchorDrag.moved = true;
+        this.markDirty();
+        return true;
+      }
+    }
     if (this.linking) {
       const w = this.screenToWorld(sx, sy);
       this.linking.cx = w.x; this.linking.cy = w.y;
@@ -1032,6 +1165,16 @@ export class Diagram {
   }
 
   _pointerUp() {
+    if (this.vertexDrag) {
+      if (this.vertexDrag.moved) this.onLayoutChange?.();
+      this.vertexDrag = null;
+      return;
+    }
+    if (this.anchorDrag) {
+      if (this.anchorDrag.moved) this.onLayoutChange?.();
+      this.anchorDrag = null;
+      return;
+    }
     // finishing a link drag -> create the link if dropped on a column
     if (this.linking) {
       const k = this.linking;
@@ -1241,10 +1384,117 @@ export class Diagram {
     this.markDirty();
   }
 
+  setEdgeRouting(style) {
+    this.edgeRouting = style || 'curved';
+    this.markDirty();
+    this.onLayoutChange?.();
+  }
+
+  setIndividualEdgeRouting(key, style) {
+    if (!key) return;
+    if (style) this.edgeRoutings.set(key.toLowerCase(), style);
+    else this.edgeRoutings.delete(key.toLowerCase());
+    this.markDirty();
+    this.onLayoutChange?.();
+  }
+
+  setEdgeWaypoints(key, pts) {
+    if (!key) return;
+    if (Array.isArray(pts) && pts.length) {
+      this.edgeWaypoints.set(key.toLowerCase(), pts.map(p => ({ x: Math.round(p.x), y: Math.round(p.y) })));
+    } else {
+      this.edgeWaypoints.delete(key.toLowerCase());
+    }
+    this.markDirty();
+  }
+
+  addWaypoint(key, x, y, insertIndex = -1) {
+    if (!key) return;
+    const lk = key.toLowerCase();
+    const pts = this.edgeWaypoints.get(lk) ? [...this.edgeWaypoints.get(lk)] : [];
+    const pt = { x: Math.round(x), y: Math.round(y) };
+    if (insertIndex >= 0 && insertIndex < pts.length) {
+      pts.splice(insertIndex, 0, pt);
+    } else {
+      pts.push(pt);
+    }
+    this.edgeWaypoints.set(lk, pts);
+    this.markDirty();
+  }
+
+  moveWaypoint(key, index, x, y) {
+    if (!key) return;
+    const lk = key.toLowerCase();
+    const pts = this.edgeWaypoints.get(lk);
+    if (pts && pts[index]) {
+      pts[index].x = Math.round(x);
+      pts[index].y = Math.round(y);
+      this.markDirty();
+    }
+  }
+
+  removeWaypoint(key, index) {
+    if (!key) return;
+    const lk = key.toLowerCase();
+    const pts = this.edgeWaypoints.get(lk);
+    if (pts && index >= 0 && index < pts.length) {
+      pts.splice(index, 1);
+      if (!pts.length) this.edgeWaypoints.delete(lk);
+      this.markDirty();
+    }
+  }
+
+  setEdgeAnchor(key, side, offset, isFrom = true) {
+    if (!key) return;
+    const lk = key.toLowerCase();
+    const cur = this.edgeAnchors.get(lk) || {};
+    if (isFrom) cur.fromAnchor = { side, offset };
+    else cur.toAnchor = { side, offset };
+    this.edgeAnchors.set(lk, cur);
+    this.markDirty();
+  }
+
+  // Hit-test waypoint handle or anchor handle near cursor
+  vertexAt(sx, sy) {
+    const w = this.screenToWorld(sx, sy);
+    const tol = 10 / this.cam.scale;
+
+    // First test waypoints of the selected edge or all edges
+    for (const [key, pts] of this.edgeWaypoints.entries()) {
+      for (let i = 0; i < pts.length; i++) {
+        const pt = pts[i];
+        if (Math.hypot(w.x - pt.x, w.y - pt.y) <= tol) {
+          return { key, index: i, x: pt.x, y: pt.y, isWaypoint: true };
+        }
+      }
+    }
+
+    // Next test anchors of the selected edge
+    if (this.selectedEdgeKey) {
+      const key = this.selectedEdgeKey;
+      const parts = key.split('->');
+      if (parts.length === 2) {
+        const [fPart, tPart] = parts;
+        const [fTable, fCol] = fPart.split('.');
+        const [tTable, tCol] = tPart.split('.');
+        const seg = this._edgeSeg(fTable, fCol, tTable, tCol, null, key);
+        if (seg) {
+          if (Math.hypot(w.x - seg.p1.x, w.y - seg.p1.y) <= tol) {
+            return { key, isAnchor: true, isFrom: true, table: seg.fromTable, x: seg.p1.x, y: seg.p1.y };
+          }
+          if (Math.hypot(w.x - seg.p2.x, w.y - seg.p2.y) <= tol) {
+            return { key, isAnchor: true, isFrom: false, table: seg.toTable, x: seg.p2.x, y: seg.p2.y };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
   // Hit-test any edge (model relation or manual link) near the cursor
   edgeAt(sx, sy) {
     const w = this.screenToWorld(sx, sy);
-    const tol = 8 / this.cam.scale;
+    const tol = 9 / this.cam.scale;
     const byKey = this._tableMap();
     const edges = [];
     for (const r of this.model.relations) {
@@ -1279,20 +1529,42 @@ export class Diagram {
 
     let idx = 0;
     for (const e of edges) {
-      const seg = this._edgeSeg(e.fk, e.fc, e.tk, e.tc, null);
+      const seg = this._edgeSeg(e.fk, e.fc, e.tk, e.tc, null, e.key);
       if (!seg) { idx++; continue; }
       const customColor = this.edgeColors.get(e.key);
       const autoColor = this.edgeColorMode === 'single' ? this.theme.edge : EDGE_COLORS[idx % EDGE_COLORS.length];
       const color = customColor || autoColor;
+      const waypoints = seg.waypoints || [];
       idx++;
 
-      for (let i = 0; i <= 20; i++) {
-        const u = i / 20, iu = 1 - u;
-        const bx = iu * iu * iu * seg.fx + 3 * iu * iu * u * seg.c1x + 3 * iu * u * u * seg.c2x + u * u * u * seg.tx;
-        const by = iu * iu * iu * seg.fy + 3 * iu * iu * u * seg.fy + 3 * iu * u * u * seg.ty + u * u * u * seg.ty;
-        if (Math.hypot(w.x - bx, w.y - by) <= tol) {
-          return { ...e, color, customColor, isManual: e.manual, manualLink: e.link };
+      // Check distance across route segments
+      const pts = [seg.p1, ...waypoints, seg.p2];
+      let minDistance = Infinity;
+      let bestSegment = 0;
+
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i];
+        const b = pts[i + 1];
+        const res = pointToSegmentDistance(w.x, w.y, a.x, a.y, b.x, b.y);
+        if (res.dist < minDistance) {
+          minDistance = res.dist;
+          bestSegment = i;
         }
+      }
+
+      if (minDistance <= tol) {
+        return {
+          ...e,
+          color,
+          customColor,
+          isManual: e.manual,
+          manualLink: e.link,
+          p1: seg.p1,
+          p2: seg.p2,
+          waypoints,
+          routingStyle: seg.routingStyle,
+          insertIndex: bestSegment + 1,
+        };
       }
     }
     return null;

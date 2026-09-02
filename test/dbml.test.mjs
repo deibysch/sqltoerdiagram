@@ -183,5 +183,44 @@ TableGroup Ecommerce [color: #27ae60] {
   ok(parsedLayout.groups.Core.color === '#5aa7ff', 'dddbml layout JSON group preserved');
 }
 
+// --- Routing Styles, Waypoints and Perimeter Anchors ---
+{
+  const { getTableAnchor, buildOrthogonalPoints, buildSVGPath, pointToSegmentDistance } = await import('../src/routing.js');
+
+  const table = { x: 100, y: 100, w: 200, h: 100, columns: [{ name: 'id' }] };
+  const targetRight = { x: 400, y: 150 };
+  const targetTop = { x: 200, y: 0 };
+
+  const anchorRight = getTableAnchor(table, 'id', targetRight);
+  ok(anchorRight.side === 'right' && anchorRight.x === 300, 'getTableAnchor connects on right');
+
+  const anchorTop = getTableAnchor(table, 'id', targetTop);
+  ok(anchorTop.side === 'top' && anchorTop.y === 100, 'getTableAnchor connects on top');
+
+  const manualAnchor = getTableAnchor(table, 'id', null, { side: 'bottom', offset: 0.5 });
+  ok(manualAnchor.side === 'bottom' && manualAnchor.x === 200 && manualAnchor.y === 200, 'getTableAnchor custom bottom anchor');
+
+  // Orthogonal points
+  const p1 = { x: 100, y: 100, nx: 1, ny: 0 };
+  const p2 = { x: 300, y: 200, nx: -1, ny: 0 };
+  const waypoints = [{ x: 200, y: 150 }];
+  const orthoPts = buildOrthogonalPoints(p1, p2, waypoints);
+  ok(orthoPts.length >= 3, 'buildOrthogonalPoints produced multi-point step path');
+
+  // SVG Paths
+  const svgStraight = buildSVGPath('straight', p1, p2, waypoints);
+  ok(svgStraight.startsWith('M 100 100 L 200 150 L 300 200'), 'buildSVGPath straight path');
+
+  const svgOrtho = buildSVGPath('ortho-sharp', p1, p2, []);
+  ok(svgOrtho.startsWith('M 100 100'), 'buildSVGPath ortho-sharp path');
+
+  const svgOrthoRounded = buildSVGPath('ortho-rounded', p1, p2, []);
+  ok(svgOrthoRounded.includes('Q') || svgOrthoRounded.includes('L'), 'buildSVGPath ortho-rounded path');
+
+  // Distance
+  const dist = pointToSegmentDistance(200, 155, 100, 150, 300, 150);
+  ok(dist.dist === 5, 'pointToSegmentDistance calculates accurate distance');
+}
+
 console.log(`\nDBML tests: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

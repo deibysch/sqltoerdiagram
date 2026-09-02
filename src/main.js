@@ -69,15 +69,32 @@ function collectLayout() {
   }
 
   const connections = {};
-  if (diagram.edgeColors) {
-    for (const [k, col] of diagram.edgeColors.entries()) {
-      if (col) connections[k] = { color: col };
+  const allConnKeys = new Set([
+    ...diagram.edgeColors.keys(),
+    ...diagram.edgeRoutings.keys(),
+    ...diagram.edgeWaypoints.keys(),
+    ...diagram.edgeAnchors.keys(),
+  ]);
+  for (const k of allConnKeys) {
+    const item = {};
+    const col = diagram.edgeColors.get(k);
+    if (col) item.color = col;
+    const r = diagram.edgeRoutings.get(k);
+    if (r) item.routing = r;
+    const pts = diagram.edgeWaypoints.get(k);
+    if (pts && pts.length) item.points = pts.map(p => ({ x: p.x, y: p.y }));
+    const anch = diagram.edgeAnchors.get(k);
+    if (anch) {
+      if (anch.fromAnchor) item.fromAnchor = anch.fromAnchor;
+      if (anch.toAnchor) item.toAnchor = anch.toAnchor;
     }
+    if (Object.keys(item).length) connections[k] = item;
   }
 
   return {
     version: 1,
     edgeColorMode: diagram.edgeColorMode || 'multi',
+    edgeRouting: diagram.edgeRouting || 'curved',
     tables,
     positions: tables, // backwards compatibility
     groups,
@@ -119,8 +136,17 @@ function applyLayoutData(model, data) {
     diagram.setEdgeColorMode(data.edgeColorMode);
     syncEdgeColorsBtn();
   }
+  if (data.edgeRouting) {
+    diagram.setEdgeRouting(data.edgeRouting);
+  }
   if (data.connections && typeof data.connections === 'object') {
-    diagram.setEdgeColors(data.connections);
+    for (const [k, v] of Object.entries(data.connections)) {
+      if (v.color) diagram.setEdgeColor(k, v.color);
+      if (v.routing) diagram.setIndividualEdgeRouting(k, v.routing);
+      if (Array.isArray(v.points)) diagram.setEdgeWaypoints(k, v.points);
+      if (v.fromAnchor) diagram.setEdgeAnchor(k, v.fromAnchor.side, v.fromAnchor.offset, true);
+      if (v.toAnchor) diagram.setEdgeAnchor(k, v.toAnchor.side, v.toAnchor.offset, false);
+    }
   }
   return placed > 0;
 }
@@ -168,10 +194,22 @@ canvas.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   const r = canvas.getBoundingClientRect();
   const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  const w = diagram.screenToWorld(sx, sy);
   const t = diagram.tableAt(sx, sy);
+  const vHit = diagram.vertexAt(sx, sy);
   const edge = diagram.edgeAt(sx, sy);
   const items = [];
-  if (t) {
+
+  if (vHit && vHit.isWaypoint) {
+    items.push({
+      label: 'Delete this vertex',
+      act: () => {
+        diagram.removeWaypoint(vHit.key, vHit.index);
+        saveLayoutDebounced();
+        if (editorMode === 'layout') updateLayoutTextarea();
+      },
+    });
+  } else if (t) {
     const multi = diagram.selected.has(t) && diagram.selected.size > 1;
     items.push({ label: multi ? `Hide ${diagram.selected.size} tables` : 'Hide table', act: () => diagram.hideTable(t) });
   } else if (edge) {
@@ -186,6 +224,25 @@ canvas.addEventListener('contextmenu', (e) => {
         if (editorMode === 'layout') updateLayoutTextarea();
       },
     });
+    items.push({
+      label: 'Add vertex here',
+      act: () => {
+        diagram.addWaypoint(edge.key, Math.round(w.x), Math.round(w.y), edge.insertIndex);
+        diagram.selectedEdgeKey = edge.key;
+        saveLayoutDebounced();
+        if (editorMode === 'layout') updateLayoutTextarea();
+      },
+    });
+    if (edge.waypoints && edge.waypoints.length) {
+      items.push({
+        label: `Clear all vertices (${edge.waypoints.length})`,
+        act: () => {
+          diagram.setEdgeWaypoints(edge.key, []);
+          saveLayoutDebounced();
+          if (editorMode === 'layout') updateLayoutTextarea();
+        },
+      });
+    }
     if (edge.customColor) {
       items.push({
         label: 'Reset connection color (Auto)',
@@ -713,6 +770,7 @@ function generateLayoutJson() {
   const out = {
     version: 1,
     edgeColorMode: diagram.edgeColorMode || 'multi',
+    edgeRouting: diagram.edgeRouting || 'curved',
     tables: data.tables,
     groups: data.groups,
     connections: data.connections,
@@ -768,7 +826,7 @@ modeToggle.addEventListener('click', (e) => {
 });
 setMode(editorMode);
 
-// Connection color mode button in topbar
+// Connection color mode button in zoom controls
 const btnEdgeColors = $('btn-edge-colors');
 function syncEdgeColorsBtn() {
   if (!btnEdgeColors) return;
@@ -785,6 +843,29 @@ if (btnEdgeColors) {
     if (editorMode === 'layout') updateLayoutTextarea();
   });
   syncEdgeColorsBtn();
+}
+
+// Line routing style selector button and menu
+const btnEdgeRouting = $('btn-edge-routing');
+const routingMenu = $('routing-menu');
+if (btnEdgeRouting && routingMenu) {
+  btnEdgeRouting.addEventListener('click', (e) => {
+    e.stopPropagation();
+    routingMenu.hidden = !routingMenu.hidden;
+  });
+  routingMenu.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const item = e.target.closest('.menu-item');
+    if (!item) return;
+    routingMenu.hidden = true;
+    const style = item.dataset.routing;
+    if (style) {
+      diagram.setEdgeRouting(style);
+      saveLayoutDebounced();
+      if (editorMode === 'layout') updateLayoutTextarea();
+    }
+  });
+  document.addEventListener('click', () => { routingMenu.hidden = true; });
 }
 
 $('zoom-in').addEventListener('click', () => diagram.zoomBy(1.25));
@@ -858,7 +939,18 @@ function exportImage(kind) {
     const url = diagram.exportPNG(2);
     if (url) download('schema.png', url);
   } else {
-    const svg = exportSVG(diagram.model, diagram.themeName, diagram.annotations, diagram.hidden, diagram.edgeColorMode, diagram.edgeColors);
+    const svg = exportSVG(
+      diagram.model,
+      diagram.themeName,
+      diagram.annotations,
+      diagram.hidden,
+      diagram.edgeColorMode,
+      diagram.edgeColors,
+      diagram.edgeRouting,
+      diagram.edgeWaypoints,
+      diagram.edgeAnchors,
+      diagram.edgeRoutings
+    );
     if (svg) downloadText('schema.svg', svg, 'image/svg+xml');
   }
 }

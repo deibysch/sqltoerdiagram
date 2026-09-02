@@ -2,6 +2,7 @@
 import { THEMES, columnY, ROW_H, HEADER_H, EDGE_COLORS } from './renderer.js';
 import { NOTE_COLORS, GROUP_COLORS, resolveGroupColor } from './annotations.js';
 import { relationCardinality } from './cardinality.js';
+import { getTableAnchor, buildSVGPath } from './routing.js';
 
 // Crow's-foot cardinality marker at a line endpoint (world coords).
 //   dir = +1 if the line extends in +x from (x,y), else -1.
@@ -41,7 +42,18 @@ const hexA = (hex, a) => {
   return `rgba(90,167,255,${a})`;
 };
 
-export function exportSVG(model, themeName, annotations = [], hidden = null, edgeColorMode = 'multi', edgeColors = null) {
+export function exportSVG(
+  model,
+  themeName,
+  annotations = [],
+  hidden = null,
+  edgeColorMode = 'multi',
+  edgeColors = null,
+  edgeRouting = 'curved',
+  edgeWaypoints = null,
+  edgeAnchors = null,
+  edgeRoutings = null
+) {
   const theme = THEMES[themeName] || THEMES.dark;
   const isHidden = (k) => !!(hidden && hidden.has(k));
   const ts = model.tables.filter(t => Number.isFinite(t.x) && !isHidden(t.key));
@@ -93,18 +105,21 @@ export function exportSVG(model, themeName, annotations = [], hidden = null, edg
     }
     edgeIndex++;
 
-    const fy = from.y + columnY(from, r.fromCols[0]);
-    const ty = to.y + columnY(to, r.toCols[0]);
-    const fromRight = (from.x + from.w / 2) < (to.x + to.w / 2);
-    const fx = fromRight ? from.x + from.w : from.x;
-    const tx = fromRight ? to.x : to.x + to.w;
-    const dx = Math.max(28, Math.abs(tx - fx) * 0.4);
-    const c1x = fx + (fromRight ? dx : -dx);
-    const c2x = tx + (fromRight ? -dx : dx);
-    parts.push(`<path d="M ${fx} ${fy} C ${c1x} ${fy}, ${c2x} ${ty}, ${tx} ${ty}" fill="none" stroke="${color}" stroke-width="1.5"/>`);
+    const waypoints = edgeWaypoints?.get ? (edgeWaypoints.get(relKey) || []) : (edgeWaypoints && edgeWaypoints[relKey]) || [];
+    const anchorCfg = edgeAnchors?.get ? edgeAnchors.get(relKey) : (edgeAnchors && edgeAnchors[relKey]);
+    const rStyle = (edgeRoutings?.get ? edgeRoutings.get(relKey) : (edgeRoutings && edgeRoutings[relKey])) || edgeRouting || 'curved';
+
+    const targetForFrom = waypoints.length ? waypoints[0] : (to ? { x: to.x + to.w / 2, y: to.y + to.h / 2 } : null);
+    const targetForTo = waypoints.length ? waypoints[waypoints.length - 1] : (from ? { x: from.x + from.w / 2, y: from.y + from.h / 2 } : null);
+
+    const p1 = getTableAnchor(from, r.fromCols[0], targetForFrom, anchorCfg?.fromAnchor);
+    const p2 = getTableAnchor(to, r.toCols[0], targetForTo, anchorCfg?.toAnchor);
+
+    const pathD = buildSVGPath(rStyle, p1, p2, waypoints, 8);
+    parts.push(`<path d="${pathD}" fill="none" stroke="${color}" stroke-width="1.5"/>`);
     const card = relationCardinality(r, byKey);
-    parts.push(svgMarker(fx, fy, Math.sign(c1x - fx) || 1, card.from, color));
-    parts.push(svgMarker(tx, ty, Math.sign(c2x - tx) || 1, card.to, color));
+    parts.push(svgMarker(p1.x, p1.y, p1.nx || 1, card.from, color));
+    parts.push(svgMarker(p2.x, p2.y, p2.nx || -1, card.to, color));
   }
 
   // tables

@@ -232,6 +232,20 @@
             <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
           </svg>
         </button>
+        <div class="menu-wrap">
+          <button id="btn-edge-routing" class="btn ghost icon" title="Line style (Curved, Straight, 90° Sharp, 90° Rounded)" aria-label="Line style" data-umami-event="edge-routing">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 18c4 0 4-12 8-12s4 12 8 12"/>
+            </svg>
+          </button>
+          <div id="routing-menu" class="menu up" hidden>
+            <div class="menu-label">Line Style</div>
+            <button class="menu-item" data-routing="curved">Curved (Bézier)</button>
+            <button class="menu-item" data-routing="straight">Straight (Direct)</button>
+            <button class="menu-item" data-routing="ortho-sharp">90° Step (Sharp)</button>
+            <button class="menu-item" data-routing="ortho-rounded">90° Step (Rounded)</button>
+          </div>
+        </div>
         <span class="vsep" aria-hidden="true"></span>
         <div class="menu-wrap">
           <button id="btn-arrange" class="btn ghost caret" title="Auto-arrange tables" data-umami-event="arrange">Arrange</button>
