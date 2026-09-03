@@ -268,6 +268,24 @@ a.btn { text-decoration: none; color: var(--text); }
 .menu-item.active { color: var(--accent); font-weight: 600; }
 .menu-item.active::after { content: "✓"; font-size: 12px; }
 
+.tool-mode-group {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--panel-2);
+  padding: 2px;
+  border-radius: 7px;
+}
+.tool-mode-group .btn {
+  padding: 4px 6px;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 5px;
+}
+.tool-mode-group .btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
 /* ---------- layout ---------- */
 .layout {
   display: flex;

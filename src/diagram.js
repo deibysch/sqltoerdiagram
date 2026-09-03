@@ -23,6 +23,11 @@ export class Diagram {
     this.dragGroup = null;         // active multi-table drag
     this.marquee = null;           // active rubber-band selection (world coords)
     this.selected = new Set();     // multi-selected tables (for group drag)
+    this.selectedAnnos = new Set();// multi-selected annotations/groups
+    this.toolMode = 'pan';         // 'pan' | 'select'
+    this._potentialSingleSelect = null; // clicked table in multi-selection to collapse on mouseup if not dragged
+    this._potentialSingleAnno = null;   // clicked annotation in multi-selection
+    this.onToolModeChange = null;  // fired when toolMode changes
     this.hidden = new Set();       // keys of hidden tables (node + edges suppressed)
     this.onHiddenChange = null;    // fired when the hidden set changes
     this.onSelectionChange = null; // fired when the selected set changes
@@ -291,12 +296,21 @@ export class Diagram {
       ctx.drawImage(bm, t.x, t.y, t.w, t.h);
       ctx.restore();
 
-      const emphasised = this.hover === t || this.drag?.t === t || pinned === t || this.selected.has(t);
+      const isSelected = this.selected.has(t);
+      const emphasised = this.hover === t || this.drag?.t === t || pinned === t || isSelected;
       if (emphasised) {
         ctx.strokeStyle = theme.edgeHi;
-        ctx.lineWidth = (pinned === t || this.selected.has(t) ? 2.5 : 2) / cam.scale;
+        ctx.lineWidth = (pinned === t || isSelected ? 2.5 : 2) / cam.scale;
         roundRectPath(ctx, t.x, t.y, t.w, t.h, 10);
         ctx.stroke();
+
+        // If multiple tables are selected, draw an outer accent glow
+        if (isSelected && (this.selected.size > 1 || this.selectedAnnos.size > 0)) {
+          ctx.strokeStyle = hexA(theme.edgeHi, 0.35);
+          ctx.lineWidth = 4.5 / cam.scale;
+          roundRectPath(ctx, t.x - 2 / cam.scale, t.y - 2 / cam.scale, t.w + 4 / cam.scale, t.h + 4 / cam.scale, 12);
+          ctx.stroke();
+        }
       }
     }
 
@@ -365,18 +379,18 @@ export class Diagram {
 
   _drawGroup(a, cull) {
     if (!this._annoVisible(a, cull)) return;
-    const { ctx, cam } = this;
+    const { ctx, cam, theme } = this;
     const color = resolveGroupColor(a.color);
     ctx.save();
     roundRectPath(ctx, a.x, a.y, a.w, a.h, 12);
     ctx.fillStyle = hexA(color, 0.08);
     ctx.fill();
-    ctx.strokeStyle = hexA(color, 0.7);
-    ctx.lineWidth = 1.5 / cam.scale;
+    ctx.strokeStyle = (this.selectedAnnos.has(a) || this.selectedAnno === a) ? theme.edgeHi : hexA(color, 0.7);
+    ctx.lineWidth = ((this.selectedAnnos.has(a) || this.selectedAnno === a) ? 2.5 : 1.5) / cam.scale;
     ctx.stroke();
     // label in the header strip
     if (a.text) {
-      ctx.fillStyle = color;
+      ctx.fillStyle = (this.selectedAnnos.has(a) || this.selectedAnno === a) ? theme.edgeHi : color;
       ctx.font = `600 ${13 / cam.scale}px ui-sans-serif, system-ui, sans-serif`;
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'left';
@@ -388,7 +402,7 @@ export class Diagram {
 
   _drawNote(a, cull) {
     if (!this._annoVisible(a, cull)) return;
-    const { ctx, cam } = this;
+    const { ctx, cam, theme } = this;
     const c = NOTE_COLORS[a.color] || NOTE_COLORS.yellow;
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.25)';
@@ -534,11 +548,26 @@ export class Diagram {
     return null;
   }
 
-  _groupAt(sx, sy) {
+  _groupAt(sx, sy, headerOrBorderOnly = false) {
     const w = this.screenToWorld(sx, sy);
+    const tol = Math.max(8, 10 / this.cam.scale);
     for (let i = this.annotations.length - 1; i >= 0; i--) {
       const a = this.annotations[i];
-      if (a.type === 'group' && inside(w, a)) return a;
+      if (a.type !== 'group') continue;
+      if (!inside(w, a)) continue;
+
+      if (!headerOrBorderOnly) return a;
+
+      const headerH = Math.max(28, 30 / this.cam.scale);
+      const isHeader = w.y <= a.y + headerH;
+      const isNearLeft = Math.abs(w.x - a.x) <= tol;
+      const isNearRight = Math.abs(w.x - (a.x + a.w)) <= tol;
+      const isNearBottom = Math.abs(w.y - (a.y + a.h)) <= tol;
+      const isNearTop = Math.abs(w.y - a.y) <= tol;
+
+      if (isHeader || isNearLeft || isNearRight || isNearBottom || isNearTop) {
+        return a;
+      }
     }
     return null;
   }
@@ -942,8 +971,9 @@ export class Diagram {
     c.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;   // ignore right/middle click (right-click = context menu)
       const r = c.getBoundingClientRect();
-      this._pointerDown(e.clientX - r.left, e.clientY - r.top, e.shiftKey);
-      c.style.cursor = 'grabbing';
+      const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+      this._pointerDown(e.clientX - r.left, e.clientY - r.top, additive);
+      c.style.cursor = this.toolMode === 'select' ? 'crosshair' : 'grabbing';
     });
 
     window.addEventListener('mousemove', (e) => {
@@ -1000,16 +1030,16 @@ export class Diagram {
         c.style.cursor = 'pointer';
       } else if (t) {
         c.style.cursor = 'grab';
-      } else if (this._noteAt(sx, sy) || this._groupAt(sx, sy)) {
+      } else if (this._noteAt(sx, sy) || this._groupAt(sx, sy, true)) {
         c.style.cursor = 'grab';
       } else {
-        c.style.cursor = 'default';
+        c.style.cursor = this.toolMode === 'select' ? 'crosshair' : 'default';
       }
     });
 
     window.addEventListener('mouseup', () => {
       this._pointerUp();
-      c.style.cursor = this.hoverVertex ? 'move' : (this.hoverEdge ? (this.hoverEdge.isOrthogonal ? (this.hoverEdge.isVertical ? 'ew-resize' : 'ns-resize') : 'pointer') : (this.hover ? 'grab' : 'default'));
+      c.style.cursor = this.hoverVertex ? 'move' : (this.hoverEdge ? (this.hoverEdge.isOrthogonal ? (this.hoverEdge.isVertical ? 'ew-resize' : 'ns-resize') : 'pointer') : (this.hover ? 'grab' : (this.toolMode === 'select' ? 'crosshair' : 'default')));
     });
 
     // ---- touch (mobile): 1 finger = drag/pan, 2 fingers = pinch-zoom + pan ----
@@ -1196,7 +1226,7 @@ export class Diagram {
     if (t) {
       if (this.selectedAnno) this.selectedAnno = null;
       if (this.selectedEdgeKey) { this.selectedEdgeKey = null; }
-      if (additive) {                                   // Shift+click toggles selection
+      if (additive) {                                   // Shift/Ctrl+click toggles selection
         if (this.selected.has(t)) this.selected.delete(t);
         else this.selected.add(t);
         this.pinned = null; this.pinnedKeys = null;
@@ -1208,33 +1238,67 @@ export class Diagram {
       this.model.tables.splice(idx, 1);
       this.model.tables.push(t);
       const w = this.screenToWorld(sx, sy);
-      if (this.selected.has(t) && this.selected.size > 1) {
+      if (this.selected.has(t) && (this.selected.size > 1 || this.selectedAnnos.size > 0)) {
         // drag the whole current selection together
-        const items = [...this.selected].filter(x => Number.isFinite(x.x))
+        const tables = [...this.selected].filter(x => Number.isFinite(x.x))
           .map(x => ({ t: x, sx0: x.x, sy0: x.y }));
-        this.dragGroup = { items, ax: w.x, ay: w.y, moved: false };
+        const annos = [...this.selectedAnnos].map(a => ({ a, sx0: a.x, sy0: a.y }));
+        const groupOrigins = {};
+        for (const a of this.annotations) {
+          if (a.type === 'group') groupOrigins[a.id] = { x: a.x, y: a.y };
+        }
+        this.dragGroup = { tables, annos, groupOrigins, ax: w.x, ay: w.y, moved: false };
+        this._potentialSingleSelect = t;
       } else {
         this.selected = new Set([t]);
+        this.selectedAnnos.clear();
         this.drag = { t, dx: w.x - t.x, dy: w.y - t.y, moved: false };
         this.onSelectionChange?.();
       }
       this.markDirty();
       return;
     }
-    // 5) a group box (grabbable anywhere that isn't a table)
-    const group = this._groupAt(sx, sy);
+    // 5) a group box (header or border directly targeted)
+    const group = this._groupAt(sx, sy, true);
     if (group) {
       if (this.selectedEdgeKey) { this.selectedEdgeKey = null; }
+      if (additive) {
+        if (this.selectedAnnos.has(group)) this.selectedAnnos.delete(group);
+        else this.selectedAnnos.add(group);
+        this.markDirty();
+        this.onSelectionChange?.();
+        return;
+      }
+      const w = this.screenToWorld(sx, sy);
+      if (this.selectedAnnos.has(group) && (this.selected.size > 0 || this.selectedAnnos.size > 1)) {
+        const tables = [...this.selected].filter(x => Number.isFinite(x.x))
+          .map(x => ({ t: x, sx0: x.x, sy0: x.y }));
+        const annos = [...this.selectedAnnos].map(a => ({ a, sx0: a.x, sy0: a.y }));
+        const groupOrigins = {};
+        for (const a of this.annotations) {
+          if (a.type === 'group') groupOrigins[a.id] = { x: a.x, y: a.y };
+        }
+        this.dragGroup = { tables, annos, groupOrigins, ax: w.x, ay: w.y, moved: false };
+        this._potentialSingleAnno = group;
+        this.markDirty();
+        return;
+      }
+      this.selected.clear();
+      this.selectedAnnos = new Set([group]);
       this._grabAnno(group, sx, sy);
       return;
     }
 
-    // 6) empty space -> clear edge selection, Shift+drag marquee-selects; otherwise pan
+    // 6) empty space -> clear edge selection, Shift/Ctrl drag or Marquee mode selects; otherwise pan
     if (this.selectedEdgeKey) { this.selectedEdgeKey = null; this.markDirty(); }
     if (this.selectedAnno) { this.selectedAnno = null; this.markDirty(); }
     const w = this.screenToWorld(sx, sy);
-    if (additive) {
-      this.marquee = { ax: w.x, ay: w.y, x: w.x, y: w.y };
+    if (additive || this.toolMode === 'select') {
+      if (!additive) {
+        this.selected.clear();
+        this.selectedAnnos.clear();
+      }
+      this.marquee = { ax: w.x, ay: w.y, x: w.x, y: w.y, additive };
     } else {
       this.pan = { sx, sy, camx: this.cam.x, camy: this.cam.y, moved: false };
     }
@@ -1332,11 +1396,52 @@ export class Diagram {
     if (this.dragGroup) {
       const w = this.screenToWorld(sx, sy);
       const dx = w.x - this.dragGroup.ax, dy = w.y - this.dragGroup.ay;
-      for (const it of this.dragGroup.items) {
+
+      // Move tables
+      for (const it of this.dragGroup.tables) {
         it.t.x = it.sx0 + dx;
         it.t.y = it.sy0 + dy;
-        this._fitGroupsForTable(it.t.key);
       }
+
+      // Move explicitly selected annotations
+      for (const it of this.dragGroup.annos) {
+        it.a.x = it.sx0 + dx;
+        it.a.y = it.sy0 + dy;
+      }
+
+      // Coordination with TableGroups:
+      // If all tables in a TableGroup are moving, move the group box intact with them.
+      // If only some tables in a TableGroup are moving, refit the group dynamically.
+      const selectedTableKeys = new Set(this.dragGroup.tables.map(it => it.t.key.toLowerCase()));
+      const explicitlyMovedGroupIds = new Set(this.dragGroup.annos.map(it => it.a.id));
+
+      for (const a of this.annotations) {
+        if (a.type === 'group') {
+          if (explicitlyMovedGroupIds.has(a.id)) continue;
+          const memberKeys = (a.tables || []).map(k => String(k).toLowerCase());
+          if (!memberKeys.length) continue;
+
+          const allMembersSelected = memberKeys.every(k => selectedTableKeys.has(k));
+          const someMembersSelected = memberKeys.some(k => selectedTableKeys.has(k));
+
+          if (allMembersSelected) {
+            const origin = this.dragGroup.groupOrigins[a.id];
+            if (origin) {
+              a.x = origin.x + dx;
+              a.y = origin.y + dy;
+            }
+          } else if (someMembersSelected) {
+            const bounds = computeGroupBounds(a, this.model.tables);
+            if (bounds) {
+              a.x = bounds.x;
+              a.y = bounds.y;
+              a.w = bounds.w;
+              a.h = bounds.h;
+            }
+          }
+        }
+      }
+
       this.dragGroup.moved = true;
       this.markDirty();
       return true;
@@ -1429,15 +1534,30 @@ export class Diagram {
       this.markDirty();
       return;
     }
-    // marquee end -> select tables intersecting the box (union with current)
+    // marquee end -> select tables and groups fully enclosed by the box
     if (this.marquee) {
       const m = this.marquee;
       const x0 = Math.min(m.ax, m.x), x1 = Math.max(m.ax, m.x);
       const y0 = Math.min(m.ay, m.y), y1 = Math.max(m.ay, m.y);
-      if (x1 - x0 > 2 || y1 - y0 > 2) {
+      if (x1 - x0 > 4 || y1 - y0 > 4) {
+        if (!m.additive) {
+          this.selected.clear();
+          this.selectedAnnos.clear();
+        }
+        // Tables: MUST BE FULLY ENCLOSED by the marquee box
         for (const t of this.model.tables) {
-          if (Number.isFinite(t.x) && t.x < x1 && t.x + t.w > x0 && t.y < y1 && t.y + t.h > y0) {
-            this.selected.add(t);
+          if (Number.isFinite(t.x) && !this.hidden.has(t.key)) {
+            const fullyEnclosed = t.x >= x0 && (t.x + t.w) <= x1 && t.y >= y0 && (t.y + t.h) <= y1;
+            if (fullyEnclosed) {
+              this.selected.add(t);
+            }
+          }
+        }
+        // Annotations / Groups: MUST ALSO BE FULLY ENCLOSED by the marquee box
+        for (const a of this.annotations) {
+          const fullyEnclosed = a.x >= x0 && (a.x + a.w) <= x1 && a.y >= y0 && (a.y + a.h) <= y1;
+          if (fullyEnclosed) {
+            this.selectedAnnos.add(a);
           }
         }
         this.pinned = null; this.pinnedKeys = null;
@@ -1448,14 +1568,36 @@ export class Diagram {
       return;
     }
     if (this.dragGroup) {
-      if (this.dragGroup.moved) this.onLayoutChange?.();
+      if (!this.dragGroup.moved) {
+        // User clicked an already selected item without dragging: collapse selection
+        if (this._potentialSingleSelect) {
+          this.selected = new Set([this._potentialSingleSelect]);
+          this.selectedAnnos.clear();
+          this._pin(this._potentialSingleSelect);
+        } else if (this._potentialSingleAnno) {
+          this.selected.clear();
+          this.selectedAnnos = new Set([this._potentialSingleAnno]);
+          this.selectedAnno = this._potentialSingleAnno;
+        }
+        this.markDirty();
+        this.onSelectionChange?.();
+      } else {
+        this.onLayoutChange?.();
+      }
       this.dragGroup = null;
+      this._potentialSingleSelect = null;
+      this._potentialSingleAnno = null;
       return;
     }
     // a click (no drag) on a table pins focus; a click on empty space clears it
     if (this.drag && !this.drag.moved) this._pin(this.drag.t);
     else if (this.pan && !this.pan.moved) {
-      if (this.selected.size) { this.selected = new Set(); this.markDirty(); this.onSelectionChange?.(); }
+      if (this.selected.size || this.selectedAnnos.size) {
+        this.selected = new Set();
+        this.selectedAnnos = new Set();
+        this.markDirty();
+        this.onSelectionChange?.();
+      }
       if (this.pinned) this._pin(this.pinned);
     }
     const changed = (this.drag && this.drag.moved) || (this.pan && this.pan.moved) ||
@@ -1468,7 +1610,29 @@ export class Diagram {
   }
 
   clearSelection() {
-    if (this.selected.size) { this.selected = new Set(); this.markDirty(); this.onSelectionChange?.(); }
+    if (this.selected.size || this.selectedAnnos.size) {
+      this.selected = new Set();
+      this.selectedAnnos = new Set();
+      this.markDirty();
+      this.onSelectionChange?.();
+    }
+  }
+
+  selectAll() {
+    this.selected = new Set(this.model.tables.filter(t => Number.isFinite(t.x) && !this.hidden.has(t.key)));
+    this.selectedAnnos = new Set(this.annotations);
+    this.pinned = null;
+    this.pinnedKeys = null;
+    this.selectedEdgeKey = null;
+    this.selectedAnno = null;
+    this.markDirty();
+    this.onSelectionChange?.();
+  }
+
+  setToolMode(mode) {
+    this.toolMode = mode === 'select' ? 'select' : 'pan';
+    this.markDirty();
+    this.onToolModeChange?.(this.toolMode);
   }
 
   // ---- hide / show tables ----

@@ -73,31 +73,80 @@ function performRedo() {
   }
 }
 
+// Tool mode: Hand (Pan) vs Marquee (Select)
+const btnToolPan = $('btn-tool-pan');
+const btnToolSelect = $('btn-tool-select');
+
+function syncToolModeButtons(mode) {
+  if (btnToolPan) btnToolPan.classList.toggle('active', mode === 'pan');
+  if (btnToolSelect) btnToolSelect.classList.toggle('active', mode === 'select');
+}
+
+btnToolPan?.addEventListener('click', () => {
+  diagram.setToolMode('pan');
+  syncToolModeButtons('pan');
+});
+
+btnToolSelect?.addEventListener('click', () => {
+  diagram.setToolMode('select');
+  syncToolModeButtons('select');
+});
+
+diagram.onToolModeChange = (mode) => syncToolModeButtons(mode);
+
 btnUndo?.addEventListener('click', () => performUndo());
 btnRedo?.addEventListener('click', () => performRedo());
 btnCanvasUndo?.addEventListener('click', () => performUndo());
 btnCanvasRedo?.addEventListener('click', () => performRedo());
 
-// Global keyboard shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, Cmd+Z, Cmd+Y, Cmd+Shift+Z)
+// Global keyboard shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, Ctrl+A, V, H, Space)
+let preSpaceToolMode = null;
+
 window.addEventListener('keydown', (e) => {
   const isCtrlOrCmd = e.ctrlKey || e.metaKey;
-  if (!isCtrlOrCmd) return;
-
   const tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
   const isInput = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
 
-  // Let native editor handle typing undo when typing in SQL or layout textarea
+  // If user is actively typing in SQL or layout textarea, let native editor handle typing
   if (isInput && (document.activeElement === sqlEl || document.activeElement === layoutJsonEl)) {
     return;
   }
 
-  const key = e.key.toLowerCase();
-  if (key === 'z' && !e.shiftKey) {
-    e.preventDefault();
-    performUndo();
-  } else if ((key === 'z' && e.shiftKey) || key === 'y') {
-    e.preventDefault();
-    performRedo();
+  if (isCtrlOrCmd) {
+    const key = e.key.toLowerCase();
+    if (key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      performUndo();
+    } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+      e.preventDefault();
+      performRedo();
+    } else if (key === 'a' && !isInput) {
+      e.preventDefault();
+      diagram.selectAll();
+    }
+    return;
+  }
+
+  if (!isInput) {
+    if (e.key === ' ' && !e.repeat && !preSpaceToolMode) {
+      preSpaceToolMode = diagram.toolMode;
+      diagram.setToolMode('pan');
+      syncToolModeButtons('pan');
+    } else if (e.key.toLowerCase() === 'v') {
+      diagram.setToolMode('select');
+      syncToolModeButtons('select');
+    } else if (e.key.toLowerCase() === 'h') {
+      diagram.setToolMode('pan');
+      syncToolModeButtons('pan');
+    }
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  if (e.key === ' ' && preSpaceToolMode) {
+    diagram.setToolMode(preSpaceToolMode);
+    syncToolModeButtons(preSpaceToolMode);
+    preSpaceToolMode = null;
   }
 });
 

@@ -237,6 +237,22 @@
       </div>
 
       <div class="zoom-controls">
+        <div class="tool-mode-group">
+          <button id="btn-tool-pan" class="btn ghost icon active" title="Hand tool: Pan the canvas (H / Space)" aria-label="Hand tool" data-umami-event="tool-pan">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px">
+              <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/>
+              <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/>
+              <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/>
+              <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
+            </svg>
+          </button>
+          <button id="btn-tool-select" class="btn ghost icon" title="Select tool: Area marquee selection (V / Drag)" aria-label="Select tool" data-umami-event="tool-select">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px">
+              <path d="M3 3l7 18 3-7 7-3L3 3z"/>
+            </svg>
+          </button>
+        </div>
+        <span class="vsep" aria-hidden="true"></span>
         <button id="btn-edge-colors" class="btn ghost icon" title="Toggle connection colors (Multicolor / Single color)" aria-label="Toggle connection colors" data-umami-event="toggle-edge-colors">
           <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/>
