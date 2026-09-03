@@ -973,13 +973,25 @@ export class Diagram {
       const r = c.getBoundingClientRect();
       const additive = e.shiftKey || e.ctrlKey || e.metaKey;
       this._pointerDown(e.clientX - r.left, e.clientY - r.top, additive);
-      c.style.cursor = this.toolMode === 'select' ? 'crosshair' : 'grabbing';
+      c.style.cursor = 'grabbing';
     });
 
     window.addEventListener('mousemove', (e) => {
       const r = c.getBoundingClientRect();
       const sx = e.clientX - r.left, sy = e.clientY - r.top;
       if (this._pointerMove(sx, sy)) return;   // active drag/pan handled it
+
+      if (this.toolMode === 'pan') {
+        if (this.hover || this.hoverEdge || this.hoverVertex || this.hoverConn) {
+          this.hover = null;
+          this.hoverEdge = null;
+          this.hoverVertex = null;
+          this.hoverConn = null;
+          this.markDirty();
+        }
+        c.style.cursor = 'grab';
+        return;
+      }
 
       // 1) vertex or anchor handle under cursor
       const vHit = this.vertexAt(sx, sy);
@@ -1039,7 +1051,9 @@ export class Diagram {
 
     window.addEventListener('mouseup', () => {
       this._pointerUp();
-      c.style.cursor = this.hoverVertex ? 'move' : (this.hoverEdge ? (this.hoverEdge.isOrthogonal ? (this.hoverEdge.isVertical ? 'ew-resize' : 'ns-resize') : 'pointer') : (this.hover ? 'grab' : (this.toolMode === 'select' ? 'crosshair' : 'default')));
+      c.style.cursor = this.toolMode === 'pan'
+        ? 'grab'
+        : (this.hoverVertex ? 'move' : (this.hoverEdge ? (this.hoverEdge.isOrthogonal ? (this.hoverEdge.isVertical ? 'ew-resize' : 'ns-resize') : 'pointer') : (this.hover ? 'grab' : (this.toolMode === 'select' ? 'crosshair' : 'default'))));
     });
 
     // ---- touch (mobile): 1 finger = drag/pan, 2 fingers = pinch-zoom + pan ----
@@ -1126,6 +1140,7 @@ export class Diagram {
 
     // double-click: vertex deletion, or new vertex creation on edge, else inline edit
     c.addEventListener('dblclick', (e) => {
+      if (this.toolMode === 'pan') return;
       const r = c.getBoundingClientRect();
       const sx = e.clientX - r.left, sy = e.clientY - r.top;
       const vHit = this.vertexAt(sx, sy);
@@ -1149,9 +1164,15 @@ export class Diagram {
   }
 
   // ---- shared pointer logic (used by both mouse and touch) ----
-  // `additive` (Shift) drives multi-select: Shift+click toggles a table,
+  // `additive` (Shift/Ctrl) drives multi-select: Shift+click toggles a table,
   // Shift+drag on empty draws a marquee box.
   _pointerDown(sx, sy, additive = false, allowConnect = true) {
+    if (this.toolMode === 'pan') {
+      // In Hand / Pan mode: strictly pan the canvas, cannot select or move elements
+      this.pan = { sx, sy, camx: this.cam.x, camy: this.cam.y, moved: false };
+      return;
+    }
+
     this._preDragSnapshot = this.getSnapshot();
 
     // 0) Vertex handle (waypoint / anchor)
@@ -1592,13 +1613,15 @@ export class Diagram {
     // a click (no drag) on a table pins focus; a click on empty space clears it
     if (this.drag && !this.drag.moved) this._pin(this.drag.t);
     else if (this.pan && !this.pan.moved) {
-      if (this.selected.size || this.selectedAnnos.size) {
-        this.selected = new Set();
-        this.selectedAnnos = new Set();
-        this.markDirty();
-        this.onSelectionChange?.();
+      if (this.toolMode !== 'pan') {
+        if (this.selected.size || this.selectedAnnos.size) {
+          this.selected = new Set();
+          this.selectedAnnos = new Set();
+          this.markDirty();
+          this.onSelectionChange?.();
+        }
+        if (this.pinned) this._pin(this.pinned);
       }
-      if (this.pinned) this._pin(this.pinned);
     }
     const changed = (this.drag && this.drag.moved) || (this.pan && this.pan.moved) ||
                     (this.annoDrag && this.annoDrag.moved) || (this.annoResize && this.annoResize.moved);
@@ -1631,6 +1654,15 @@ export class Diagram {
 
   setToolMode(mode) {
     this.toolMode = mode === 'select' ? 'select' : 'pan';
+    if (this.toolMode === 'pan') {
+      this.hover = null;
+      this.hoverEdge = null;
+      this.hoverVertex = null;
+      this.hoverConn = null;
+      this.canvas.style.cursor = 'grab';
+    } else {
+      this.canvas.style.cursor = 'default';
+    }
     this.markDirty();
     this.onToolModeChange?.(this.toolMode);
   }

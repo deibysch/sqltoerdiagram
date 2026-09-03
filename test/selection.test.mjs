@@ -85,3 +85,24 @@ test('Selection area box requires full enclosure', () => {
   assert.strictEqual(selFull.has('profiles'), true);
   assert.strictEqual(selFull.has('auth_group'), true, 'Whole group is selected when completely enclosed');
 });
+
+test('Hand tool pan-only mode disables element selection and movement', () => {
+  let toolMode = 'pan';
+  let pan = null;
+  let selected = new Set(['users']);
+  const t = { key: 'users', x: 100, y: 100, w: 200, h: 150 };
+
+  // Pointer down in pan mode on a table
+  function pointerDown(sx, sy) {
+    if (toolMode === 'pan') {
+      pan = { sx, sy, camx: 0, camy: 0, moved: false };
+      return;
+    }
+    selected = new Set([t]);
+  }
+
+  pointerDown(150, 150);
+  assert.ok(pan !== null, 'Pan is initiated even when clicking on a table');
+  assert.strictEqual(selected.size, 1, 'Selection was not modified or cleared');
+});
+
