@@ -160,11 +160,114 @@ function capitalize(s) {
 }
 
 /**
+ * Optimize 2D grid placement of domains so heavily interconnected domains sit adjacent to each other.
+ */
+export function optimizeDomainGridPositions(domains, relations = [], cols = 2) {
+  const n = domains.length;
+  const rows = Math.ceil(n / cols);
+  const slots = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (slots.length < n) slots.push({ col: c, row: r });
+    }
+  }
+
+  if (n <= 2) return slots.slice(0, n);
+
+  // Map table -> domainIndex
+  const tableToDomain = new Map();
+  domains.forEach((d, idx) => {
+    (d.tables || []).forEach(t => tableToDomain.set(String(t).toLowerCase(), idx));
+  });
+
+  // Inter-domain connection weight matrix
+  const weights = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (const r of (relations || [])) {
+    const fDom = tableToDomain.get(String(r.fromTable).toLowerCase());
+    const tDom = tableToDomain.get(String(r.toTable).toLowerCase());
+    if (fDom !== undefined && tDom !== undefined && fDom !== tDom) {
+      weights[fDom][tDom]++;
+      weights[tDom][fDom]++;
+    }
+  }
+
+  function getCost(assignment) {
+    let cost = 0;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        if (weights[i][j] > 0) {
+          const s1 = slots[assignment[i]];
+          const s2 = slots[assignment[j]];
+          const dist = Math.abs(s1.col - s2.col) + Math.abs(s1.row - s2.row);
+          cost += weights[i][j] * dist;
+        }
+      }
+    }
+    return cost;
+  }
+
+  let bestAssignment = Array.from({ length: n }, (_, i) => i);
+  let bestCost = getCost(bestAssignment);
+
+  if (n <= 6) {
+    function permute(arr, k = 0) {
+      if (k === arr.length) {
+        const c = getCost(arr);
+        if (c < bestCost) { bestCost = c; bestAssignment = [...arr]; }
+        return;
+      }
+      for (let i = k; i < arr.length; i++) {
+        [arr[k], arr[i]] = [arr[i], arr[k]];
+        permute(arr, k + 1);
+        [arr[k], arr[i]] = [arr[i], arr[k]];
+      }
+    }
+    permute([...bestAssignment]);
+  } else {
+    // Greedy placement
+    const placed = new Array(n).fill(-1);
+    const degrees = weights.map(row => row.reduce((a, b) => a + b, 0));
+    const first = degrees.indexOf(Math.max(...degrees));
+    placed[first] = 0;
+    const usedSlots = new Set([0]);
+
+    for (let step = 1; step < n; step++) {
+      let bestDomain = -1, bestSlot = -1, bestScore = -Infinity;
+      for (let d = 0; d < n; d++) {
+        if (placed[d] !== -1) continue;
+        for (let s = 0; s < n; s++) {
+          if (usedSlots.has(s)) continue;
+          let score = 0;
+          for (let prev = 0; prev < n; prev++) {
+            if (placed[prev] !== -1 && weights[d][prev] > 0) {
+              const dist = Math.abs(slots[s].col - slots[placed[prev]].col) + Math.abs(slots[s].row - slots[placed[prev]].row);
+              score += weights[d][prev] / dist;
+            }
+          }
+          if (score > bestScore) {
+            bestScore = score;
+            bestDomain = d;
+            bestSlot = s;
+          }
+        }
+      }
+      if (bestDomain !== -1 && bestSlot !== -1) {
+        placed[bestDomain] = bestSlot;
+        usedSlots.add(bestSlot);
+      }
+    }
+    bestAssignment = placed;
+  }
+
+  return bestAssignment.map(slotIdx => slots[slotIdx]);
+}
+
+/**
  * Apply semantic domain layout to model tables.
- * Arranges domains in clean 2D grid cells with ample corridors,
+ * Arranges domains in connection-optimized 2D grid cells with ample corridors,
  * and arranges tables within each domain cluster in a compact, readable formation.
  */
-export function applySemanticDomainLayout(model, domains, createGroups = true) {
+export function applySemanticDomainLayout(model, domains, createGroups = true, options = {}) {
   const tableMap = new Map(model.tables.map(t => [t.key.toLowerCase(), t]));
 
   // Measure all tables
@@ -173,49 +276,95 @@ export function applySemanticDomainLayout(model, domains, createGroups = true) {
     t.w = dims.w; t.h = dims.h; t.rowH = dims.rowH; t.headerH = dims.headerH;
   }
 
-  const cols = Math.max(1, Math.ceil(Math.sqrt(domains.length)));
-  let currentY = 80;
-  let rowMaxHeight = 0;
-  let currentX = 80;
+  const n = domains.length;
+  if (!n) return { domains: [], annotations: [] };
 
-  const generatedAnnotations = [];
+  const cols = Math.max(1, Math.min(3, Math.ceil(Math.sqrt(n))));
+  const gridPositions = optimizeDomainGridPositions(domains, model.relations || [], cols);
 
-  for (let dIdx = 0; dIdx < domains.length; dIdx++) {
-    const domain = domains[dIdx];
-    const dCol = dIdx % cols;
-    if (dCol === 0 && dIdx > 0) {
-      currentY += rowMaxHeight + 120;
-      currentX = 80;
-      rowMaxHeight = 0;
-    }
+  // Measure each domain's internal layout size first
+  const domainSizes = domains.map((domain) => {
+    const dTables = (domain.tables || []).map(k => tableMap.get(k)).filter(Boolean);
+    if (!dTables.length) return { w: 280, h: 200, dTables: [], subCols: 1 };
 
-    const dTables = domain.tables.map(k => tableMap.get(k)).filter(Boolean);
-    if (!dTables.length) continue;
-
-    // Arrange tables within this domain in a tidy 2-column or 3-column block
     const subCols = Math.max(1, Math.min(3, Math.ceil(Math.sqrt(dTables.length))));
-    let subX = currentX + 30;
-    let subY = currentY + 50;
-    let subRowMaxH = 0;
-    let domainMaxW = 0;
+    let subW = 0, subH = 0;
+    let curX = 32, curY = 56, rowH = 0;
 
     for (let i = 0; i < dTables.length; i++) {
       const t = dTables[i];
       if (i > 0 && i % subCols === 0) {
+        curY += rowH + 36;
+        curX = 32;
+        rowH = 0;
+      }
+      curX += t.w + 48;
+      rowH = Math.max(rowH, t.h);
+      subW = Math.max(subW, curX);
+      subH = Math.max(subH, curY + rowH + 28);
+    }
+
+    return {
+      w: Math.max(280, subW + 20),
+      h: Math.max(200, subH + 16),
+      dTables,
+      subCols,
+    };
+  });
+
+  // Calculate row heights and col widths
+  const rows = Math.ceil(n / cols);
+  const colWidths = new Array(cols).fill(280);
+  const rowHeights = new Array(rows).fill(200);
+
+  for (let i = 0; i < n; i++) {
+    const pos = gridPositions[i];
+    const size = domainSizes[i];
+    colWidths[pos.col] = Math.max(colWidths[pos.col], size.w);
+    rowHeights[pos.row] = Math.max(rowHeights[pos.row], size.h);
+  }
+
+  // Corridors / Gutters between domain boxes: wide channels for cross-domain lines
+  const GUTTER_X = 140;
+  const GUTTER_Y = 130;
+
+  // Calculate X/Y offsets for each grid cell
+  const colX = [80];
+  for (let c = 1; c < cols; c++) {
+    colX[c] = colX[c - 1] + colWidths[c - 1] + GUTTER_X;
+  }
+  const rowY = [80];
+  for (let r = 1; r < rows; r++) {
+    rowY[r] = rowY[r - 1] + rowHeights[r - 1] + GUTTER_Y;
+  }
+
+  const generatedAnnotations = [];
+
+  for (let dIdx = 0; dIdx < n; dIdx++) {
+    const domain = domains[dIdx];
+    const pos = gridPositions[dIdx];
+    const size = domainSizes[dIdx];
+    const currentX = colX[pos.col];
+    const currentY = rowY[pos.row];
+
+    // Place tables inside this domain box
+    const subCols = size.subCols;
+    let subX = currentX + 32;
+    let subY = currentY + 56;
+    let subRowMaxH = 0;
+
+    for (let i = 0; i < size.dTables.length; i++) {
+      const t = size.dTables[i];
+      if (i > 0 && i % subCols === 0) {
         subY += subRowMaxH + 36;
-        subX = currentX + 30;
+        subX = currentX + 32;
         subRowMaxH = 0;
       }
       t.x = subX;
       t.y = subY;
       subX += t.w + 48;
       subRowMaxH = Math.max(subRowMaxH, t.h);
-      domainMaxW = Math.max(domainMaxW, subX - currentX);
     }
-
-    const domainW = Math.max(260, domainMaxW + 20);
-    const domainH = Math.max(180, (subY + subRowMaxH) - currentY + 30);
-    rowMaxHeight = Math.max(rowMaxHeight, domainH);
 
     if (createGroups) {
       generatedAnnotations.push({
@@ -226,15 +375,17 @@ export function applySemanticDomainLayout(model, domains, createGroups = true) {
         tables: domain.tables,
         x: currentX,
         y: currentY,
-        w: domainW,
-        h: domainH,
+        w: size.w,
+        h: size.h,
       });
     }
-
-    currentX += domainW + 80;
   }
 
-  return { domains, annotations: generatedAnnotations };
+  return {
+    domains,
+    annotations: generatedAnnotations,
+    lineStyle: options.lineStyle || null,
+  };
 }
 
 /**
@@ -417,7 +568,7 @@ Include every single table from the schema. Do not omit any tables.`;
     });
   }
 
-  return applySemanticDomainLayout(model, domains, options.createGroups !== false);
+  return applySemanticDomainLayout(model, domains, options.createGroups !== false, options);
 }
 
 /**
@@ -425,5 +576,5 @@ Include every single table from the schema. Do not omit any tables.`;
  */
 export function reorderWithLocalAI(model, options = {}) {
   const domains = clusterTablesLocalAI(model);
-  return applySemanticDomainLayout(model, domains, options.createGroups !== false);
+  return applySemanticDomainLayout(model, domains, options.createGroups !== false, options);
 }

@@ -698,7 +698,7 @@ export class Diagram {
   }
 
   // Compute connection endpoint anchors and route data for an edge
-  _edgeSeg(fromKey, fromCol, toKey, toCol, cull, key = '') {
+  _edgeSeg(fromKey, fromCol, toKey, toCol, cull, key = '', laneOffset = 0) {
     const byKey = this._tableMap();
     const from = byKey.get(fromKey), to = byKey.get(toKey);
     if (!from || !to || !Number.isFinite(from.x) || !Number.isFinite(to.x)) return null;
@@ -714,11 +714,18 @@ export class Diagram {
       ? waypoints[waypoints.length - 1]
       : (from ? { x: from.x + from.w / 2, y: from.y + from.h / 2 } : null);
 
-    const p1 = getTableAnchor(from, fromCol, targetForFrom, anchorCfg?.fromAnchor);
-    const p2 = getTableAnchor(to, toCol, targetForTo, anchorCfg?.toAnchor);
+    const p1 = getTableAnchor(from, fromCol, targetForFrom, anchorCfg?.fromAnchor, laneOffset);
+    const p2 = getTableAnchor(to, toCol, targetForTo, anchorCfg?.toAnchor, laneOffset);
 
     const routingStyle = this.edgeRoutings.get(key) || this.edgeRouting || 'curved';
     const isOrthogonal = routingStyle === 'ortho-sharp' || routingStyle === 'ortho-rounded';
+
+    const obstacles = [];
+    for (const t of this.model.tables) {
+      if (t.key !== fromKey && t.key !== toKey && Number.isFinite(t.x) && !this.hidden.has(t.key)) {
+        obstacles.push(t);
+      }
+    }
 
     return {
       p1, p2,
@@ -727,6 +734,7 @@ export class Diagram {
       fromKey, toKey,
       fromTable: from, toTable: to,
       waypoints,
+      obstacles,
       routingStyle,
       isOrthogonal,
     };
@@ -771,9 +779,48 @@ export class Diagram {
       edges.push({ fk, tk, fc, tc, manual: true, card: null, key });
     }
 
+    // Calculate lane offsets for parallel edges
+    const pairCounts = new Map();
+    const pairIndices = new Map();
+    for (const e of edges) {
+      const pairKey = `${e.fk}->${e.tk}`;
+      pairCounts.set(pairKey, (pairCounts.get(pairKey) || 0) + 1);
+    }
+    const fromCounts = new Map();
+    const fromIndices = new Map();
+    for (const e of edges) {
+      fromCounts.set(e.fk, (fromCounts.get(e.fk) || 0) + 1);
+    }
+
+    // Map each source table to a consistent distinct color from EDGE_COLORS
+    const srcTableColors = new Map();
+    let srcColorIdx = 0;
+    for (const e of edges) {
+      if (!srcTableColors.has(e.fk)) {
+        srcTableColors.set(e.fk, EDGE_COLORS[srcColorIdx % EDGE_COLORS.length]);
+        srcColorIdx++;
+      }
+    }
+
     let idx = 0;
     for (const e of edges) {
-      const seg = this._edgeSeg(e.fk, e.fc, e.tk, e.tc, cull, e.key);
+      const pairKey = `${e.fk}->${e.tk}`;
+      const pIdx = pairIndices.get(pairKey) || 0;
+      pairIndices.set(pairKey, pIdx + 1);
+      const pCount = pairCounts.get(pairKey) || 1;
+
+      const fIdx = fromIndices.get(e.fk) || 0;
+      fromIndices.set(e.fk, fIdx + 1);
+      const fCount = fromCounts.get(e.fk) || 1;
+
+      let laneOffset = 0;
+      if (pCount > 1) {
+        laneOffset = (pIdx - (pCount - 1) / 2) * 14;
+      } else if (fCount > 1) {
+        laneOffset = (fIdx - (fCount - 1) / 2) * 8;
+      }
+
+      const seg = this._edgeSeg(e.fk, e.fc, e.tk, e.tc, cull, e.key, laneOffset);
       if (!seg) { idx++; continue; }
       seg.manual = e.manual;
       seg.card = e.card;
@@ -786,7 +833,8 @@ export class Diagram {
       } else if (this.edgeColorMode === 'single') {
         edgeColor = theme.edge;
       } else {
-        edgeColor = EDGE_COLORS[idx % EDGE_COLORS.length];
+        // Color by source table so all lines originating from a table share a consistent, unique hue
+        edgeColor = srcTableColors.get(e.fk) || EDGE_COLORS[idx % EDGE_COLORS.length];
       }
       seg.color = edgeColor;
       idx++;
@@ -822,7 +870,7 @@ export class Diagram {
     ctx.lineWidth = width / cam.scale;
     if (dashed) ctx.setLineDash([6 / cam.scale, 5 / cam.scale]);
     ctx.beginPath();
-    drawRoutePath(ctx, routingStyle, p1, p2, waypoints, 8);
+    drawRoutePath(ctx, routingStyle, p1, p2, waypoints, 8, seg.obstacles);
     ctx.stroke();
     if (dashed) ctx.setLineDash([]);
 

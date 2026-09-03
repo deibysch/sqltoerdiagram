@@ -104,6 +104,46 @@ test('Local AI semantic layout clusters tables into business domains', () => {
   const allClusteredTables = clusters.flatMap(c => c.tables);
   assert.strictEqual(allClusteredTables.length, model.tables.length, 'All tables included in clusters');
 
-  const res = reorderWithLocalAI(model, { createGroups: true });
+  const res = reorderWithLocalAI(model, { createGroups: true, lineStyle: 'ortho-rounded' });
   assert.ok(res.annotations.length > 0, 'Generated group annotations for domains');
+  assert.strictEqual(res.lineStyle, 'ortho-rounded');
 });
+
+test('optimizeDomainGridPositions places connected domains in adjacent slots', async () => {
+  const { optimizeDomainGridPositions } = await import('../src/ai-layout.js');
+  const domains = [
+    { name: 'Auth', tables: ['users'] },
+    { name: 'Orders', tables: ['orders', 'order_items'] },
+    { name: 'Analytics', tables: ['logs'] },
+    { name: 'Billing', tables: ['invoices'] },
+  ];
+  // 5 relations between Auth and Orders
+  const relations = [
+    { fromTable: 'orders', toTable: 'users' },
+    { fromTable: 'orders', toTable: 'users' },
+    { fromTable: 'orders', toTable: 'users' },
+    { fromTable: 'orders', toTable: 'users' },
+    { fromTable: 'orders', toTable: 'users' },
+  ];
+
+  const slots = optimizeDomainGridPositions(domains, relations, 2);
+  assert.strictEqual(slots.length, 4);
+
+  const authSlot = slots[0];
+  const ordersSlot = slots[1];
+  const dist = Math.abs(authSlot.col - ordersSlot.col) + Math.abs(authSlot.row - ordersSlot.row);
+  assert.strictEqual(dist, 1, 'Auth and Orders must be directly adjacent (distance = 1)');
+});
+
+test('getTableAnchor separates parallel connections with laneOffset', async () => {
+  const { getTableAnchor } = await import('../src/routing.js');
+  const table = { x: 100, y: 100, w: 200, h: 200 };
+  const target = { x: 500, y: 150 };
+
+  const a1 = getTableAnchor(table, null, target, null, -12);
+  const a2 = getTableAnchor(table, null, target, null, 12);
+
+  assert.notStrictEqual(a1.y, a2.y, 'Anchors with different lane offsets must have different coordinates');
+  assert.strictEqual(a2.y - a1.y, 24, 'Distance between anchors matches laneOffset difference');
+});
+

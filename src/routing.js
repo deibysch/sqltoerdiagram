@@ -18,7 +18,7 @@ export const ROUTING_STYLES = {
  * If anchor is specified ({ side: 'left'|'right'|'top'|'bottom', offset: 0..1 }), uses that.
  * Otherwise, calculates optimal perimeter point facing the target point.
  */
-export function getTableAnchor(table, colName, targetPoint = null, anchorConfig = null) {
+export function getTableAnchor(table, colName, targetPoint = null, anchorConfig = null, laneOffset = 0) {
   if (!table || !Number.isFinite(table.x) || !Number.isFinite(table.y)) {
     return { x: 0, y: 0, nx: 1, ny: 0, side: 'right' };
   }
@@ -28,17 +28,18 @@ export function getTableAnchor(table, colName, targetPoint = null, anchorConfig 
   if (anchorConfig && anchorConfig.side) {
     const side = anchorConfig.side;
     const offset = Number.isFinite(anchorConfig.offset) ? Math.max(0, Math.min(1, anchorConfig.offset)) : 0.5;
-    if (side === 'left') return { x, y: y + offset * h, nx: -1, ny: 0, side: 'left' };
-    if (side === 'right') return { x: x + w, y: y + offset * h, nx: 1, ny: 0, side: 'right' };
-    if (side === 'top') return { x: x + offset * w, y, nx: 0, ny: -1, side: 'top' };
-    if (side === 'bottom') return { x: x + offset * w, y: y + h, nx: 0, ny: 1, side: 'bottom' };
+    if (side === 'left') return { x, y: Math.max(y + 20, Math.min(y + h - 10, y + offset * h + laneOffset)), nx: -1, ny: 0, side: 'left' };
+    if (side === 'right') return { x: x + w, y: Math.max(y + 20, Math.min(y + h - 10, y + offset * h + laneOffset)), nx: 1, ny: 0, side: 'right' };
+    if (side === 'top') return { x: Math.max(x + 16, Math.min(x + w - 16, x + offset * w + laneOffset)), y, nx: 0, ny: -1, side: 'top' };
+    if (side === 'bottom') return { x: Math.max(x + 16, Math.min(x + w - 16, x + offset * w + laneOffset)), y: y + h, nx: 0, ny: 1, side: 'bottom' };
   }
 
   // If column is provided and target is horizontal, default to column row height on left/right
   const colY = colName ? y + columnY(table, colName) : y + h / 2;
 
   if (!targetPoint) {
-    return { x: x + w, y: colY, nx: 1, ny: 0, side: 'right' };
+    const finalY = Math.max(y + 22, Math.min(y + h - 8, colY + laneOffset));
+    return { x: x + w, y: finalY, nx: 1, ny: 0, side: 'right' };
   }
 
   const cx = x + w / 2;
@@ -46,16 +47,17 @@ export function getTableAnchor(table, colName, targetPoint = null, anchorConfig 
   const dx = targetPoint.x - cx;
   const dy = targetPoint.y - cy;
 
-  // If mostly horizontal, attach to left or right at column height
+  // If mostly horizontal, attach to left or right at column height (with lane offset)
   if (Math.abs(dx) * h >= Math.abs(dy) * w) {
+    const finalY = Math.max(y + 22, Math.min(y + h - 8, colY + laneOffset));
     if (dx >= 0) {
-      return { x: x + w, y: colY, nx: 1, ny: 0, side: 'right' };
+      return { x: x + w, y: finalY, nx: 1, ny: 0, side: 'right' };
     } else {
-      return { x, y: colY, nx: -1, ny: 0, side: 'left' };
+      return { x, y: finalY, nx: -1, ny: 0, side: 'left' };
     }
   } else {
-    // Mostly vertical
-    const clampX = Math.max(x + 12, Math.min(x + w - 12, targetPoint.x));
+    // Mostly vertical (with lane offset along top/bottom edge)
+    const clampX = Math.max(x + 16, Math.min(x + w - 16, targetPoint.x + laneOffset));
     if (dy >= 0) {
       return { x: clampX, y: y + h, nx: 0, ny: 1, side: 'bottom' };
     } else {
@@ -426,26 +428,41 @@ export function drawRoutePath(ctx, style, p1, p2, waypoints = [], radius = 8, ob
   }
 
   if (style === 'curved') {
-    if (!waypoints || !waypoints.length) {
-      const fromRight = (p1.nx === 1) || (p1.nx === undefined && p1.x <= p2.x);
-      const dx = Math.max(28, Math.abs(p2.x - p1.x) * 0.4);
-      const c1x = p1.x + (p1.nx !== undefined ? p1.nx * dx : (fromRight ? dx : -dx));
-      const c1y = p1.y + (p1.ny !== undefined ? p1.ny * dx : 0);
-      const c2x = p2.x + (p2.nx !== undefined ? p2.nx * dx : (fromRight ? -dx : dx));
-      const c2y = p2.y + (p2.ny !== undefined ? p2.ny * dx : 0);
+    let effectivePts = pts;
+    if ((!waypoints || !waypoints.length) && obstacles && obstacles.length) {
+      const hits = obstacles.some(box => segmentIntersectsBox(p1, p2, box, 12).hit);
+      if (hits) {
+        effectivePts = routeAroundObstacles([p1, p2], obstacles, 16);
+      }
+    }
+
+    if (effectivePts.length <= 2) {
+      const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      const bend = Math.max(36, Math.min(dist * 0.45, 200));
+
+      const nx1 = p1.nx !== undefined ? p1.nx : (p1.x <= p2.x ? 1 : -1);
+      const ny1 = p1.ny !== undefined ? p1.ny : 0;
+      const nx2 = p2.nx !== undefined ? p2.nx : (p2.x <= p1.x ? 1 : -1);
+      const ny2 = p2.ny !== undefined ? p2.ny : 0;
+
+      const c1x = p1.x + nx1 * bend;
+      const c1y = p1.y + ny1 * bend;
+      const c2x = p2.x + nx2 * bend;
+      const c2y = p2.y + ny2 * bend;
+
       ctx.moveTo(p1.x, p1.y);
       ctx.bezierCurveTo(c1x, c1y, c2x, c2y, p2.x, p2.y);
     } else {
-      // Smooth curve passing through waypoints
-      ctx.moveTo(p1.x, p1.y);
-      for (let i = 0; i < pts.length - 1; i++) {
-        const a = pts[i];
-        const b = pts[i + 1];
+      // Smooth curve passing through detour waypoints
+      ctx.moveTo(effectivePts[0].x, effectivePts[0].y);
+      for (let i = 0; i < effectivePts.length - 1; i++) {
+        const a = effectivePts[i];
+        const b = effectivePts[i + 1];
         const mx = (a.x + b.x) / 2;
         const my = (a.y + b.y) / 2;
         ctx.quadraticCurveTo(a.x, a.y, mx, my);
       }
-      ctx.lineTo(p2.x, p2.y);
+      ctx.lineTo(effectivePts[effectivePts.length - 1].x, effectivePts[effectivePts.length - 1].y);
     }
     return;
   }
@@ -484,24 +501,39 @@ export function buildSVGPath(style, p1, p2, waypoints = [], radius = 8, obstacle
   }
 
   if (style === 'curved') {
-    if (!waypoints || !waypoints.length) {
-      const fromRight = (p1.nx === 1) || (p1.nx === undefined && p1.x <= p2.x);
-      const dx = Math.max(28, Math.abs(p2.x - p1.x) * 0.4);
-      const c1x = p1.x + (p1.nx !== undefined ? p1.nx * dx : (fromRight ? dx : -dx));
-      const c1y = p1.y + (p1.ny !== undefined ? p1.ny * dx : 0);
-      const c2x = p2.x + (p2.nx !== undefined ? p2.nx * dx : (fromRight ? -dx : dx));
-      const c2y = p2.y + (p2.ny !== undefined ? p2.ny * dx : 0);
+    let effectivePts = pts;
+    if ((!waypoints || !waypoints.length) && obstacles && obstacles.length) {
+      const hits = obstacles.some(box => segmentIntersectsBox(p1, p2, box, 12).hit);
+      if (hits) {
+        effectivePts = routeAroundObstacles([p1, p2], obstacles, 16);
+      }
+    }
+
+    if (effectivePts.length <= 2) {
+      const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      const bend = Math.max(36, Math.min(dist * 0.45, 200));
+
+      const nx1 = p1.nx !== undefined ? p1.nx : (p1.x <= p2.x ? 1 : -1);
+      const ny1 = p1.ny !== undefined ? p1.ny : 0;
+      const nx2 = p2.nx !== undefined ? p2.nx : (p2.x <= p1.x ? 1 : -1);
+      const ny2 = p2.ny !== undefined ? p2.ny : 0;
+
+      const c1x = p1.x + nx1 * bend;
+      const c1y = p1.y + ny1 * bend;
+      const c2x = p2.x + nx2 * bend;
+      const c2y = p2.y + ny2 * bend;
+
       return `M ${p1.x} ${p1.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
     } else {
-      let d = `M ${p1.x} ${p1.y}`;
-      for (let i = 0; i < pts.length - 1; i++) {
-        const a = pts[i];
-        const b = pts[i + 1];
+      let d = `M ${effectivePts[0].x} ${effectivePts[0].y}`;
+      for (let i = 0; i < effectivePts.length - 1; i++) {
+        const a = effectivePts[i];
+        const b = effectivePts[i + 1];
         const mx = (a.x + b.x) / 2;
         const my = (a.y + b.y) / 2;
         d += ` Q ${a.x} ${a.y}, ${mx} ${my}`;
       }
-      d += ` L ${p2.x} ${p2.y}`;
+      d += ` L ${effectivePts[effectivePts.length - 1].x} ${effectivePts[effectivePts.length - 1].y}`;
       return d;
     }
   }

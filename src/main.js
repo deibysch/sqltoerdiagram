@@ -786,6 +786,7 @@ const btnCancelAI = $('btn-cancel-ai');
 const btnRunLocalAI = $('btn-run-local-ai');
 const btnRunGeminiAI = $('btn-run-gemini-ai');
 const aiKeyInput = $('ai-gemini-key');
+const aiLineStyle = $('ai-line-style');
 const aiCreateGroups = $('ai-create-groups');
 const aiStatusBox = $('ai-status');
 const aiStatusText = $('ai-status-text');
@@ -795,6 +796,9 @@ function openAIModal() {
   modalAI.hidden = false;
   if (aiKeyInput) {
     aiKeyInput.value = localStorage.getItem('gemini_api_key') || '';
+  }
+  if (aiLineStyle) {
+    aiLineStyle.value = diagram.edgeRouting === 'curved' ? 'curved' : 'ortho-rounded';
   }
   if (aiStatusBox) aiStatusBox.hidden = true;
 }
@@ -818,6 +822,8 @@ async function executeAIReorder(isGemini = false) {
   }
 
   const createGroups = aiCreateGroups ? aiCreateGroups.checked : true;
+  const selectedLineStyle = aiLineStyle ? aiLineStyle.value : (diagram.edgeRouting || 'ortho-rounded');
+
   if (aiStatusBox) {
     aiStatusBox.hidden = false;
     aiStatusText.textContent = isGemini ? 'Consultando a Google Gemini AI...' : 'Ejecutando IA Semántica Local...';
@@ -833,14 +839,18 @@ async function executeAIReorder(isGemini = false) {
         throw new Error('Por favor ingresa tu Gemini API Key o haz clic en "Ejecutar con IA Local".');
       }
       localStorage.setItem('gemini_api_key', apiKey);
-      res = await reorderWithGemini(diagram.model, apiKey, { createGroups });
+      res = await reorderWithGemini(diagram.model, apiKey, { createGroups, lineStyle: selectedLineStyle });
     } else {
-      res = reorderWithLocalAI(diagram.model, { createGroups });
+      res = reorderWithLocalAI(diagram.model, { createGroups, lineStyle: selectedLineStyle });
     }
 
     if (res.annotations && res.annotations.length) {
       const notes = diagram.annotations.filter(a => a.type === 'note');
       diagram.setAnnotations([...notes, ...res.annotations]);
+    }
+
+    if (selectedLineStyle) {
+      diagram.setEdgeRouting(selectedLineStyle);
     }
 
     diagram.markDirty();
