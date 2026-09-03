@@ -90,6 +90,20 @@
         <button id="btn-infer" class="btn ghost" title="Auto-detect relationships by column name (for schemas without foreign keys)" data-umami-event="infer-links">Infer links</button>
       </div>
 
+      <!-- undo / redo history -->
+      <div class="tb-group undo-redo-group">
+        <button id="btn-undo" class="btn ghost icon" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px">
+            <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+          </svg>
+        </button>
+        <button id="btn-redo" class="btn ghost icon" title="Redo (Ctrl+Y / Ctrl+Shift+Z)" aria-label="Redo" disabled>
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px">
+            <path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/>
+          </svg>
+        </button>
+      </div>
+
       <!-- output: get the diagram out -->
       <div class="tb-group">
         <div class="menu-wrap">
@@ -246,6 +260,17 @@
             <button class="menu-item" data-routing="ortho-rounded">90° Step (Rounded)</button>
           </div>
         </div>
+        <span class="vsep" aria-hidden="true"></span>
+        <button id="btn-canvas-undo" class="btn ghost icon" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px">
+            <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+          </svg>
+        </button>
+        <button id="btn-canvas-redo" class="btn ghost icon" title="Redo (Ctrl+Y / Ctrl+Shift+Z)" aria-label="Redo" disabled>
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px">
+            <path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/>
+          </svg>
+        </button>
         <span class="vsep" aria-hidden="true"></span>
         <div class="menu-wrap">
           <button id="btn-arrange" class="btn ghost caret" title="Auto-arrange tables" data-umami-event="arrange">Arrange</button>

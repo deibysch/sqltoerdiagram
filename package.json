@@ -12,7 +12,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test/edit.test.mjs && node test/dbml.test.mjs"
+    "test": "node test/edit.test.mjs && node test/dbml.test.mjs && node test/history.test.mjs"
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.4"

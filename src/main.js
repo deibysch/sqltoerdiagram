@@ -12,6 +12,7 @@ import { highlightSQL } from './highlight.js';
 import { encodeShare, decodeShare } from './share.js';
 import { sanitizeAnnotations, computeGroupBounds, newId } from './annotations.js';
 import { EXAMPLE_SQL } from './examples.js';
+import { HistoryManager } from './history.js';
 
 const $ = (id) => document.getElementById(id);
 const sqlEl = $('sql');
@@ -26,6 +27,79 @@ const diagram = new Diagram(canvas);
 diagram.onZoom = (s) => { zoomLabel.textContent = Math.round(s * 100) + '%'; };
 window.__dbdiga = diagram;   // debug handle
 let visualEditor = null;     // created after setup; refreshed on every model change
+
+// History manager (Undo / Redo) with 50 steps
+const history = new HistoryManager(50);
+diagram.onHistorySnapshot = (snapshot) => {
+  history.push(snapshot);
+};
+
+const btnUndo = $('btn-undo');
+const btnRedo = $('btn-redo');
+const btnCanvasUndo = $('btn-canvas-undo');
+const btnCanvasRedo = $('btn-canvas-redo');
+
+function updateUndoRedoButtons() {
+  const canUndo = history.canUndo();
+  const canRedo = history.canRedo();
+  if (btnUndo) { btnUndo.disabled = !canUndo; btnUndo.setAttribute('aria-disabled', String(!canUndo)); }
+  if (btnRedo) { btnRedo.disabled = !canRedo; btnRedo.setAttribute('aria-disabled', String(!canRedo)); }
+  if (btnCanvasUndo) { btnCanvasUndo.disabled = !canUndo; btnCanvasUndo.setAttribute('aria-disabled', String(!canUndo)); }
+  if (btnCanvasRedo) { btnCanvasRedo.disabled = !canRedo; btnCanvasRedo.setAttribute('aria-disabled', String(!canRedo)); }
+}
+history.onChange(updateUndoRedoButtons);
+
+function performUndo() {
+  if (!history.canUndo()) return;
+  const current = diagram.getSnapshot();
+  const previous = history.undo(current);
+  if (previous) {
+    diagram.applySnapshot(previous);
+    saveLayoutDebounced();
+    if (editorMode === 'layout') updateLayoutTextarea();
+    if (editorMode === 'visual') visualEditor?.render();
+  }
+}
+
+function performRedo() {
+  if (!history.canRedo()) return;
+  const current = diagram.getSnapshot();
+  const next = history.redo(current);
+  if (next) {
+    diagram.applySnapshot(next);
+    saveLayoutDebounced();
+    if (editorMode === 'layout') updateLayoutTextarea();
+    if (editorMode === 'visual') visualEditor?.render();
+  }
+}
+
+btnUndo?.addEventListener('click', () => performUndo());
+btnRedo?.addEventListener('click', () => performRedo());
+btnCanvasUndo?.addEventListener('click', () => performUndo());
+btnCanvasRedo?.addEventListener('click', () => performRedo());
+
+// Global keyboard shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, Cmd+Z, Cmd+Y, Cmd+Shift+Z)
+window.addEventListener('keydown', (e) => {
+  const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+  if (!isCtrlOrCmd) return;
+
+  const tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+  const isInput = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
+
+  // Let native editor handle typing undo when typing in SQL or layout textarea
+  if (isInput && (document.activeElement === sqlEl || document.activeElement === layoutJsonEl)) {
+    return;
+  }
+
+  const key = e.key.toLowerCase();
+  if (key === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    performUndo();
+  } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+    e.preventDefault();
+    performRedo();
+  }
+});
 
 // read-only embed view (?embed=1) — never editable, no matter the input format
 const isEmbed = new URLSearchParams(location.search).has('embed');
@@ -471,6 +545,7 @@ function rebuild({ arrange = false, restore = null } = {}) {
   diagram._tmapDirty = true;
 
   if (arrange) {
+    diagram.onHistorySnapshot?.(diagram.getSnapshot());
     layout(result, layoutOpts, diagram.hidden);
     if (result.groups?.length) {
       diagram.setAnnotations(syncModelGroups(result, diagram.annotations));

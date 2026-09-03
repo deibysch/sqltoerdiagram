@@ -53,9 +53,10 @@ export class Diagram {
     this.editable = true;          // false for parse-only formats (Prisma/ORM) — no edit-back
     this.typeSuggestions = [];     // dialect type list for the type editor
     this.annotations = [];         // group boxes + sticky notes
-    this.selectedAnno = null;      // currently selected annotation
     this.annoDrag = null;          // annotation move
     this.annoResize = null;        // annotation resize
+    this.onHistorySnapshot = null; // callback(snapshot) for Undo/Redo
+    this._preDragSnapshot = null;  // snapshot taken before drag starts
 
     this._bindInput();
     this._loop = this._loop.bind(this);
@@ -79,11 +80,75 @@ export class Diagram {
     this.pinnedKeys = null;
     this.selected = new Set();
     this.dragGroup = null;
-    this.marquee = null;
     this.linking = null;
     this.hoverConn = null;
     this.markDirty();
     if (!keepCamera) {/* caller may fit */}
+  }
+
+  getSnapshot() {
+    const tables = {};
+    for (const t of this.model.tables) {
+      if (Number.isFinite(t.x)) tables[t.key] = { x: Math.round(t.x), y: Math.round(t.y) };
+    }
+    return {
+      tables,
+      annotations: this.annotations.map(a => ({ ...a, tables: a.tables ? [...a.tables] : [] })),
+      edgeColorMode: this.edgeColorMode,
+      edgeColors: Array.from(this.edgeColors.entries()),
+      edgeRouting: this.edgeRouting,
+      edgeRoutings: Array.from(this.edgeRoutings.entries()),
+      edgeWaypoints: Array.from(this.edgeWaypoints.entries()).map(([k, pts]) => [k, pts.map(p => ({ x: p.x, y: p.y }))]),
+      edgeAnchors: Array.from(this.edgeAnchors.entries()).map(([k, a]) => [k, { ...a }]),
+      manualLinks: this.manualLinks.map(l => ({ from: { ...l.from }, to: { ...l.to } })),
+      hidden: Array.from(this.hidden),
+    };
+  }
+
+  applySnapshot(snapshot) {
+    if (!snapshot) return;
+    if (snapshot.tables) {
+      for (const t of this.model.tables) {
+        const p = snapshot.tables[t.key] || snapshot.tables[t.name];
+        if (p && Number.isFinite(p.x)) { t.x = p.x; t.y = p.y; }
+      }
+    }
+    if (snapshot.annotations) {
+      this.annotations = snapshot.annotations.map(a => ({ ...a, tables: a.tables ? [...a.tables] : [] }));
+    }
+    if (snapshot.edgeColorMode) {
+      this.edgeColorMode = snapshot.edgeColorMode;
+    }
+    if (snapshot.edgeColors) {
+      this.edgeColors = new Map(snapshot.edgeColors);
+    }
+    if (snapshot.edgeRouting) {
+      this.edgeRouting = snapshot.edgeRouting;
+    }
+    if (snapshot.edgeRoutings) {
+      this.edgeRoutings = new Map(snapshot.edgeRoutings);
+    }
+    if (snapshot.edgeWaypoints) {
+      this.edgeWaypoints = new Map(snapshot.edgeWaypoints.map(([k, pts]) => [k, pts.map(p => ({ x: p.x, y: p.y }))]));
+    } else {
+      this.edgeWaypoints.clear();
+    }
+    if (snapshot.edgeAnchors) {
+      this.edgeAnchors = new Map(snapshot.edgeAnchors.map(([k, a]) => [k, { ...a }]));
+    } else {
+      this.edgeAnchors.clear();
+    }
+    if (snapshot.manualLinks) {
+      this.manualLinks = snapshot.manualLinks.map(l => ({ from: { ...l.from }, to: { ...l.to } }));
+    }
+    if (snapshot.hidden) {
+      this.hidden = new Set(snapshot.hidden);
+    }
+    this.selectedEdgeKey = null;
+    this.hoverEdge = null;
+    this.hoverVertex = null;
+    this.markDirty();
+    this.onHiddenChange?.();
   }
 
   // The table whose relationships should be emphasised: a click-pinned table
@@ -417,6 +482,7 @@ export class Diagram {
   }
 
   addAnnotation(type) {
+    this.onHistorySnapshot?.(this.getSnapshot());
     const center = this.screenToWorld(this.viewW / 2, this.viewH / 2);
     const a = makeAnnotation(type, center.x, center.y);
     this.annotations.push(a);
@@ -430,6 +496,7 @@ export class Diagram {
 
   deleteSelectedAnnotation() {
     if (!this.selectedAnno) return;
+    this.onHistorySnapshot?.(this.getSnapshot());
     const i = this.annotations.indexOf(this.selectedAnno);
     if (i >= 0) this.annotations.splice(i, 1);
     this.selectedAnno = null;
@@ -1055,6 +1122,8 @@ export class Diagram {
   // `additive` (Shift) drives multi-select: Shift+click toggles a table,
   // Shift+drag on empty draws a marquee box.
   _pointerDown(sx, sy, additive = false, allowConnect = true) {
+    this._preDragSnapshot = this.getSnapshot();
+
     // 0) Vertex handle (waypoint / anchor)
     const vHit = this.vertexAt(sx, sy);
     if (vHit) {
@@ -1095,7 +1164,12 @@ export class Diagram {
     const chrome = this._annoChromeAt(sx, sy);
     if (chrome) {
       const a = this.selectedAnno;
-      if (chrome.kind === 'color') { a.color = chrome.value; this.markDirty(); this.onLayoutChange?.(); }
+      if (chrome.kind === 'color') {
+        this.onHistorySnapshot?.(this.getSnapshot());
+        a.color = chrome.value;
+        this.markDirty();
+        this.onLayoutChange?.();
+      }
       else if (chrome.kind === 'delete') { this.deleteSelectedAnnotation(); }
       else if (chrome.kind === 'resize') {
         const w = this.screenToWorld(sx, sy);
@@ -1318,6 +1392,19 @@ export class Diagram {
   }
 
   _pointerUp() {
+    const didMove = (this.segmentDrag && this.segmentDrag.moved) ||
+                    (this.vertexDrag && this.vertexDrag.moved) ||
+                    (this.anchorDrag && this.anchorDrag.moved) ||
+                    (this.dragGroup && this.dragGroup.moved) ||
+                    (this.annoResize && this.annoResize.moved) ||
+                    (this.annoDrag && this.annoDrag.moved) ||
+                    (this.drag && this.drag.moved);
+
+    if (didMove && this._preDragSnapshot) {
+      this.onHistorySnapshot?.(this._preDragSnapshot);
+    }
+    this._preDragSnapshot = null;
+
     if (this.segmentDrag) {
       if (this.segmentDrag.moved) this.onLayoutChange?.();
       this.segmentDrag = null;
@@ -1392,6 +1479,7 @@ export class Diagram {
     else if (t) keys = [t.key];
     else keys = [...this.selected].map(x => x.key);
     if (!keys.length) return;
+    this.onHistorySnapshot?.(this.getSnapshot());
     for (const k of keys) this.hidden.add(k);
     this.selected = new Set();
     this.pinned = null; this.pinnedKeys = null;
@@ -1403,7 +1491,8 @@ export class Diagram {
 
   showAllHidden() {
     if (!this.hidden.size) return;
-    this.hidden = new Set();
+    this.onHistorySnapshot?.(this.getSnapshot());
+    this.hidden.clear();
     this.markDirty();
     this.onHiddenChange?.();
     this.onLayoutChange?.();
@@ -1504,6 +1593,7 @@ export class Diagram {
   addManualLink(fk, fc, tk, tc) {
     if (fk === tk && fc.toLowerCase() === tc.toLowerCase()) return false;
     if (this._linkExists(fk, fc, tk, tc)) return false;
+    this.onHistorySnapshot?.(this.getSnapshot());
     this.manualLinks.push({ from: { table: fk, col: fc }, to: { table: tk, col: tc } });
     this.markDirty();
     this.onLayoutChange?.();
@@ -1516,6 +1606,7 @@ export class Diagram {
   }
 
   setEdgeColorMode(mode) {
+    this.onHistorySnapshot?.(this.getSnapshot());
     this.edgeColorMode = mode === 'single' ? 'single' : 'multi';
     this.markDirty();
     this.onLayoutChange?.();
@@ -1523,6 +1614,7 @@ export class Diagram {
 
   setEdgeColor(key, color) {
     if (!key) return;
+    this.onHistorySnapshot?.(this.getSnapshot());
     if (color) {
       this.edgeColors.set(key.toLowerCase(), color);
     } else {
@@ -1543,6 +1635,7 @@ export class Diagram {
   }
 
   setEdgeRouting(style) {
+    this.onHistorySnapshot?.(this.getSnapshot());
     this.edgeRouting = style || 'curved';
     this.markDirty();
     this.onLayoutChange?.();
@@ -1550,6 +1643,7 @@ export class Diagram {
 
   setIndividualEdgeRouting(key, style) {
     if (!key) return;
+    this.onHistorySnapshot?.(this.getSnapshot());
     if (style) this.edgeRoutings.set(key.toLowerCase(), style);
     else this.edgeRoutings.delete(key.toLowerCase());
     this.markDirty();
@@ -1568,6 +1662,7 @@ export class Diagram {
 
   addWaypoint(key, x, y, insertIndex = -1) {
     if (!key) return;
+    this.onHistorySnapshot?.(this.getSnapshot());
     const lk = key.toLowerCase();
     const pts = this.edgeWaypoints.get(lk) ? [...this.edgeWaypoints.get(lk)] : [];
     const pt = { x: Math.round(x), y: Math.round(y) };
@@ -1593,6 +1688,7 @@ export class Diagram {
 
   removeWaypoint(key, index) {
     if (!key) return;
+    this.onHistorySnapshot?.(this.getSnapshot());
     const lk = key.toLowerCase();
     const pts = this.edgeWaypoints.get(lk);
     if (pts && index >= 0 && index < pts.length) {
@@ -1724,6 +1820,7 @@ export class Diagram {
   removeManualLink(link) {
     const i = this.manualLinks.indexOf(link);
     if (i < 0) return;
+    this.onHistorySnapshot?.(this.getSnapshot());
     this.manualLinks.splice(i, 1);
     this.markDirty();
     this.onLayoutChange?.();
@@ -1731,6 +1828,7 @@ export class Diagram {
 
   clearManualLinks() {
     if (!this.manualLinks.length) return;
+    this.onHistorySnapshot?.(this.getSnapshot());
     this.manualLinks = [];
     this.markDirty();
     this.onLayoutChange?.();
