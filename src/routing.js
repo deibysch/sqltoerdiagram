@@ -108,9 +108,122 @@ export function cleanOrthogonalPoints(points) {
 }
 
 /**
- * Generate orthogonal 90-degree step points between two endpoints with optional waypoints.
+ * Check whether a segment between p1 and p2 intersects an obstacle box.
  */
-export function buildOrthogonalPoints(p1, p2, waypoints = []) {
+export function segmentIntersectsBox(p1, p2, box, margin = 12) {
+  if (!box || !Number.isFinite(box.x) || !Number.isFinite(box.y)) return { hit: false };
+  const minX = box.x - margin;
+  const maxX = box.x + box.w + margin;
+  const minY = box.y - margin;
+  const maxY = box.y + box.h + margin;
+
+  const isHoriz = Math.abs(p1.y - p2.y) < 1;
+  const isVert = Math.abs(p1.x - p2.x) < 1;
+
+  if (isHoriz) {
+    const y = p1.y;
+    if (y >= minY && y <= maxY) {
+      const segMinX = Math.min(p1.x, p2.x);
+      const segMaxX = Math.max(p1.x, p2.x);
+      if (segMaxX > minX && segMinX < maxX) {
+        return { hit: true, axis: 'h', minX, maxX, minY, maxY, box };
+      }
+    }
+  } else if (isVert) {
+    const x = p1.x;
+    if (x >= minX && x <= maxX) {
+      const segMinY = Math.min(p1.y, p2.y);
+      const segMaxY = Math.max(p1.y, p2.y);
+      if (segMaxY > minY && segMinY < maxY) {
+        return { hit: true, axis: 'v', minX, maxX, minY, maxY, box };
+      }
+    }
+  } else {
+    // Slanted or diagonal segment
+    const segMinX = Math.min(p1.x, p2.x), segMaxX = Math.max(p1.x, p2.x);
+    const segMinY = Math.min(p1.y, p2.y), segMaxY = Math.max(p1.y, p2.y);
+    if (segMaxX > minX && segMinX < maxX && segMaxY > minY && segMinY < maxY) {
+      return { hit: true, axis: 'diagonal', minX, maxX, minY, maxY, box };
+    }
+  }
+  return { hit: false };
+}
+
+/**
+ * Reroute orthogonal points sequence around obstacles via outer boundary channels.
+ */
+export function routeAroundObstacles(pts, obstacles = [], margin = 12) {
+  if (!obstacles || !obstacles.length || !pts || pts.length < 2) return pts;
+
+  let current = cleanOrthogonalPoints(pts);
+  const MAX_PASSES = 4;
+
+  for (let pass = 0; pass < MAX_PASSES; pass++) {
+    let modified = false;
+    const next = [];
+
+    for (let i = 0; i < current.length - 1; i++) {
+      const a = current[i];
+      const b = current[i + 1];
+      if (i === 0) next.push(a);
+
+      let firstHit = null;
+      for (const obs of obstacles) {
+        const hit = segmentIntersectsBox(a, b, obs, margin);
+        if (hit.hit) {
+          firstHit = hit;
+          break;
+        }
+      }
+
+      if (!firstHit) {
+        next.push(b);
+        continue;
+      }
+
+      modified = true;
+      if (firstHit.axis === 'h') {
+        // Horizontal segment intersects obstacle: route above or below
+        const detourY = Math.abs(a.y - firstHit.minY) < Math.abs(a.y - firstHit.maxY)
+          ? firstHit.minY - 6
+          : firstHit.maxY + 6;
+        const detourX1 = a.x < b.x ? firstHit.minX - 6 : firstHit.maxX + 6;
+        const detourX2 = a.x < b.x ? firstHit.maxX + 6 : firstHit.minX - 6;
+
+        next.push({ x: detourX1, y: a.y });
+        next.push({ x: detourX1, y: detourY });
+        next.push({ x: detourX2, y: detourY });
+        next.push({ x: detourX2, y: b.y });
+        next.push(b);
+      } else if (firstHit.axis === 'v') {
+        // Vertical segment intersects obstacle: route left or right
+        const detourX = Math.abs(a.x - firstHit.minX) < Math.abs(a.x - firstHit.maxX)
+          ? firstHit.minX - 6
+          : firstHit.maxX + 6;
+        const detourY1 = a.y < b.y ? firstHit.minY - 6 : firstHit.maxY + 6;
+        const detourY2 = a.y < b.y ? firstHit.maxY + 6 : firstHit.minY - 6;
+
+        next.push({ x: a.x, y: detourY1 });
+        next.push({ x: detourX, y: detourY1 });
+        next.push({ x: detourX, y: detourY2 });
+        next.push({ x: b.x, y: detourY2 });
+        next.push(b);
+      } else {
+        next.push(b);
+      }
+    }
+
+    current = cleanOrthogonalPoints(next);
+    if (!modified) break;
+  }
+
+  return current;
+}
+
+/**
+ * Generate orthogonal 90-degree step points between two endpoints with optional waypoints and obstacle avoidance.
+ */
+export function buildOrthogonalPoints(p1, p2, waypoints = [], obstacles = []) {
   if (waypoints && waypoints.length) {
     // Connect p1 -> w1 -> w2 ... -> p2, ensuring each transition is 90°
     const raw = [p1, ...waypoints, p2];
@@ -146,7 +259,8 @@ export function buildOrthogonalPoints(p1, p2, waypoints = []) {
       }
       ortho.push({ x: b.x, y: b.y, nx: b.nx, ny: b.ny });
     }
-    return cleanOrthogonalPoints(ortho);
+    const cleaned = cleanOrthogonalPoints(ortho);
+    return cleaned;
   }
 
   // Default automatic S-bend or L-bend
@@ -182,14 +296,19 @@ export function buildOrthogonalPoints(p1, p2, waypoints = []) {
   }
 
   ortho.push({ x: p2.x, y: p2.y, nx: nxb, ny: nyb });
-  return cleanOrthogonalPoints(ortho);
+  const cleaned = cleanOrthogonalPoints(ortho);
+
+  if (obstacles && obstacles.length > 0) {
+    return routeAroundObstacles(cleaned, obstacles);
+  }
+  return cleaned;
 }
 
 /**
  * Extract all horizontal and vertical segments from an orthogonal route.
  */
-export function getOrthogonalSegments(p1, p2, waypoints = []) {
-  const pts = buildOrthogonalPoints(p1, p2, waypoints);
+export function getOrthogonalSegments(p1, p2, waypoints = [], obstacles = []) {
+  const pts = buildOrthogonalPoints(p1, p2, waypoints, obstacles);
   const segments = [];
 
   for (let i = 0; i < pts.length - 1; i++) {
@@ -295,7 +414,7 @@ export function moveOrthogonalCorner(p1, p2, waypoints, cornerIndex, mouseX, mou
 /**
  * Draw route onto Canvas 2D context based on routing style.
  */
-export function drawRoutePath(ctx, style, p1, p2, waypoints = [], radius = 8) {
+export function drawRoutePath(ctx, style, p1, p2, waypoints = [], radius = 8, obstacles = []) {
   const pts = [p1, ...(waypoints || []), p2];
 
   if (style === 'straight') {
@@ -332,7 +451,7 @@ export function drawRoutePath(ctx, style, p1, p2, waypoints = [], radius = 8) {
   }
 
   // Orthogonal styles ('ortho-sharp' and 'ortho-rounded')
-  const ortho = buildOrthogonalPoints(p1, p2, waypoints);
+  const ortho = buildOrthogonalPoints(p1, p2, waypoints, obstacles);
   if (!ortho.length) return;
 
   ctx.moveTo(ortho[0].x, ortho[0].y);
@@ -357,7 +476,7 @@ export function drawRoutePath(ctx, style, p1, p2, waypoints = [], radius = 8) {
 /**
  * Generate SVG path `d` attribute string for the given routing style.
  */
-export function buildSVGPath(style, p1, p2, waypoints = [], radius = 8) {
+export function buildSVGPath(style, p1, p2, waypoints = [], radius = 8, obstacles = []) {
   const pts = [p1, ...(waypoints || []), p2];
 
   if (style === 'straight') {
@@ -388,7 +507,7 @@ export function buildSVGPath(style, p1, p2, waypoints = [], radius = 8) {
   }
 
   // Orthogonal styles
-  const ortho = buildOrthogonalPoints(p1, p2, waypoints);
+  const ortho = buildOrthogonalPoints(p1, p2, waypoints, obstacles);
   if (!ortho.length) return `M ${p1.x} ${p1.y}`;
 
   if (style === 'ortho-sharp' || radius <= 0) {

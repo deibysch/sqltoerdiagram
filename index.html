@@ -290,14 +290,23 @@
         <span class="vsep" aria-hidden="true"></span>
         <div class="menu-wrap">
           <button id="btn-arrange" class="btn ghost caret" title="Auto-arrange tables" data-umami-event="arrange">Arrange</button>
-          <div id="arrange-menu" class="menu up" hidden>
-            <div class="menu-label">Direction</div>
-            <button class="menu-item" data-dir="LR">Horizontal&nbsp;→</button>
+          <div id="arrange-menu" class="menu up" hidden style="min-width: 215px;">
+            <div class="menu-label">Algorithm</div>
+            <button class="menu-item active" data-algo="dagre">Hierarchical (Dagre)</button>
+            <button class="menu-item" data-algo="force">Physics (Force-Directed)</button>
+            <button class="menu-item" data-algo="radial">Radial Hub &amp; Satellites</button>
+            <div class="menu-sep"></div>
+            <button class="menu-item" id="btn-arrange-ai" style="color: var(--accent); font-weight: 600;">
+              <span>✨ Reorganizar con IA...</span>
+            </button>
+            <div class="menu-sep"></div>
+            <div class="menu-label">Direction (Hierarchical)</div>
+            <button class="menu-item active" data-dir="LR">Horizontal&nbsp;→</button>
             <button class="menu-item" data-dir="TB">Vertical&nbsp;↓</button>
             <div class="menu-sep"></div>
             <div class="menu-label">Spacing</div>
             <button class="menu-item" data-spacing="compact">Compact</button>
-            <button class="menu-item" data-spacing="comfortable">Comfortable</button>
+            <button class="menu-item active" data-spacing="comfortable">Comfortable</button>
             <button class="menu-item" data-spacing="spacious">Spacious</button>
           </div>
         </div>
@@ -309,6 +318,53 @@
       </div>
     </section>
   </main>
+
+  <!-- Modal: Reorganizar con IA -->
+  <div id="modal-ai-arrange" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent); width: 20px; height: 20px;">
+            <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+          </svg>
+          <span>Reorganizar con Inteligencia Artificial</span>
+        </div>
+        <button id="btn-close-ai-modal" class="btn ghost icon" aria-label="Close modal">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <p class="modal-desc">
+          Analiza automáticamente la semántica de las tablas, nombres y relaciones para agrupar tu base de datos en dominios de negocio modulares y presentarlos con máxima claridad visual sin líneas que atraviesen tablas.
+        </p>
+
+        <div class="form-group">
+          <label for="ai-gemini-key">Gemini API Key <span class="badge-optional">(Opcional)</span></label>
+          <input type="password" id="ai-gemini-key" class="input-text" placeholder="Pega tu clave API de Gemini aquí..." autocomplete="off">
+          <div class="form-hint">
+            Si no ingresas una clave, se ejecutará la <strong>IA Semántica Local</strong> integrada directamente en tu navegador sin enviar datos a internet. Puedes obtener una clave gratuita en <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a>.
+          </div>
+        </div>
+
+        <div class="form-check">
+          <label>
+            <input type="checkbox" id="ai-create-groups" checked>
+            <span>Crear cuadros de grupo (<code>TableGroup</code>) automáticos para cada dominio de negocio</span>
+          </label>
+        </div>
+
+        <div id="ai-status" class="ai-status-box" hidden>
+          <div class="spinner"></div>
+          <span id="ai-status-text">Analizando esquema...</span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btn-cancel-ai" class="btn ghost">Cancelar</button>
+        <button id="btn-run-local-ai" class="btn ghost">Ejecutar con IA Local</button>
+        <button id="btn-run-gemini-ai" class="btn primary">Ejecutar con Gemini</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Crawlable content for search engines (long-tail keywords + matches the FAQ schema) -->
   <section class="sr-only" aria-label="About SQL to ER Diagram">

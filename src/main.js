@@ -13,6 +13,7 @@ import { encodeShare, decodeShare } from './share.js';
 import { sanitizeAnnotations, computeGroupBounds, newId } from './annotations.js';
 import { EXAMPLE_SQL } from './examples.js';
 import { HistoryManager } from './history.js';
+import { reorderWithGemini, reorderWithLocalAI } from './ai-layout.js';
 
 const $ = (id) => document.getElementById(id);
 const sqlEl = $('sql');
@@ -524,6 +525,7 @@ let firstRender = true;
 
 // layout options (persisted)
 const layoutOpts = {
+  algo: localStorage.getItem('dbdiga-algo') || 'dagre',
   dir: localStorage.getItem('dbdiga-dir') || 'LR',
   spacing: localStorage.getItem('dbdiga-spacing') || 'comfortable',
 };
@@ -734,6 +736,8 @@ $('btn-example2')?.addEventListener('click', loadExample);
 // Arrange button: re-arrange with current opts; the ▾ part toggles the menu.
 const arrangeMenu = $('arrange-menu');
 function syncMenu() {
+  for (const el of arrangeMenu.querySelectorAll('[data-algo]'))
+    el.classList.toggle('active', el.dataset.algo === layoutOpts.algo);
   for (const el of arrangeMenu.querySelectorAll('[data-dir]'))
     el.classList.toggle('active', el.dataset.dir === layoutOpts.dir);
   for (const el of arrangeMenu.querySelectorAll('[data-spacing]'))
@@ -746,10 +750,22 @@ $('btn-arrange').addEventListener('click', (e) => {
   if (arrangeMenu.hidden) { arrangeMenu.hidden = false; }
   else { arrangeMenu.hidden = true; rebuild({ arrange: true }); }
 });
+
 arrangeMenu.addEventListener('click', (e) => {
   e.stopPropagation();
   const item = e.target.closest('.menu-item');
   if (!item) return;
+
+  if (item.id === 'btn-arrange-ai') {
+    arrangeMenu.hidden = true;
+    openAIModal();
+    return;
+  }
+
+  if (item.dataset.algo) {
+    layoutOpts.algo = item.dataset.algo;
+    localStorage.setItem('dbdiga-algo', layoutOpts.algo);
+  }
   if (item.dataset.dir) {
     layoutOpts.dir = item.dataset.dir;
     localStorage.setItem('dbdiga-dir', layoutOpts.dir);
@@ -762,6 +778,94 @@ arrangeMenu.addEventListener('click', (e) => {
   rebuild({ arrange: true });
 });
 document.addEventListener('click', () => { arrangeMenu.hidden = true; });
+
+// ---- AI Arrange Modal wiring ----
+const modalAI = $('modal-ai-arrange');
+const btnCloseAIModal = $('btn-close-ai-modal');
+const btnCancelAI = $('btn-cancel-ai');
+const btnRunLocalAI = $('btn-run-local-ai');
+const btnRunGeminiAI = $('btn-run-gemini-ai');
+const aiKeyInput = $('ai-gemini-key');
+const aiCreateGroups = $('ai-create-groups');
+const aiStatusBox = $('ai-status');
+const aiStatusText = $('ai-status-text');
+
+function openAIModal() {
+  if (!modalAI) return;
+  modalAI.hidden = false;
+  if (aiKeyInput) {
+    aiKeyInput.value = localStorage.getItem('gemini_api_key') || '';
+  }
+  if (aiStatusBox) aiStatusBox.hidden = true;
+}
+
+function closeAIModal() {
+  if (!modalAI) return;
+  modalAI.hidden = true;
+  if (aiStatusBox) aiStatusBox.hidden = true;
+}
+
+btnCloseAIModal?.addEventListener('click', closeAIModal);
+btnCancelAI?.addEventListener('click', closeAIModal);
+modalAI?.addEventListener('click', (e) => {
+  if (e.target === modalAI) closeAIModal();
+});
+
+async function executeAIReorder(isGemini = false) {
+  if (!diagram.model || !diagram.model.tables || !diagram.model.tables.length) {
+    alert('No hay tablas en el diagrama para organizar.');
+    return;
+  }
+
+  const createGroups = aiCreateGroups ? aiCreateGroups.checked : true;
+  if (aiStatusBox) {
+    aiStatusBox.hidden = false;
+    aiStatusText.textContent = isGemini ? 'Consultando a Google Gemini AI...' : 'Ejecutando IA Semántica Local...';
+  }
+
+  diagram.onHistorySnapshot?.(diagram.getSnapshot());
+
+  try {
+    let res;
+    if (isGemini) {
+      const apiKey = aiKeyInput ? aiKeyInput.value.trim() : '';
+      if (!apiKey) {
+        throw new Error('Por favor ingresa tu Gemini API Key o haz clic en "Ejecutar con IA Local".');
+      }
+      localStorage.setItem('gemini_api_key', apiKey);
+      res = await reorderWithGemini(diagram.model, apiKey, { createGroups });
+    } else {
+      res = reorderWithLocalAI(diagram.model, { createGroups });
+    }
+
+    if (res.annotations && res.annotations.length) {
+      const notes = diagram.annotations.filter(a => a.type === 'note');
+      diagram.setAnnotations([...notes, ...res.annotations]);
+    }
+
+    diagram.markDirty();
+    diagram.fit();
+    diagram.onLayoutChange?.();
+    saveLayoutDebounced();
+    if (editorMode === 'layout') updateLayoutTextarea();
+    if (editorMode === 'visual') visualEditor?.render();
+
+    closeAIModal();
+
+    if (res.fallbackToLocal) {
+      flashButton($('btn-arrange'), 'IA Local (Cuota Gemini)');
+    }
+  } catch (err) {
+    console.error('AI Arrange Error:', err);
+    if (aiStatusBox) {
+      aiStatusBox.hidden = false;
+      aiStatusText.textContent = 'Error: ' + (err.message || 'Fallo en reorganización');
+    }
+  }
+}
+
+btnRunLocalAI?.addEventListener('click', () => executeAIReorder(false));
+btnRunGeminiAI?.addEventListener('click', () => executeAIReorder(true));
 
 $('btn-fit').addEventListener('click', () => diagram.fit());
 

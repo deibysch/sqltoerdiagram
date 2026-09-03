@@ -88,7 +88,7 @@ export class Diagram {
     this.linking = null;
     this.hoverConn = null;
     this.markDirty();
-    if (!keepCamera) {/* caller may fit */}
+    if (!keepCamera) {/* caller may fit */ }
   }
 
   getSnapshot() {
@@ -282,7 +282,7 @@ export class Diagram {
     for (const t of this.model.tables) {
       if (!Number.isFinite(t.x) || this.hidden.has(t.key)) continue;
       if (t.x > vx1 + margin || t.x + t.w < vx0 - margin ||
-          t.y > vy1 + margin || t.y + t.h < vy0 - margin) continue;
+        t.y > vy1 + margin || t.y + t.h < vy0 - margin) continue;
       const bm = this._bitmap(t);
       const dim = pinned && !this.pinnedKeys.has(t.key);
       ctx.save();
@@ -606,7 +606,7 @@ export class Diagram {
     if ((w.x - del.cx) ** 2 + (w.y - del.cy) ** 2 <= (del.r * 1.4) ** 2) return { kind: 'delete' };
     const rz = rects.resize;
     if (w.x >= rz.x - 4 / this.cam.scale && w.x <= rz.x + rz.w + 4 / this.cam.scale &&
-        w.y >= rz.y - 4 / this.cam.scale && w.y <= rz.y + rz.h + 4 / this.cam.scale) return { kind: 'resize' };
+      w.y >= rz.y - 4 / this.cam.scale && w.y <= rz.y + rz.h + 4 / this.cam.scale) return { kind: 'resize' };
     return null;
   }
 
@@ -848,7 +848,7 @@ export class Diagram {
         // 1) Segment midpoint handles (interactive sliding bars)
         for (const segment of segments) {
           const isHoveredSeg = (this.hoverEdge?.key === seg.key && this.hoverEdge?.segmentIndex === segment.index) ||
-                               (this.segmentDrag?.key === seg.key && this.segmentDrag?.segIndex === segment.index);
+            (this.segmentDrag?.key === seg.key && this.segmentDrag?.segIndex === segment.index);
           const barW = segment.isVertical ? 6 * s : (isHoveredSeg ? 18 * s : 14 * s);
           const barH = segment.isVertical ? (isHoveredSeg ? 18 * s : 14 * s) : 6 * s;
           const rx = barW / 2, ry = barH / 2;
@@ -1519,12 +1519,12 @@ export class Diagram {
 
   _pointerUp() {
     const didMove = (this.segmentDrag && this.segmentDrag.moved) ||
-                    (this.vertexDrag && this.vertexDrag.moved) ||
-                    (this.anchorDrag && this.anchorDrag.moved) ||
-                    (this.dragGroup && this.dragGroup.moved) ||
-                    (this.annoResize && this.annoResize.moved) ||
-                    (this.annoDrag && this.annoDrag.moved) ||
-                    (this.drag && this.drag.moved);
+      (this.vertexDrag && this.vertexDrag.moved) ||
+      (this.anchorDrag && this.anchorDrag.moved) ||
+      (this.dragGroup && this.dragGroup.moved) ||
+      (this.annoResize && this.annoResize.moved) ||
+      (this.annoDrag && this.annoDrag.moved) ||
+      (this.drag && this.drag.moved);
 
     if (didMove && this._preDragSnapshot) {
       this.onHistorySnapshot?.(this._preDragSnapshot);
@@ -1624,7 +1624,7 @@ export class Diagram {
       }
     }
     const changed = (this.drag && this.drag.moved) || (this.pan && this.pan.moved) ||
-                    (this.annoDrag && this.annoDrag.moved) || (this.annoResize && this.annoResize.moved);
+      (this.annoDrag && this.annoDrag.moved) || (this.annoResize && this.annoResize.moved);
     this.drag = null;
     this.pan = null;
     this.annoDrag = null;
@@ -1782,7 +1782,7 @@ export class Diagram {
   _linkExists(fk, fc, tk, tc) {
     const eq = (a, b) => a.toLowerCase() === b.toLowerCase();
     const has = (l) => (eq(l.from.table, fk) && eq(l.from.col, fc) && eq(l.to.table, tk) && eq(l.to.col, tc)) ||
-                       (eq(l.from.table, tk) && eq(l.from.col, tc) && eq(l.to.table, fk) && eq(l.to.col, fc));
+      (eq(l.from.table, tk) && eq(l.from.col, tc) && eq(l.to.table, fk) && eq(l.to.col, fc));
     return this.manualLinks.some(has);
   }
 
@@ -2075,11 +2075,15 @@ export class Diagram {
     const rowY = t.y + HEADER_H + idx * ROW_H;
     const split = t.x + t.w * 0.58;
     if (w.x >= split && col.type) {
-      return { table: t, kind: 'column-type', colName: col.name, value: col.typeRaw || col.type,
-               rect: { x: split, y: rowY, w: t.x + t.w - split, h: ROW_H }, align: 'right', weight: 400 };
+      return {
+        table: t, kind: 'column-type', colName: col.name, value: col.typeRaw || col.type,
+        rect: { x: split, y: rowY, w: t.x + t.w - split, h: ROW_H }, align: 'right', weight: 400
+      };
     }
-    return { table: t, kind: 'column-name', colName: col.name, value: col.name,
-             rect: { x: t.x + 30, y: rowY, w: split - (t.x + 30), h: ROW_H }, align: 'left', weight: 400 };
+    return {
+      table: t, kind: 'column-name', colName: col.name, value: col.name,
+      rect: { x: t.x + 30, y: rowY, w: split - (t.x + 30), h: ROW_H }, align: 'left', weight: 400
+    };
   }
 
   _beginEdit(target) {
