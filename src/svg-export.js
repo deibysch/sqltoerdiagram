@@ -5,23 +5,49 @@ import { relationCardinality } from './cardinality.js';
 import { getTableAnchor, buildSVGPath } from './routing.js';
 
 // Crow's-foot cardinality marker at a line endpoint (world coords).
-//   dir = +1 if the line extends in +x from (x,y), else -1.
-function svgMarker(x, y, dir, kind, color) {
+//   (nx, ny) = outward normal vector from the table edge (pointing along the line).
+function svgMarker(x, y, nx, ny, kind, color) {
+  if (typeof ny === 'string') {
+    color = kind;
+    kind = ny;
+    ny = 0;
+    nx = nx < 0 ? -1 : 1;
+  }
+
+  const len = Math.hypot(nx, ny);
+  const unx = len > 0.001 ? nx / len : 1;
+  const uny = len > 0.001 ? ny / len : 0;
+
+  // Perpendicular unit vector (-uny, unx) along table edge
+  const px = -uny;
+  const py = unx;
+
   const foot = 11, spread = 5.5, r = 3.2;
   const attr = `fill="none" stroke="${color}" stroke-width="1.5"`;
   const many = kind === 'many' || kind === 'zero-or-many';
   const optional = kind === 'zero-or-one' || kind === 'zero-or-many';
   let out = '';
+
+  const roundNum = (v) => Math.round(v * 100) / 100;
+
   if (many) {
-    const ax = x + dir * foot;
-    out += `<path d="M ${ax} ${y} L ${x} ${y - spread} M ${ax} ${y} L ${x} ${y + spread} M ${ax} ${y} L ${x} ${y}" ${attr}/>`;
+    const ax = roundNum(x + unx * foot);
+    const ay = roundNum(y + uny * foot);
+    const p1x = roundNum(x + px * spread), p1y = roundNum(y + py * spread);
+    const p2x = roundNum(x - px * spread), p2y = roundNum(y - py * spread);
+    const bx = roundNum(x), by = roundNum(y);
+    out += `<path d="M ${ax} ${ay} L ${p1x} ${p1y} M ${ax} ${ay} L ${p2x} ${p2y} M ${ax} ${ay} L ${bx} ${by}" ${attr}/>`;
   } else {
-    const bx = x + dir * foot;
-    out += `<path d="M ${bx} ${y - spread} L ${bx} ${y + spread}" ${attr}/>`;
+    const bx = x + unx * foot;
+    const by = y + uny * foot;
+    const p1x = roundNum(bx + px * spread), p1y = roundNum(by + py * spread);
+    const p2x = roundNum(bx - px * spread), p2y = roundNum(by - py * spread);
+    out += `<path d="M ${p1x} ${p1y} L ${p2x} ${p2y}" ${attr}/>`;
   }
   if (optional) {
-    const cx = x + dir * (foot + r + 2);
-    out += `<circle cx="${cx}" cy="${y}" r="${r}" ${attr}/>`;
+    const cx = roundNum(x + unx * (foot + r + 2));
+    const cy = roundNum(y + uny * (foot + r + 2));
+    out += `<circle cx="${cx}" cy="${cy}" r="${r}" ${attr}/>`;
   }
   return out;
 }
@@ -118,8 +144,22 @@ export function exportSVG(
     const pathD = buildSVGPath(rStyle, p1, p2, waypoints, 8);
     parts.push(`<path d="${pathD}" fill="none" stroke="${color}" stroke-width="1.5"/>`);
     const card = relationCardinality(r, byKey);
-    parts.push(svgMarker(p1.x, p1.y, p1.nx || 1, card.from, color));
-    parts.push(svgMarker(p2.x, p2.y, p2.nx || -1, card.to, color));
+    let nx1 = p1.nx, ny1 = p1.ny;
+    if ((nx1 === undefined || nx1 === null || (nx1 === 0 && ny1 === 0)) && (waypoints?.length || p2)) {
+      const nextPt = waypoints?.length ? waypoints[0] : p2;
+      const dx = nextPt.x - p1.x, dy = nextPt.y - p1.y;
+      const d = Math.hypot(dx, dy) || 1;
+      nx1 = dx / d; ny1 = dy / d;
+    }
+    let nx2 = p2.nx, ny2 = p2.ny;
+    if ((nx2 === undefined || nx2 === null || (nx2 === 0 && ny2 === 0)) && (waypoints?.length || p1)) {
+      const prevPt = waypoints?.length ? waypoints[waypoints.length - 1] : p1;
+      const dx = prevPt.x - p2.x, dy = prevPt.y - p2.y;
+      const d = Math.hypot(dx, dy) || 1;
+      nx2 = dx / d; ny2 = dy / d;
+    }
+    parts.push(svgMarker(p1.x, p1.y, nx1 ?? 1, ny1 ?? 0, card.from, color));
+    parts.push(svgMarker(p2.x, p2.y, nx2 ?? -1, ny2 ?? 0, card.to, color));
   }
 
   // tables

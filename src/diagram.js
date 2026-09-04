@@ -3,7 +3,7 @@
 // what is on screen.
 import { THEMES, rasterizeTable, columnY, measureTable, ROW_H, HEADER_H, EDGE_COLORS } from './renderer.js';
 import { NOTE_COLORS, GROUP_COLORS, NOTE_ORDER, GROUP_ORDER, makeAnnotation, resolveGroupColor, computeGroupBounds } from './annotations.js';
-import { ROUTING_STYLES, getTableAnchor, drawRoutePath, distanceToRoute, pointToSegmentDistance, buildOrthogonalPoints, getOrthogonalSegments, moveOrthogonalSegment, moveOrthogonalCorner, cleanOrthogonalPoints } from './routing.js';
+import { ROUTING_STYLES, getTableAnchor, drawRoutePath, distanceToRoute, pointToSegmentDistance, buildOrthogonalPoints, getOrthogonalSegments, moveOrthogonalSegment, moveOrthogonalCorner, cleanOrthogonalPoints, filterRedundantWaypoints, projectPointToPerimeter } from './routing.js';
 import { relationCardinality } from './cardinality.js';
 import { inferLinks as inferLinksCore } from './infer-links.js';
 
@@ -364,6 +364,23 @@ export class Diagram {
       dot(ctx, k.wx, k.wy, 4 / cam.scale);
       ctx.restore();
     }
+
+    // in-progress anchor reconnect drag (preview highlight)
+    if (this.anchorDrag && this.anchorDrag.candidateTarget) {
+      const tgt = this.anchorDrag.candidateTarget.table;
+      ctx.save();
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2.5 / cam.scale;
+      ctx.setLineDash([6 / cam.scale, 4 / cam.scale]);
+      if (ctx.roundRect) {
+        ctx.beginPath();
+        ctx.roundRect(tgt.x - 3, tgt.y - 3, tgt.w + 6, tgt.h + 6, 12);
+        ctx.stroke();
+      } else {
+        ctx.strokeRect(tgt.x - 3, tgt.y - 3, tgt.w + 6, tgt.h + 6);
+      }
+      ctx.restore();
+    }
   }
 
   // left/right connector dot positions for a column row (world coords)
@@ -704,8 +721,9 @@ export class Diagram {
     if (!from || !to || !Number.isFinite(from.x) || !Number.isFinite(to.x)) return null;
     if (this.hidden.has(from.key) || this.hidden.has(to.key)) return null;
 
-    const waypoints = this.edgeWaypoints.get(key) || [];
-    const anchorCfg = this.edgeAnchors.get(key);
+    const lk = key ? key.toLowerCase() : '';
+    const waypoints = (lk ? this.edgeWaypoints.get(lk) : null) || this.edgeWaypoints.get(key) || [];
+    const anchorCfg = (lk ? this.edgeAnchors.get(lk) : null) || this.edgeAnchors.get(key);
 
     const targetForFrom = waypoints.length
       ? waypoints[0]
@@ -717,7 +735,7 @@ export class Diagram {
     const p1 = getTableAnchor(from, fromCol, targetForFrom, anchorCfg?.fromAnchor, laneOffset);
     const p2 = getTableAnchor(to, toCol, targetForTo, anchorCfg?.toAnchor, laneOffset);
 
-    const routingStyle = this.edgeRoutings.get(key) || this.edgeRouting || 'curved';
+    const routingStyle = (lk ? this.edgeRoutings.get(lk) : null) || this.edgeRoutings.get(key) || this.edgeRouting || 'curved';
     const isOrthogonal = routingStyle === 'ortho-sharp' || routingStyle === 'ortho-rounded';
 
     const obstacles = [];
@@ -728,6 +746,7 @@ export class Diagram {
     }
 
     return {
+      key,
       p1, p2,
       fx: p1.x, fy: p1.y, tx: p2.x, ty: p2.y,
       c1x: p1.x + (p1.nx || 1) * 30, c2x: p2.x + (p2.nx || -1) * 30,
@@ -742,11 +761,28 @@ export class Diagram {
 
   _edgeSegForDrag(key) {
     if (!key) return null;
+    const lk = key.toLowerCase();
+    for (const r of this.model.relations) {
+      const k = `${r.fromTable.toLowerCase()}.${(r.fromCols[0] || '').toLowerCase()}->${r.toTable.toLowerCase()}.${(r.toCols[0] || '').toLowerCase()}`;
+      if (k === lk) {
+        return this._edgeSeg(r.fromTable.toLowerCase(), r.fromCols[0], r.toTable.toLowerCase(), r.toCols[0], null, key);
+      }
+    }
+    for (const l of this.manualLinks) {
+      const k = `${l.from.table.toLowerCase()}.${(l.from.col || '').toLowerCase()}->${l.to.table.toLowerCase()}.${(l.to.col || '').toLowerCase()}`;
+      if (k === lk) {
+        return this._edgeSeg(l.from.table.toLowerCase(), l.from.col, l.to.table.toLowerCase(), l.to.col, null, key);
+      }
+    }
     const parts = key.split('->');
     if (parts.length !== 2) return null;
     const [fPart, tPart] = parts;
-    const [fTable, fCol] = fPart.split('.');
-    const [tTable, tCol] = tPart.split('.');
+    const lastDotF = fPart.lastIndexOf('.');
+    const lastDotT = tPart.lastIndexOf('.');
+    const fTable = lastDotF !== -1 ? fPart.slice(0, lastDotF) : fPart;
+    const fCol = lastDotF !== -1 ? fPart.slice(lastDotF + 1) : '';
+    const tTable = lastDotT !== -1 ? tPart.slice(0, lastDotT) : tPart;
+    const tCol = lastDotT !== -1 ? tPart.slice(lastDotT + 1) : '';
     return this._edgeSeg(fTable, fCol, tTable, tCol, null, key);
   }
 
@@ -878,8 +914,22 @@ export class Diagram {
       // markers sit just outside each table, pointing along the line
       const s = 1 / cam.scale;
       const mw = Math.max(width, 1.4) / cam.scale;
-      drawMarker(ctx, p1.x, p1.y, p1.nx || 1, card.from, s, mw);
-      drawMarker(ctx, p2.x, p2.y, p2.nx || -1, card.to, s, mw);
+      let nx1 = p1.nx, ny1 = p1.ny;
+      if ((nx1 === undefined || nx1 === null || (nx1 === 0 && ny1 === 0)) && (waypoints?.length || p2)) {
+        const nextPt = waypoints?.length ? waypoints[0] : p2;
+        const dx = nextPt.x - p1.x, dy = nextPt.y - p1.y;
+        const d = Math.hypot(dx, dy) || 1;
+        nx1 = dx / d; ny1 = dy / d;
+      }
+      let nx2 = p2.nx, ny2 = p2.ny;
+      if ((nx2 === undefined || nx2 === null || (nx2 === 0 && ny2 === 0)) && (waypoints?.length || p1)) {
+        const prevPt = waypoints?.length ? waypoints[waypoints.length - 1] : p1;
+        const dx = prevPt.x - p2.x, dy = prevPt.y - p2.y;
+        const d = Math.hypot(dx, dy) || 1;
+        nx2 = dx / d; ny2 = dy / d;
+      }
+      drawMarker(ctx, p1.x, p1.y, nx1 ?? 1, ny1 ?? 0, card.from, s, mw);
+      drawMarker(ctx, p2.x, p2.y, nx2 ?? -1, ny2 ?? 0, card.to, s, mw);
     } else {
       dot(ctx, p1.x, p1.y, 3 / cam.scale);
       dot(ctx, p2.x, p2.y, 3 / cam.scale);
@@ -918,7 +968,8 @@ export class Diagram {
         if (points.length > 2) {
           for (let i = 1; i < points.length - 1; i++) {
             const pt = points[i];
-            const isHoveredVertex = this.hoverVertex?.key === seg.key && this.hoverVertex?.index === (i - 1) && this.hoverVertex?.isWaypoint;
+            const isDraggedVertex = (this.vertexDrag?.key?.toLowerCase() === seg.key?.toLowerCase()) && this.vertexDrag?.index === (i - 1);
+            const isHoveredVertex = (!this.vertexDrag && this.hoverVertex?.key?.toLowerCase() === seg.key?.toLowerCase() && this.hoverVertex?.index === (i - 1) && this.hoverVertex?.isWaypoint) || isDraggedVertex;
             const r = (isHoveredVertex ? 5.5 : 4) * s;
             ctx.beginPath();
             ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
@@ -935,7 +986,8 @@ export class Diagram {
         if (waypoints && waypoints.length) {
           for (let i = 0; i < waypoints.length; i++) {
             const pt = waypoints[i];
-            const isHoveredVertex = this.hoverVertex?.key === seg.key && this.hoverVertex?.index === i && this.hoverVertex?.isWaypoint;
+            const isDraggedVertex = (this.vertexDrag?.key?.toLowerCase() === seg.key?.toLowerCase()) && this.vertexDrag?.index === i;
+            const isHoveredVertex = (!this.vertexDrag && this.hoverVertex?.key?.toLowerCase() === seg.key?.toLowerCase() && this.hoverVertex?.index === i && this.hoverVertex?.isWaypoint) || isDraggedVertex;
             ctx.beginPath();
             ctx.arc(pt.x, pt.y, isHoveredVertex ? r * 1.3 : r, 0, Math.PI * 2);
             ctx.fillStyle = isHoveredVertex ? '#ffe600' : (isSelectedEdge ? '#ffffff' : 'rgba(255,255,255,0.85)');
@@ -1193,6 +1245,11 @@ export class Diagram {
       const sx = e.clientX - r.left, sy = e.clientY - r.top;
       const vHit = this.vertexAt(sx, sy);
       if (vHit && vHit.isWaypoint) {
+        console.log('[Diagram dblclick Remove] ' + JSON.stringify({
+          key: vHit.key,
+          index: vHit.index,
+          coord: { x: vHit.x, y: vHit.y }
+        }));
         this.removeWaypoint(vHit.key, vHit.index);
         this.markDirty();
         this.onLayoutChange?.();
@@ -1201,6 +1258,18 @@ export class Diagram {
       const eHit = this.edgeAt(sx, sy);
       if (eHit) {
         const w = this.screenToWorld(sx, sy);
+        const lk = eHit.key.toLowerCase();
+        const currentWps = this.edgeWaypoints.get(lk) || [];
+        console.log('[Diagram dblclick Add] ' + JSON.stringify({
+          key: eHit.key,
+          routingStyle: eHit.routingStyle,
+          clickWorld: { x: Math.round(w.x), y: Math.round(w.y) },
+          insertIndex: eHit.insertIndex,
+          currentWaypointsCount: currentWps.length,
+          currentWaypoints: currentWps.map(p => ({ x: p.x, y: p.y })),
+          p1: { x: eHit.p1.x, y: eHit.p1.y },
+          p2: { x: eHit.p2.x, y: eHit.p2.y }
+        }));
         this.addWaypoint(eHit.key, Math.round(w.x), Math.round(w.y), eHit.insertIndex);
         this.selectedEdgeKey = eHit.key;
         this.markDirty();
@@ -1227,7 +1296,32 @@ export class Diagram {
     const vHit = this.vertexAt(sx, sy);
     if (vHit) {
       if (vHit.isWaypoint) {
-        this.vertexDrag = { key: vHit.key, index: vHit.index, isOrthogonal: vHit.isOrthogonal, moved: false };
+        const seg = this._edgeSegForDrag(vHit.key);
+        let originalPoints = null;
+        if (vHit.isOrthogonal && seg) {
+          const orthoData = getOrthogonalSegments(seg.p1, seg.p2, seg.waypoints, seg.obstacles);
+          originalPoints = orthoData.points.map(p => ({ ...p }));
+        }
+        this.vertexDrag = {
+          key: vHit.key,
+          index: vHit.index,
+          isOrthogonal: vHit.isOrthogonal,
+          originalPoints,
+          currentPoints: originalPoints ? originalPoints.map(p => ({ ...p })) : null,
+          p1: seg ? { ...seg.p1 } : null,
+          p2: seg ? { ...seg.p2 } : null,
+          fromTable: seg?.fromTable,
+          toTable: seg?.toTable,
+          moved: false
+        };
+        console.log('[Diagram pointerDown vertexHit] ' + JSON.stringify({
+          key: vHit.key,
+          index: vHit.index,
+          isOrthogonal: vHit.isOrthogonal,
+          vHitCoord: { x: vHit.x, y: vHit.y },
+          storedWaypoints: (this.edgeWaypoints.get(vHit.key.toLowerCase()) || []).map(p => ({ x: p.x, y: p.y })),
+          originalPoints: originalPoints ? originalPoints.map(p => ({ x: p.x, y: p.y })) : null
+        }));
         this.selectedEdgeKey = vHit.key;
         this.selected = new Set();
         this.pinned = null;
@@ -1235,7 +1329,18 @@ export class Diagram {
         this.markDirty();
         return;
       } else if (vHit.isAnchor) {
-        this.anchorDrag = { key: vHit.key, isFrom: vHit.isFrom, table: vHit.table, moved: false };
+        this.anchorDrag = {
+          key: vHit.key,
+          isFrom: vHit.isFrom,
+          table: vHit.table,
+          moved: false,
+          candidateTarget: null
+        };
+        console.log('[Diagram pointerDown anchorHit] ' + JSON.stringify({
+          key: vHit.key,
+          isFrom: vHit.isFrom,
+          table: vHit.table ? vHit.table.key : null
+        }));
         this.selectedEdgeKey = vHit.key;
         this.selected = new Set();
         this.pinned = null;
@@ -1249,7 +1354,31 @@ export class Diagram {
     const edge = this.edgeAt(sx, sy);
     if (edge) {
       if (edge.isOrthogonal) {
-        this.segmentDrag = { key: edge.key, segIndex: edge.segmentIndex, isVertical: edge.isVertical, p1: edge.p1, p2: edge.p2, moved: false };
+        const seg = this._edgeSegForDrag(edge.key);
+        if (seg) {
+          const orthoData = getOrthogonalSegments(seg.p1, seg.p2, seg.waypoints, seg.obstacles);
+          const w = this.screenToWorld(sx, sy);
+          this.segmentDrag = {
+            key: edge.key,
+            segIndex: edge.segmentIndex,
+            isVertical: edge.isVertical,
+            originalPoints: orthoData.points.map(p => ({ ...p })),
+            startMouse: { x: w.x, y: w.y },
+            fromTable: seg.fromTable,
+            toTable: seg.toTable,
+            p1: { ...seg.p1 },
+            p2: { ...seg.p2 },
+            moved: false
+          };
+          console.log('[Diagram pointerDown edgeHit] ' + JSON.stringify({
+            key: edge.key,
+            segIndex: edge.segmentIndex,
+            isVertical: edge.isVertical,
+            isOrthogonal: edge.isOrthogonal,
+            storedWaypoints: (this.edgeWaypoints.get(edge.key.toLowerCase()) || []).map(p => ({ x: p.x, y: p.y })),
+            originalPoints: orthoData.points.map(p => ({ x: p.x, y: p.y }))
+          }));
+        }
       }
       this.selectedEdgeKey = edge.key;
       this.selected = new Set();
@@ -1390,71 +1519,119 @@ export class Diagram {
   _pointerMove(sx, sy) {
     if (this.segmentDrag) {
       const w = this.screenToWorld(sx, sy);
-      const seg = this._edgeSegForDrag(this.segmentDrag.key);
-      if (seg) {
-        const nextWaypoints = moveOrthogonalSegment(
-          seg.p1,
-          seg.p2,
-          this.edgeWaypoints.get(this.segmentDrag.key),
-          this.segmentDrag.segIndex,
-          w.x,
-          w.y
-        );
-        this.setEdgeWaypoints(this.segmentDrag.key, nextWaypoints);
-        this.segmentDrag.moved = true;
+      const drag = this.segmentDrag;
+      const dx = w.x - drag.startMouse.x;
+      const dy = w.y - drag.startMouse.y;
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+        drag.moved = true;
+      }
+      const res = moveOrthogonalSegment(
+        drag.p1,
+        drag.p2,
+        drag.originalPoints,
+        drag.segIndex,
+        dx,
+        dy,
+        drag.fromTable,
+        drag.toTable
+      );
+        if (res) {
+        this.setEdgeWaypoints(drag.key, res.waypoints);
+        if (res.fromAnchor) {
+          this.setEdgeAnchor(drag.key, res.fromAnchor.side, res.fromAnchor.offset, true);
+        }
+        if (res.toAnchor) {
+          this.setEdgeAnchor(drag.key, res.toAnchor.side, res.toAnchor.offset, false);
+        }
+        console.log('[Diagram segmentDrag Move] ' + JSON.stringify({
+          key: drag.key,
+          segIndex: drag.segIndex,
+          dx: Math.round(dx),
+          dy: Math.round(dy),
+          waypointCount: res.waypoints ? res.waypoints.length : 0,
+          waypoints: res.waypoints ? res.waypoints.map(p => ({ x: p.x, y: p.y })) : [],
+          fromAnchor: res.fromAnchor,
+          toAnchor: res.toAnchor
+        }));
         this.markDirty();
       }
       return true;
     }
     if (this.vertexDrag) {
       const w = this.screenToWorld(sx, sy);
-      if (this.vertexDrag.isOrthogonal) {
-        const seg = this._edgeSegForDrag(this.vertexDrag.key);
-        if (seg) {
-          const nextWaypoints = moveOrthogonalCorner(
-            seg.p1,
-            seg.p2,
-            this.edgeWaypoints.get(this.vertexDrag.key),
-            this.vertexDrag.index,
-            w.x,
-            w.y
-          );
-          this.setEdgeWaypoints(this.vertexDrag.key, nextWaypoints);
-          this.vertexDrag.moved = true;
-          this.markDirty();
+      const drag = this.vertexDrag;
+      drag.moved = true;
+      if (drag.isOrthogonal && (drag.currentPoints || drag.originalPoints)) {
+        const basePts = drag.currentPoints || drag.originalPoints;
+        const res = moveOrthogonalCorner(
+          drag.p1,
+          drag.p2,
+          basePts,
+          drag.index,
+          w.x,
+          w.y,
+          drag.fromTable,
+          drag.toTable
+        );
+        this.setEdgeWaypoints(drag.key, res.waypoints);
+        if (res.fromAnchor) {
+          this.setEdgeAnchor(drag.key, res.fromAnchor.side, res.fromAnchor.offset, true);
         }
+        if (res.toAnchor) {
+          this.setEdgeAnchor(drag.key, res.toAnchor.side, res.toAnchor.offset, false);
+        }
+        if (Number.isFinite(res.activeCornerIndex) && res.activeCornerIndex >= 0) {
+          drag.index = res.activeCornerIndex;
+        }
+        if (res.points && res.points.length >= 2) {
+          drag.currentPoints = res.points.map(p => ({ ...p }));
+          drag.p1 = { ...res.points[0] };
+          drag.p2 = { ...res.points[res.points.length - 1] };
+        }
+        this.hoverVertex = {
+          key: drag.key,
+          index: drag.index,
+          isWaypoint: true,
+          isOrthogonal: true
+        };
+        console.log('[Diagram vertexDrag Move] ' + JSON.stringify({
+          key: drag.key,
+          dragIndex: drag.index,
+          mouse: { x: Math.round(w.x), y: Math.round(w.y) },
+          waypointCount: res.waypoints ? res.waypoints.length : 0,
+          waypoints: res.waypoints ? res.waypoints.map(p => ({ x: p.x, y: p.y })) : [],
+          fromAnchor: res.fromAnchor,
+          toAnchor: res.toAnchor,
+          activeCornerIndex: res.activeCornerIndex
+        }));
       } else {
-        this.moveWaypoint(this.vertexDrag.key, this.vertexDrag.index, Math.round(w.x), Math.round(w.y));
-        this.vertexDrag.moved = true;
-        this.markDirty();
+        this.moveWaypoint(drag.key, drag.index, Math.round(w.x), Math.round(w.y));
       }
+      this.markDirty();
       return true;
     }
     if (this.anchorDrag) {
       const w = this.screenToWorld(sx, sy);
-      const t = this.anchorDrag.table;
-      if (t) {
-        const dLeft = Math.abs(w.x - t.x);
-        const dRight = Math.abs(w.x - (t.x + t.w));
-        const dTop = Math.abs(w.y - t.y);
-        const dBottom = Math.abs(w.y - (t.y + t.h));
-        const minD = Math.min(dLeft, dRight, dTop, dBottom);
-        let side = 'right', offset = 0.5;
-        if (minD === dLeft) {
-          side = 'left'; offset = (w.y - t.y) / t.h;
-        } else if (minD === dRight) {
-          side = 'right'; offset = (w.y - t.y) / t.h;
-        } else if (minD === dTop) {
-          side = 'top'; offset = (w.x - t.x) / t.w;
-        } else {
-          side = 'bottom'; offset = (w.x - t.x) / t.w;
+      this.anchorDrag.moved = true;
+
+      // Check if hovering over another table (reconnect candidate)
+      const hoverTable = this.tableAt(sx, sy);
+      const hoverCol = this._columnAtWorld(w.x, w.y);
+      if (hoverTable && hoverTable.key.toLowerCase() !== this.anchorDrag.table.key.toLowerCase()) {
+        this.anchorDrag.candidateTarget = {
+          table: hoverTable,
+          col: hoverCol ? hoverCol.col : (hoverTable.columns[0]?.name || '')
+        };
+      } else {
+        this.anchorDrag.candidateTarget = null;
+        // Smooth continuous perimeter docking
+        const proj = projectPointToPerimeter(this.anchorDrag.table, w);
+        if (proj) {
+          this.setEdgeAnchor(this.anchorDrag.key, proj.side, proj.offset, this.anchorDrag.isFrom);
         }
-        offset = Math.max(0.05, Math.min(0.95, offset));
-        this.setEdgeAnchor(this.anchorDrag.key, side, offset, this.anchorDrag.isFrom);
-        this.anchorDrag.moved = true;
-        this.markDirty();
-        return true;
       }
+      this.markDirty();
+      return true;
     }
     if (this.linking) {
       const w = this.screenToWorld(sx, sy);
@@ -1580,18 +1757,63 @@ export class Diagram {
     this._preDragSnapshot = null;
 
     if (this.segmentDrag) {
-      if (this.segmentDrag.moved) this.onLayoutChange?.();
+      if (this.segmentDrag.moved) {
+        const key = this.segmentDrag.key;
+        const lk = key.toLowerCase();
+        const wps = this.edgeWaypoints.get(lk) || this.edgeWaypoints.get(key);
+        if (wps) {
+          const cleaned = filterRedundantWaypoints(wps, 4);
+          this.setEdgeWaypoints(key, cleaned);
+          console.log('[Diagram segmentDrag Up] ' + JSON.stringify({
+            key: lk,
+            count: cleaned.length,
+            waypoints: cleaned.map(p => ({ x: p.x, y: p.y })),
+            fromAnchor: this.edgeAnchors.get(lk)?.fromAnchor,
+            toAnchor: this.edgeAnchors.get(lk)?.toAnchor
+          }));
+        }
+        this.onLayoutChange?.();
+      }
       this.segmentDrag = null;
       return;
     }
     if (this.vertexDrag) {
-      if (this.vertexDrag.moved) this.onLayoutChange?.();
+      if (this.vertexDrag.moved) {
+        const key = this.vertexDrag.key;
+        const lk = key.toLowerCase();
+        const wps = this.edgeWaypoints.get(lk) || this.edgeWaypoints.get(key);
+        if (wps) {
+          const cleaned = filterRedundantWaypoints(wps, 2);
+          this.setEdgeWaypoints(key, cleaned);
+          console.log('[Diagram vertexDrag Up] ' + JSON.stringify({
+            key: lk,
+            count: cleaned.length,
+            waypoints: cleaned.map(p => ({ x: p.x, y: p.y })),
+            fromAnchor: this.edgeAnchors.get(lk)?.fromAnchor,
+            toAnchor: this.edgeAnchors.get(lk)?.toAnchor
+          }));
+        }
+        this.onLayoutChange?.();
+      }
       this.vertexDrag = null;
+      this.hoverVertex = null;
       return;
     }
     if (this.anchorDrag) {
-      if (this.anchorDrag.moved) this.onLayoutChange?.();
+      if (this.anchorDrag.moved) {
+        if (this.anchorDrag.candidateTarget) {
+          this.reconnectEdge(
+            this.anchorDrag.key,
+            this.anchorDrag.isFrom,
+            this.anchorDrag.candidateTarget.table.key,
+            this.anchorDrag.candidateTarget.col
+          );
+        } else {
+          this.onLayoutChange?.();
+        }
+      }
       this.anchorDrag = null;
+      this.markDirty();
       return;
     }
     // finishing a link drag -> create the link if dropped on a column
@@ -1910,11 +2132,23 @@ export class Diagram {
     const lk = key.toLowerCase();
     const pts = this.edgeWaypoints.get(lk) ? [...this.edgeWaypoints.get(lk)] : [];
     const pt = { x: Math.round(x), y: Math.round(y) };
-    if (insertIndex >= 0 && insertIndex < pts.length) {
+    const beforeList = pts.map(p => ({ x: p.x, y: p.y }));
+
+    if (insertIndex >= 0 && insertIndex <= pts.length) {
       pts.splice(insertIndex, 0, pt);
     } else {
       pts.push(pt);
     }
+
+    console.log('[Diagram addWaypoint] ' + JSON.stringify({
+      key: lk,
+      insertedAt: (insertIndex >= 0 && insertIndex <= beforeList.length) ? insertIndex : beforeList.length,
+      requestedInsertIndex: insertIndex,
+      newPoint: pt,
+      before: beforeList,
+      after: pts.map(p => ({ x: p.x, y: p.y }))
+    }));
+
     this.edgeWaypoints.set(lk, pts);
     this.markDirty();
   }
@@ -1936,10 +2170,77 @@ export class Diagram {
     const lk = key.toLowerCase();
     const pts = this.edgeWaypoints.get(lk);
     if (pts && index >= 0 && index < pts.length) {
+      const removed = pts[index];
       pts.splice(index, 1);
-      if (!pts.length) this.edgeWaypoints.delete(lk);
+      const cleaned = filterRedundantWaypoints(pts, 3);
+      console.log('[Diagram removeWaypoint] ' + JSON.stringify({
+        key: lk,
+        removedIndex: index,
+        removedPoint: removed,
+        remainingCount: cleaned.length,
+        remaining: cleaned.map(p => ({ x: p.x, y: p.y }))
+      }));
+      if (cleaned.length) {
+        this.edgeWaypoints.set(lk, cleaned);
+      } else {
+        this.edgeWaypoints.delete(lk);
+      }
       this.markDirty();
     }
+  }
+
+  reconnectEdge(key, isFrom, newTableKey, newColName) {
+    if (!key || !newTableKey) return false;
+    this.onHistorySnapshot?.(this.getSnapshot());
+
+    const lk = key.toLowerCase();
+    let reconnected = false;
+
+    // Check manual links
+    for (let i = 0; i < this.manualLinks.length; i++) {
+      const l = this.manualLinks[i];
+      const k = `${l.from.table.toLowerCase()}.${(l.from.col || '').toLowerCase()}->${l.to.table.toLowerCase()}.${(l.to.col || '').toLowerCase()}`;
+      if (k === lk) {
+        if (isFrom) {
+          l.from.table = newTableKey;
+          l.from.col = newColName || '';
+        } else {
+          l.to.table = newTableKey;
+          l.to.col = newColName || '';
+        }
+        reconnected = true;
+        break;
+      }
+    }
+
+    // Check model relations
+    if (!reconnected) {
+      for (let i = 0; i < this.model.relations.length; i++) {
+        const r = this.model.relations[i];
+        const k = `${r.fromTable.toLowerCase()}.${(r.fromCols[0] || '').toLowerCase()}->${r.toTable.toLowerCase()}.${(r.toCols[0] || '').toLowerCase()}`;
+        if (k === lk) {
+          if (isFrom) {
+            r.fromTable = newTableKey;
+            r.fromCols = [newColName || ''];
+          } else {
+            r.toTable = newTableKey;
+            r.toCols = [newColName || ''];
+          }
+          reconnected = true;
+          break;
+        }
+      }
+    }
+
+    if (reconnected) {
+      this.edgeWaypoints.delete(lk);
+      this.edgeAnchors.delete(lk);
+      this.selectedEdgeKey = null;
+      this.markDirty();
+      this.onLayoutChange?.();
+      return true;
+    }
+    return false;
   }
 
   setEdgeAnchor(key, side, offset, isFrom = true) {
@@ -1957,19 +2258,7 @@ export class Diagram {
     const w = this.screenToWorld(sx, sy);
     const tol = Math.max(10, 14 / this.cam.scale);
 
-    // 1) Test waypoints of all edges (or selected edge first)
-    for (const [key, pts] of this.edgeWaypoints.entries()) {
-      const seg = this._edgeSegForDrag(key);
-      const isOrthogonal = seg?.isOrthogonal;
-      for (let i = 0; i < pts.length; i++) {
-        const pt = pts[i];
-        if (Math.hypot(w.x - pt.x, w.y - pt.y) <= tol) {
-          return { key, index: i, x: pt.x, y: pt.y, isWaypoint: true, isOrthogonal };
-        }
-      }
-    }
-
-    // 2) Test anchors of active (selected or hovered) edge
+    // 1) Test anchors and corners of active (selected or hovered) edge FIRST
     const activeKey = this.selectedEdgeKey || this.hoverEdge?.key;
     if (activeKey) {
       const seg = this._edgeSegForDrag(activeKey);
@@ -1980,8 +2269,48 @@ export class Diagram {
         if (Math.hypot(w.x - seg.p2.x, w.y - seg.p2.y) <= tol) {
           return { key: activeKey, isAnchor: true, isFrom: false, table: seg.toTable, x: seg.p2.x, y: seg.p2.y };
         }
+        if (seg.isOrthogonal) {
+          const orthoData = getOrthogonalSegments(seg.p1, seg.p2, seg.waypoints, seg.obstacles);
+          for (let i = 1; i < orthoData.points.length - 1; i++) {
+            const pt = orthoData.points[i];
+            if (Math.hypot(w.x - pt.x, w.y - pt.y) <= tol) {
+              return { key: activeKey, index: i - 1, x: pt.x, y: pt.y, isWaypoint: true, isOrthogonal: true };
+            }
+          }
+        } else if (seg.waypoints && seg.waypoints.length) {
+          for (let i = 0; i < seg.waypoints.length; i++) {
+            const pt = seg.waypoints[i];
+            if (Math.hypot(w.x - pt.x, w.y - pt.y) <= tol) {
+              return { key: activeKey, index: i, x: pt.x, y: pt.y, isWaypoint: true, isOrthogonal: false };
+            }
+          }
+        }
       }
     }
+
+    // 2) Test waypoints / corners of other edges
+    for (const [key, pts] of this.edgeWaypoints.entries()) {
+      if (activeKey && key.toLowerCase() === activeKey.toLowerCase()) continue;
+      const seg = this._edgeSegForDrag(key);
+      const isOrthogonal = seg?.isOrthogonal;
+      if (isOrthogonal && seg) {
+        const orthoData = getOrthogonalSegments(seg.p1, seg.p2, seg.waypoints, seg.obstacles);
+        for (let i = 1; i < orthoData.points.length - 1; i++) {
+          const pt = orthoData.points[i];
+          if (Math.hypot(w.x - pt.x, w.y - pt.y) <= tol) {
+            return { key, index: i - 1, x: pt.x, y: pt.y, isWaypoint: true, isOrthogonal: true };
+          }
+        }
+      } else {
+        for (let i = 0; i < pts.length; i++) {
+          const pt = pts[i];
+          if (Math.hypot(w.x - pt.x, w.y - pt.y) <= tol) {
+            return { key, index: i, x: pt.x, y: pt.y, isWaypoint: true, isOrthogonal };
+          }
+        }
+      }
+    }
+
     return null;
   }
 
@@ -2307,31 +2636,57 @@ function dot(ctx, x, y, r) {
 }
 
 // Crow's-foot cardinality marker at a line endpoint on a table edge.
-//   (x,y) = the point on the table edge; dir = +1 if the line extends in +x
-//   from here, -1 if -x. `s` = world-units-per-screen-pixel (1/scale).
+//   (x, y) = the point on the table edge
+//   (nx, ny) = outward normal vector from the table edge (pointing along the line)
 //   kind ∈ 'one' | 'many' | 'zero-or-one' | 'zero-or-many'. lw = line width.
-function drawMarker(ctx, x, y, dir, kind, s, lw) {
+//   `s` = world-units-per-screen-pixel (1/scale).
+function drawMarker(ctx, x, y, nx, ny, kind, s, lw) {
+  // Backward compatibility if called as (ctx, x, y, dir, kind, s, lw)
+  if (typeof ny === 'string') {
+    lw = s;
+    s = kind;
+    kind = ny;
+    ny = 0;
+    nx = nx < 0 ? -1 : 1;
+  }
+
+  const len = Math.hypot(nx, ny);
+  const unx = len > 0.001 ? nx / len : 1;
+  const uny = len > 0.001 ? ny / len : 0;
+
+  // Perpendicular unit vector (-uny, unx) along table edge
+  const px = -uny;
+  const py = unx;
+
   const foot = 11 * s;     // distance from edge to crow's-foot apex / bar tick
-  const spread = 5.5 * s;  // half-height of the foot / bar
+  const spread = 5.5 * s;  // half-width of the foot / bar along the edge
   const r = 3.2 * s;       // optionality ("zero") ring radius
   const many = kind === 'many' || kind === 'zero-or-many';
   const optional = kind === 'zero-or-one' || kind === 'zero-or-many';
+
   ctx.lineWidth = lw;
   ctx.beginPath();
   if (many) {
-    const ax = x + dir * foot;                       // apex out along the line
-    ctx.moveTo(ax, y); ctx.lineTo(x, y - spread);    // three prongs back to edge
-    ctx.moveTo(ax, y); ctx.lineTo(x, y + spread);
-    ctx.moveTo(ax, y); ctx.lineTo(x, y);
+    const ax = x + unx * foot;
+    const ay = y + uny * foot;
+    // three prongs connecting apex back to edge
+    ctx.moveTo(ax, ay); ctx.lineTo(x + px * spread, y + py * spread);
+    ctx.moveTo(ax, ay); ctx.lineTo(x - px * spread, y - py * spread);
+    ctx.moveTo(ax, ay); ctx.lineTo(x, y);
   } else {
-    const bx = x + dir * foot;                        // single bar ("one")
-    ctx.moveTo(bx, y - spread); ctx.lineTo(bx, y + spread);
+    // single bar ("one") perpendicular to line
+    const bx = x + unx * foot;
+    const by = y + uny * foot;
+    ctx.moveTo(bx + px * spread, by + py * spread);
+    ctx.lineTo(bx - px * spread, by - py * spread);
   }
   ctx.stroke();
+
   if (optional) {
-    const cx = x + dir * (foot + r + 2 * s);          // hollow "zero" ring, outermost
+    const cx = x + unx * (foot + r + 2 * s);
+    const cy = y + uny * (foot + r + 2 * s);
     ctx.beginPath();
-    ctx.arc(cx, y, r, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
   }
 }
