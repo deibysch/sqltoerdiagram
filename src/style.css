@@ -676,6 +676,11 @@ body.embed .layout { height: 100vh; height: 100dvh; }
   font-size: 11.5px;
   color: var(--muted);
 }
+.layout-editor-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .layout-editor-title {
   font-weight: 600;
   color: var(--text);

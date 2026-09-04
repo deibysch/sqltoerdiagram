@@ -4,7 +4,7 @@ import { layout } from './layout.js';
 import { Diagram } from './diagram.js';
 import { exportSVG } from './svg-export.js';
 import { EDGE_COLORS } from './renderer.js';
-import { serialize, SERIALIZERS } from './formats/serialize.js';
+import { serialize, SERIALIZERS, toDBMLLayout } from './formats/serialize.js';
 import { applyEdit, addColumn, deleteColumn, toggleConstraint, addTable, deleteTable } from './edit.js';
 import { createVisualEditor } from './visual-editor.js';
 import { DIALECTS, DEFAULT_DIALECT } from './dialects.js';
@@ -1059,17 +1059,12 @@ let editorMode = localStorage.getItem('dbdiga-mode') || 'code';
 
 function generateLayoutJson() {
   const data = collectLayout();
-  const out = {
-    version: 1,
+  return toDBMLLayout(diagram.model, diagram.annotations, data.camera, {
     diagramLevel: diagram.diagramLevel || 'physical',
     edgeColorMode: diagram.edgeColorMode || 'multi',
     edgeRouting: diagram.edgeRouting || 'curved',
-    tables: data.tables,
-    groups: data.groups,
     connections: data.connections,
-    camera: data.camera,
-  };
-  return JSON.stringify(out, null, 2);
+  });
 }
 
 function updateLayoutTextarea() {
@@ -1098,6 +1093,13 @@ if (layoutJsonEl) {
         statusEl.className = 'status warn';
       }
     }, 300);
+  });
+}
+
+const btnDlLayout = $('btn-dl-layout');
+if (btnDlLayout) {
+  btnDlLayout.addEventListener('click', () => {
+    downloadText('schema.dbml.layout.json', generateLayoutJson(), 'application/json');
   });
 }
 
@@ -1189,7 +1191,7 @@ function downloadText(filename, text, mime) {
 
 // Reusable "here's some text — copy or download it" modal (export code, embed snippet).
 let _modal = null;
-function showCodeModal(title, text, filename, umamiLabel) {
+function showCodeModal(title, text, filename, umamiLabel, extraDownload = null) {
   if (!_modal) {
     _modal = document.createElement('div');
     _modal.className = 'modal';
@@ -1212,7 +1214,8 @@ function showCodeModal(title, text, filename, umamiLabel) {
   const copyBtn = _modal.querySelector('.modal-copy');
   const dlBtn = _modal.querySelector('.modal-dl');
   _modal.querySelector('.modal-title').textContent = title;
-  _modal.querySelector('.modal-hint').textContent = filename ? filename : '';
+  const hint = filename ? (extraDownload ? `${filename} + ${extraDownload.filename}` : filename) : '';
+  _modal.querySelector('.modal-hint').textContent = hint;
   ta.value = text;
   copyBtn.textContent = 'Copy';
   if (umamiLabel) copyBtn.setAttribute('data-umami-event', 'copy-' + umamiLabel);
@@ -1222,7 +1225,15 @@ function showCodeModal(title, text, filename, umamiLabel) {
     setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
   };
   dlBtn.hidden = !filename;
-  dlBtn.onclick = () => downloadText(filename, ta.value, 'text/plain');
+  dlBtn.onclick = () => {
+    downloadText(filename, ta.value, 'text/plain');
+    if (extraDownload) {
+      const extraContent = typeof extraDownload.content === 'function' ? extraDownload.content() : extraDownload.content;
+      setTimeout(() => {
+        downloadText(extraDownload.filename, extraContent, extraDownload.mime || 'application/json');
+      }, 150);
+    }
+  };
   _modal.hidden = false;
   ta.focus(); ta.setSelectionRange(0, 0);
 }
@@ -1319,7 +1330,12 @@ exportMenu.addEventListener('click', (e) => {
   const s = SERIALIZERS[kind];
   if (!s) return;
   const text = serialize(diagram.model, kind, diagram.annotations);
-  showCodeModal(`Export — ${s.label}`, text, `schema.${s.ext}`, s.label.toLowerCase());
+  const extraDownload = (kind === 'dbml') ? {
+    filename: 'schema.dbml.layout.json',
+    content: () => generateLayoutJson(),
+    mime: 'application/json',
+  } : null;
+  showCodeModal(`Export — ${s.label}`, text, `schema.${s.ext}`, s.label.toLowerCase(), extraDownload);
 });
 document.addEventListener('click', () => { exportMenu.hidden = true; });
 

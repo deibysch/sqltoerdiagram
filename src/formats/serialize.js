@@ -154,6 +154,44 @@ export function toPlantUML(model) {
   return L.join('\n') + '\n';
 }
 
+export function toDBMLLayout(model, annotations = [], camera = null, options = {}) {
+  const tables = {};
+  for (const t of (model?.tables || [])) {
+    if (Number.isFinite(t.x)) {
+      tables[t.key || t.name] = { x: Math.round(t.x), y: Math.round(t.y) };
+    }
+  }
+
+  const groups = {};
+  for (const a of (annotations || [])) {
+    if (a.type === 'group') {
+      groups[a.text || 'Group'] = {
+        color: a.color,
+        note: a.note || '',
+        tables: a.tables || [],
+      };
+    }
+  }
+
+  const out = {
+    version: 1,
+    diagramLevel: options.diagramLevel || 'physical',
+    edgeColorMode: options.edgeColorMode || 'multi',
+    edgeRouting: options.edgeRouting || 'curved',
+    tables,
+    groups,
+    connections: options.connections || {},
+    camera: camera || { x: 0, y: 0, scale: 1 },
+  };
+
+  const customNotes = (annotations || []).filter(a => a.type === 'note');
+  if (customNotes.length) {
+    out.customNotes = customNotes;
+  }
+
+  return JSON.stringify(out, null, 2);
+}
+
 // dispatcher used by the Export menu
 export const SERIALIZERS = {
   mermaid: { label: 'Mermaid', ext: 'mmd', fn: toMermaid },

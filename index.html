@@ -224,8 +224,11 @@
       <div class="visual-editor" id="visual-editor" hidden></div>
       <div class="layout-editor" id="layout-editor" hidden>
         <div class="layout-editor-bar">
-          <span class="layout-editor-title">dddbml layout.json</span>
-          <span class="layout-editor-hint">Positions &amp; colors sync with diagram</span>
+          <div class="layout-editor-bar-left">
+            <span class="layout-editor-title">schema.dbml.layout.json</span>
+            <span class="layout-editor-hint">Positions &amp; colors sync with diagram</span>
+          </div>
+          <button id="btn-dl-layout" class="btn ghost compact" title="Download schema.dbml.layout.json" data-umami-event="dl-layout">Download</button>
         </div>
         <textarea id="layout-json" class="layout-json-textarea" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="Layout JSON..."></textarea>
       </div>

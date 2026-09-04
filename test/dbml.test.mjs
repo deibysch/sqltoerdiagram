@@ -2,7 +2,7 @@
 // Run: node test/dbml.test.mjs
 import { parseSchema, detectFormat } from '../src/parse.js';
 import { parseDBML } from '../src/formats/dbml.js';
-import { toDBML } from '../src/formats/serialize.js';
+import { toDBML, toDBMLLayout } from '../src/formats/serialize.js';
 import { computeGroupBounds, sanitizeAnnotations, resolveGroupColor } from '../src/annotations.js';
 import { exportSVG } from '../src/svg-export.js';
 
@@ -238,5 +238,62 @@ TableGroup Ecommerce [color: #27ae60] {
   ok(dist.dist === 5, 'pointToSegmentDistance calculates accurate distance');
 }
 
+// --- toDBMLLayout (Layout JSON generation for separate download on DBML export) ---
+{
+  const mockModel = {
+    tables: [
+      { key: 'users', name: 'users', x: 120, y: 180, w: 200, h: 150 },
+      { key: 'orders', name: 'orders', x: 450, y: 220, w: 220, h: 160 },
+    ],
+    relations: [],
+  };
+
+  const mockAnnotations = [
+    {
+      id: 'g1',
+      type: 'group',
+      text: 'Ecommerce',
+      color: '#3b82f6',
+      note: 'Order tables',
+      tables: ['orders'],
+    },
+    {
+      id: 'n1',
+      type: 'note',
+      text: 'Remember to verify indexes',
+      x: 100,
+      y: 50,
+      w: 150,
+      h: 80,
+    },
+  ];
+
+  const camera = { x: 50, y: 80, scale: 1.25 };
+  const options = {
+    diagramLevel: 'logical',
+    edgeColorMode: 'single',
+    edgeRouting: 'ortho-sharp',
+    connections: {
+      'users->orders': { color: '#ef4444', routing: 'straight' },
+    },
+  };
+
+  const layoutJsonStr = toDBMLLayout(mockModel, mockAnnotations, camera, options);
+  const layout = JSON.parse(layoutJsonStr);
+
+  ok(layout.version === 1, 'toDBMLLayout: version is 1');
+  ok(layout.diagramLevel === 'logical', 'toDBMLLayout: preserves diagramLevel');
+  ok(layout.edgeColorMode === 'single', 'toDBMLLayout: preserves edgeColorMode');
+  ok(layout.edgeRouting === 'ortho-sharp', 'toDBMLLayout: preserves edgeRouting');
+  ok(layout.tables.users.x === 120 && layout.tables.users.y === 180, 'toDBMLLayout: tables contains users coords');
+  ok(layout.tables.orders.x === 450 && layout.tables.orders.y === 220, 'toDBMLLayout: tables contains orders coords');
+  ok(layout.groups.Ecommerce.color === '#3b82f6', 'toDBMLLayout: groups contains Ecommerce');
+  ok(Array.isArray(layout.groups.Ecommerce.tables) && layout.groups.Ecommerce.tables[0] === 'orders', 'toDBMLLayout: group contains orders table');
+  ok(layout.camera.scale === 1.25, 'toDBMLLayout: camera scale preserved');
+  ok(Array.isArray(layout.customNotes) && layout.customNotes.length === 1, 'toDBMLLayout: customNotes contains note annotation');
+  ok(layout.connections['users->orders'].color === '#ef4444', 'toDBMLLayout: connections preserved');
+}
+
 console.log(`\nDBML tests: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
+
