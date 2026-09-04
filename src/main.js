@@ -217,6 +217,7 @@ function collectLayout() {
 
   return {
     version: 1,
+    diagramLevel: diagram.diagramLevel || 'physical',
     edgeColorMode: diagram.edgeColorMode || 'multi',
     edgeRouting: diagram.edgeRouting || 'curved',
     tables,
@@ -255,6 +256,10 @@ function applyLayoutData(model, data) {
   for (const t of model.tables) {
     const p = pos[t.key] || pos[t.name];
     if (p && Number.isFinite(p.x)) { t.x = p.x; t.y = p.y; placed++; }
+  }
+  if (data.diagramLevel) {
+    diagram.setDiagramLevel(data.diagramLevel);
+    syncDiagramLevelUI();
   }
   if (data.edgeColorMode) {
     diagram.setEdgeColorMode(data.edgeColorMode);
@@ -1050,6 +1055,7 @@ function generateLayoutJson() {
   const data = collectLayout();
   const out = {
     version: 1,
+    diagramLevel: diagram.diagramLevel || 'physical',
     edgeColorMode: diagram.edgeColorMode || 'multi',
     edgeRouting: diagram.edgeRouting || 'curved',
     tables: data.tables,
@@ -1230,11 +1236,68 @@ function exportImage(kind) {
       diagram.edgeRouting,
       diagram.edgeWaypoints,
       diagram.edgeAnchors,
-      diagram.edgeRoutings
+      diagram.edgeRoutings,
+      diagram.diagramLevel
     );
     if (svg) downloadText('schema.svg', svg, 'image/svg+xml');
   }
 }
+
+// ---- Diagram Level menu (Physical / Logical / Conceptual) ----
+const diagramLevelBtn = $('btn-diagram-level');
+const diagramLevelMenu = $('diagram-level-menu');
+const diagramLevelIcon = $('diagram-level-icon');
+const diagramLevelLabel = $('diagram-level-label');
+
+const LEVEL_META = {
+  physical: { icon: '⚙️', label: 'Physical' },
+  logical: { icon: '📐', label: 'Logical' },
+  conceptual: { icon: '🏢', label: 'Conceptual' },
+};
+
+function syncDiagramLevelUI() {
+  const current = diagram.diagramLevel || 'physical';
+  const meta = LEVEL_META[current] || LEVEL_META.physical;
+  if (diagramLevelIcon) diagramLevelIcon.textContent = meta.icon;
+  if (diagramLevelLabel) diagramLevelLabel.textContent = meta.label;
+  if (diagramLevelMenu) {
+    for (const btn of diagramLevelMenu.querySelectorAll('[data-level]')) {
+      btn.classList.toggle('active', btn.dataset.level === current);
+    }
+  }
+}
+
+if (diagramLevelBtn && diagramLevelMenu) {
+  diagramLevelBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    diagramLevelMenu.hidden = !diagramLevelMenu.hidden;
+  });
+  diagramLevelMenu.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const btn = e.target.closest('[data-level]');
+    if (!btn) return;
+    const level = btn.dataset.level;
+    diagram.setDiagramLevel(level);
+    localStorage.setItem('dbdiga-diagram-level', level);
+    syncDiagramLevelUI();
+    diagramLevelMenu.hidden = true;
+    saveLayout();
+  });
+  document.addEventListener('click', () => {
+    diagramLevelMenu.hidden = true;
+  });
+}
+
+diagram.onDiagramLevelChange = (level) => {
+  syncDiagramLevelUI();
+  saveLayout();
+};
+
+const savedDiagramLevel = localStorage.getItem('dbdiga-diagram-level');
+if (savedDiagramLevel && ['physical', 'logical', 'conceptual'].includes(savedDiagramLevel)) {
+  diagram.setDiagramLevel(savedDiagramLevel);
+}
+syncDiagramLevelUI();
 
 // ---- Export menu (image + code formats) ----
 const exportBtn = $('btn-export');

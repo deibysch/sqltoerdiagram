@@ -104,6 +104,46 @@
         </button>
       </div>
 
+      <!-- diagram level (conceptual / logical / physical) -->
+      <div class="tb-group">
+        <div class="menu-wrap" id="diagram-level-wrap">
+          <button id="btn-diagram-level" class="btn ghost caret" title="Diagram abstraction level" data-umami-event="diagram-level-menu">
+            <span id="diagram-level-icon" class="dd-btn-icon">⚙️</span>
+            <span id="diagram-level-label">Physical</span>
+          </button>
+          <div id="diagram-level-menu" class="menu diagram-level-menu" hidden>
+            <div class="menu-label">Diagram Level</div>
+            <button class="menu-item active" data-level="physical">
+              <div class="dd-item-left">
+                <span class="dd-item-icon">⚙️</span>
+                <div class="dd-item-content">
+                  <span class="dd-item-name">Physical</span>
+                  <span class="dd-item-desc">Full schema with native types &amp; constraints</span>
+                </div>
+              </div>
+            </button>
+            <button class="menu-item" data-level="logical">
+              <div class="dd-item-left">
+                <span class="dd-item-icon">📐</span>
+                <div class="dd-item-content">
+                  <span class="dd-item-name">Logical</span>
+                  <span class="dd-item-desc">All attributes with generic logical types</span>
+                </div>
+              </div>
+            </button>
+            <button class="menu-item" data-level="conceptual">
+              <div class="dd-item-left">
+                <span class="dd-item-icon">🏢</span>
+                <div class="dd-item-content">
+                  <span class="dd-item-name">Conceptual</span>
+                  <span class="dd-item-desc">Entities &amp; key attributes without types or FKs</span>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- output: get the diagram out -->
       <div class="tb-group">
         <div class="menu-wrap">

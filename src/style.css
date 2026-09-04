@@ -266,7 +266,56 @@ a.btn { text-decoration: none; color: var(--text); }
 }
 .menu-item:hover { background: var(--panel-2); }
 .menu-item.active { color: var(--accent); font-weight: 600; }
-.menu-item.active::after { content: "✓"; font-size: 12px; }
+.menu-item.active::after { content: "✓"; font-size: 12px; flex: none; margin-left: 6px; }
+
+/* ---------- diagram level menu ---------- */
+.diagram-level-menu {
+  min-width: 250px;
+}
+.dd-btn-icon {
+  display: inline-block;
+  margin-right: 4px;
+  font-size: 13px;
+}
+.diagram-level-menu .menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+}
+.dd-item-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  text-align: left;
+}
+.dd-item-icon {
+  font-size: 16px;
+  line-height: 1.2;
+  flex: none;
+  margin-top: 1px;
+}
+.dd-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dd-item-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+}
+.diagram-level-menu .menu-item.active .dd-item-name {
+  color: var(--accent);
+}
+.dd-item-desc {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+}
 
 .tool-mode-group {
   display: inline-flex;

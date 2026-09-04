@@ -1,7 +1,7 @@
 // Diagram controller: owns the camera, input handling (pan / zoom / drag),
 // the render loop, edge routing and export. Renders only when dirty and only
 // what is on screen.
-import { THEMES, rasterizeTable, columnY, measureTable, ROW_H, HEADER_H, EDGE_COLORS } from './renderer.js';
+import { THEMES, rasterizeTable, columnY, measureTable, getVisibleColumns, ROW_H, HEADER_H, EDGE_COLORS } from './renderer.js';
 import { NOTE_COLORS, GROUP_COLORS, NOTE_ORDER, GROUP_ORDER, makeAnnotation, resolveGroupColor, computeGroupBounds } from './annotations.js';
 import { ROUTING_STYLES, getTableAnchor, drawRoutePath, distanceToRoute, pointToSegmentDistance, buildOrthogonalPoints, getOrthogonalSegments, moveOrthogonalSegment, moveOrthogonalCorner, cleanOrthogonalPoints, filterRedundantWaypoints, projectPointToPerimeter } from './routing.js';
 import { relationCardinality } from './cardinality.js';
@@ -14,6 +14,8 @@ export class Diagram {
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.cam = { x: 0, y: 0, scale: 1 };
     this.model = { tables: [], relations: [] };
+    this.diagramLevel = 'physical'; // 'physical' | 'logical' | 'conceptual'
+    this.onDiagramLevelChange = null; // fired when diagramLevel changes
     this.themeName = 'dark';
     this.theme = THEMES.dark;
     this.bitmaps = new Map();      // table.key -> offscreen canvas
@@ -73,7 +75,7 @@ export class Diagram {
     for (const t of model.tables) {
       // always size every table — layout() may be skipped on live edits, but
       // the renderer & fit need w/h regardless.
-      const dims = measureTable(t);
+      const dims = measureTable(t, this.diagramLevel);
       t.w = dims.w; t.h = dims.h; t.rowH = dims.rowH; t.headerH = dims.headerH;
       const old = prev.get(t.key);
       if (old && Number.isFinite(old.x)) { t.x = old.x; t.y = old.y; }
@@ -91,6 +93,28 @@ export class Diagram {
     if (!keepCamera) {/* caller may fit */ }
   }
 
+  setDiagramLevel(level) {
+    if (!['physical', 'logical', 'conceptual'].includes(level)) return;
+    if (this.diagramLevel === level) return;
+    this.diagramLevel = level;
+    for (const t of (this.model.tables || [])) {
+      const oldH = t.h;
+      const dims = measureTable(t, this.diagramLevel);
+      t.w = dims.w;
+      t.h = dims.h;
+      t.rowH = dims.rowH;
+      t.headerH = dims.headerH;
+      if (Number.isFinite(t.y) && Number.isFinite(oldH)) {
+        t.y = Math.round(t.y + (oldH - t.h) / 2);
+      }
+    }
+    this.bitmaps.clear();
+    this._tmapDirty = true;
+    this.markDirty();
+    this.onDiagramLevelChange?.(this.diagramLevel);
+    this.onLayoutChange?.();
+  }
+
   getSnapshot() {
     const tables = {};
     for (const t of this.model.tables) {
@@ -98,6 +122,7 @@ export class Diagram {
     }
     return {
       tables,
+      diagramLevel: this.diagramLevel,
       annotations: this.annotations.map(a => ({ ...a, tables: a.tables ? [...a.tables] : [] })),
       edgeColorMode: this.edgeColorMode,
       edgeColors: Array.from(this.edgeColors.entries()),
@@ -112,6 +137,9 @@ export class Diagram {
 
   applySnapshot(snapshot) {
     if (!snapshot) return;
+    if (snapshot.diagramLevel && snapshot.diagramLevel !== this.diagramLevel) {
+      this.setDiagramLevel(snapshot.diagramLevel);
+    }
     if (snapshot.tables) {
       for (const t of this.model.tables) {
         const p = snapshot.tables[t.key] || snapshot.tables[t.name];
@@ -186,13 +214,15 @@ export class Diagram {
   editColumn(tableKey, colName) {
     const t = this.model.tables.find(x => x.key === tableKey);
     if (!t) return;
-    const idx = t.columns.findIndex(c => c.name === colName);
+    const visibleCols = getVisibleColumns(t, this.diagramLevel);
+    const idx = visibleCols.findIndex(c => c.name === colName);
     if (idx < 0) return;
     const rowY = t.y + HEADER_H + idx * ROW_H;
     const split = t.x + t.w * 0.58;
+    const w = this.diagramLevel === 'conceptual' ? t.w - 42 : split - (t.x + 30);
     this._beginEdit({
       table: t, kind: 'column-name', colName, value: colName,
-      rect: { x: t.x + 30, y: rowY, w: split - (t.x + 30), h: ROW_H },
+      rect: { x: t.x + 30, y: rowY, w, h: ROW_H },
       align: 'left', weight: 400,
     });
   }
@@ -247,7 +277,7 @@ export class Diagram {
   _bitmap(t) {
     let bm = this.bitmaps.get(t.key);
     if (!bm) {
-      bm = rasterizeTable(t, this.theme, this.dpr);
+      bm = rasterizeTable(t, this.theme, this.dpr, this.diagramLevel);
       this.bitmaps.set(t.key, bm);
     }
     return bm;
@@ -732,8 +762,8 @@ export class Diagram {
       ? waypoints[waypoints.length - 1]
       : (from ? { x: from.x + from.w / 2, y: from.y + from.h / 2 } : null);
 
-    const p1 = getTableAnchor(from, fromCol, targetForFrom, anchorCfg?.fromAnchor, laneOffset);
-    const p2 = getTableAnchor(to, toCol, targetForTo, anchorCfg?.toAnchor, laneOffset);
+    const p1 = getTableAnchor(from, fromCol, targetForFrom, anchorCfg?.fromAnchor, laneOffset, this.diagramLevel);
+    const p2 = getTableAnchor(to, toCol, targetForTo, anchorCfg?.toAnchor, laneOffset, this.diagramLevel);
 
     const routingStyle = (lk ? this.edgeRoutings.get(lk) : null) || this.edgeRoutings.get(key) || this.edgeRouting || 'curved';
     const isOrthogonal = routingStyle === 'ortho-sharp' || routingStyle === 'ortho-rounded';
@@ -1120,8 +1150,9 @@ export class Diagram {
       let conn = null;
       if (t) {
         const w = this.screenToWorld(sx, sy);
+        const visibleCols = getVisibleColumns(t, this.diagramLevel);
         const idx = Math.floor((w.y - t.y - HEADER_H) / ROW_H);
-        if (idx >= 0 && idx < t.columns.length) conn = { t, colIndex: idx };
+        if (idx >= 0 && idx < visibleCols.length) conn = { t, colIndex: idx };
       }
       const connChanged = (conn?.t !== this.hoverConn?.t) || (conn?.colIndex !== this.hoverConn?.colIndex);
       if (connChanged) { this.hoverConn = conn; changed = true; }
@@ -1508,8 +1539,9 @@ export class Diagram {
       const t = this.model.tables[i];
       if (!Number.isFinite(t.x) || this.hidden.has(t.key)) continue;
       if (wx >= t.x && wx <= t.x + t.w && wy >= t.y && wy <= t.y + t.h) {
+        const visibleCols = getVisibleColumns(t, this.diagramLevel);
         const idx = Math.floor((wy - t.y - HEADER_H) / ROW_H);
-        if (idx >= 0 && idx < t.columns.length) return { tableKey: t.key, col: t.columns[idx].name };
+        if (idx >= 0 && idx < visibleCols.length) return { tableKey: t.key, col: visibleCols[idx].name };
         return null;
       }
     }
@@ -2030,10 +2062,11 @@ export class Diagram {
       const ly = w.y - t.y;
       if (ly < HEADER_H) continue;
       const idx = Math.floor((ly - HEADER_H) / ROW_H);
-      if (idx < 0 || idx >= t.columns.length) continue;
+      const visibleCols = getVisibleColumns(t, this.diagramLevel);
+      if (idx < 0 || idx >= visibleCols.length) continue;
       for (const p of this._connDots(t, idx)) {
         if (Math.hypot(w.x - p.x, w.y - p.y) <= r * 1.5) {
-          return { tableKey: t.key, col: t.columns[idx].name, side: p.side, wx: p.x, wy: p.y };
+          return { tableKey: t.key, col: visibleCols[idx].name, side: p.side, wx: p.x, wy: p.y };
         }
       }
     }
@@ -2045,9 +2078,10 @@ export class Diagram {
     const t = this.tableAt(sx, sy);
     if (!t) return null;
     const w = this.screenToWorld(sx, sy);
+    const visibleCols = getVisibleColumns(t, this.diagramLevel);
     const idx = Math.floor((w.y - t.y - HEADER_H) / ROW_H);
-    if (idx < 0 || idx >= t.columns.length) return null;
-    return { tableKey: t.key, col: t.columns[idx].name };
+    if (idx < 0 || idx >= visibleCols.length) return null;
+    return { tableKey: t.key, col: visibleCols[idx].name };
   }
 
   _linkExists(fk, fc, tk, tc) {
@@ -2447,12 +2481,13 @@ export class Diagram {
     if (ly < HEADER_H) {
       return { table: t, kind: 'table', rect: { x: t.x, y: t.y, w: t.w, h: HEADER_H }, align: 'left', weight: 600 };
     }
+    const visibleCols = getVisibleColumns(t, this.diagramLevel);
     const idx = Math.floor((ly - HEADER_H) / ROW_H);
-    if (idx < 0 || idx >= t.columns.length) return null;
-    const col = t.columns[idx];
+    if (idx < 0 || idx >= visibleCols.length) return null;
+    const col = visibleCols[idx];
     const rowY = t.y + HEADER_H + idx * ROW_H;
     const split = t.x + t.w * 0.58;
-    if (w.x >= split && col.type) {
+    if (this.diagramLevel !== 'conceptual' && w.x >= split && col.type) {
       return {
         table: t, kind: 'column-type', colName: col.name, value: col.typeRaw || col.type,
         rect: { x: split, y: rowY, w: t.x + t.w - split, h: ROW_H }, align: 'right', weight: 400
@@ -2460,7 +2495,7 @@ export class Diagram {
     }
     return {
       table: t, kind: 'column-name', colName: col.name, value: col.name,
-      rect: { x: t.x + 30, y: rowY, w: split - (t.x + 30), h: ROW_H }, align: 'left', weight: 400
+      rect: { x: t.x + 30, y: rowY, w: (this.diagramLevel === 'conceptual' ? t.w - 42 : split - (t.x + 30)), h: ROW_H }, align: 'left', weight: 400
     };
   }
 

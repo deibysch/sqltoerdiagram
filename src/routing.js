@@ -18,7 +18,7 @@ export const ROUTING_STYLES = {
  * If anchor is specified ({ side: 'left'|'right'|'top'|'bottom', offset: 0..1 }), uses that.
  * Otherwise, calculates optimal perimeter point facing the target point.
  */
-export function getTableAnchor(table, colName, targetPoint = null, anchorConfig = null, laneOffset = 0) {
+export function getTableAnchor(table, colName, targetPoint = null, anchorConfig = null, laneOffset = 0, diagramLevel = 'physical', relIdx = 0, totalRels = 1) {
   if (!table || !Number.isFinite(table.x) || !Number.isFinite(table.y)) {
     return { x: 0, y: 0, nx: 1, ny: 0, side: 'right' };
   }
@@ -35,17 +35,22 @@ export function getTableAnchor(table, colName, targetPoint = null, anchorConfig 
   }
 
   // If column is provided and target is horizontal, default to column row height on left/right
-  const colY = colName ? y + columnY(table, colName) : y + h / 2;
+  const colY = (colName || diagramLevel === 'conceptual')
+    ? y + columnY(table, colName, diagramLevel, relIdx, totalRels)
+    : y + h / 2;
 
   if (!targetPoint) {
     const finalY = Math.max(y + 22, Math.min(y + h - 8, colY + laneOffset));
     return { x: x + w, y: finalY, nx: 1, ny: 0, side: 'right' };
   }
 
+  const targetX = Number.isFinite(targetPoint.w) ? targetPoint.x + targetPoint.w / 2 : targetPoint.x;
+  const targetY = Number.isFinite(targetPoint.h) ? targetPoint.y + targetPoint.h / 2 : targetPoint.y;
+
   const cx = x + w / 2;
   const cy = y + h / 2;
-  const dx = targetPoint.x - cx;
-  const dy = targetPoint.y - cy;
+  const dx = targetX - cx;
+  const dy = targetY - cy;
 
   // If mostly horizontal, attach to left or right at column height (with lane offset)
   if (Math.abs(dx) * h >= Math.abs(dy) * w) {
