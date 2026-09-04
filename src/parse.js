@@ -51,6 +51,6 @@ export function parseSchema(text, format = 'auto') {
     res = { tables: [], relations: [], errors: [String(e && e.message || e)] };
   }
   res.format = fmt;
-  res.editable = fmt === 'sql';   // only SQL supports two-way canvas editing
+  res.editable = fmt === 'sql' || fmt === 'dbml';   // SQL & DBML support two-way canvas editing
   return res;
 }

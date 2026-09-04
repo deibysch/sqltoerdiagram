@@ -1,5 +1,5 @@
 import './style.css';
-import { parseSchema, FORMATS } from './parse.js';
+import { parseSchema, FORMATS, detectFormat } from './parse.js';
 import { layout } from './layout.js';
 import { Diagram } from './diagram.js';
 import { exportSVG } from './svg-export.js';
@@ -534,9 +534,20 @@ const layoutOpts = {
   spacing: localStorage.getItem('dbdiga-spacing') || 'comfortable',
 };
 
-// input format: 'auto' detects SQL / Prisma / SQLAlchemy / Sequelize
+// input format: 'auto' detects SQL / Prisma / SQLAlchemy / Sequelize / DBML
 let formatChoice = localStorage.getItem('dbdiga-format') || 'auto';
 if (!FORMATS[formatChoice]) formatChoice = 'auto';
+
+const DBML_DIALECT = {
+  name: 'DBML',
+  types: ['integer', 'int', 'bigint', 'varchar', 'text', 'boolean', 'timestamp', 'datetime', 'date', 'decimal', 'float', 'json'],
+  default: 'integer',
+};
+
+function currentFormat() {
+  if (formatChoice && formatChoice !== 'auto') return formatChoice;
+  return (lastModel && lastModel.format) || detectFormat(sqlEl.value);
+}
 
 function syncModelGroups(model, existingAnnotations = []) {
   if (!model || !Array.isArray(model.groups) || !model.groups.length) {
@@ -586,7 +597,8 @@ function rebuild({ arrange = false, restore = null } = {}) {
     return;
   }
 
-  diagram.editable = result.editable && !isEmbed;   // only SQL supports edit-back; never in embed
+  diagram.editable = result.editable && !isEmbed;   // SQL & DBML support edit-back; never in embed
+  diagram.typeSuggestions = result.format === 'dbml' ? DBML_DIALECT.types : DIALECTS[dialect].types;
   updateStatus(result, sql);
 
   const prevKeys = lastModel ? lastModel.tables.map(t => t.key).sort().join('|') : '';
@@ -667,7 +679,8 @@ function commitSql(newSql, { pinKey = null, renameFrom = null, renameTo = null }
   syncHighlight();
   // remember current positions so the edit doesn't reshuffle the diagram
   const oldPos = new Map(diagram.model.tables.map(t => [t.key, { x: t.x, y: t.y }]));
-  const model = parseSchema(newSql, 'sql');
+  const fmt = currentFormat();
+  const model = parseSchema(newSql, fmt);
   for (const t of model.tables) {
     let p = oldPos.get(t.key);
     if (!p && renameTo && t.key === renameTo) p = oldPos.get(renameFrom);   // renamed table keeps its spot
@@ -687,7 +700,8 @@ function commitSql(newSql, { pinKey = null, renameFrom = null, renameTo = null }
 // ---- canvas editing: edit a table/column on the diagram -> rewrite SQL ----
 function applyChange(change) {
   const sql = sqlEl.value;
-  const fresh = parseSchema(sql, 'sql');   // SQL parser for accurate spans
+  const fmt = currentFormat();
+  const fresh = parseSchema(sql, fmt);
   const result = applyEdit(sql, fresh, change);
   if (!result) return;
   commitSql(result.sql, { renameFrom: change.tableKey, renameTo: result.newKey });
@@ -702,14 +716,16 @@ diagram.typeSuggestions = DIALECTS[dialect].types;
 // ---- add a column with the dialect default; returns its name (or null) ----
 function addColumnTo(tableKey) {
   const sql = sqlEl.value;
-  const fresh = parseSchema(sql, 'sql');
+  const fmt = currentFormat();
+  const fresh = parseSchema(sql, fmt);
   const table = fresh.tables.find(t => t.key === tableKey);
   if (!table) return null;
   // pick a unique default name
   const existing = new Set(table.columns.map(c => c.name.toLowerCase()));
   let name = 'new_column', i = 2;
   while (existing.has(name.toLowerCase())) name = `new_column_${i++}`;
-  const res = addColumn(sql, fresh, tableKey, name, DIALECTS[dialect].default);
+  const defaultType = fmt === 'dbml' ? DBML_DIALECT.default : DIALECTS[dialect].default;
+  const res = addColumn(sql, fresh, tableKey, name, defaultType);
   if (!res) return null;
   commitSql(res.sql, { pinKey: tableKey });
   return name;
@@ -981,31 +997,36 @@ const veActions = {
   },
   toggleConstraint(tableKey, colName, kind, on) {
     const sql = sqlEl.value;
-    const res = toggleConstraint(sql, parseSchema(sql, 'sql'), tableKey, colName, kind, on);
+    const fmt = currentFormat();
+    const res = toggleConstraint(sql, parseSchema(sql, fmt), tableKey, colName, kind, on);
     if (!res) return false;
     commitSql(res.sql, { pinKey: tableKey });
     return true;
   },
   deleteColumn(tableKey, colName) {
     const sql = sqlEl.value;
-    const res = deleteColumn(sql, parseSchema(sql, 'sql'), tableKey, colName);
+    const fmt = currentFormat();
+    const res = deleteColumn(sql, parseSchema(sql, fmt), tableKey, colName);
     if (res) commitSql(res.sql, { pinKey: tableKey });
   },
   addColumn(tableKey) { return addColumnTo(tableKey); },
   addTable() {
     const sql = sqlEl.value;
-    const existing = new Set(parseSchema(sql, 'sql').tables.map(t => t.key));
+    const fmt = currentFormat();
+    const fresh = parseSchema(sql, fmt);
+    const existing = new Set(fresh.tables.map(t => t.key));
     let name = 'new_table', i = 2;
     while (existing.has(name.toLowerCase())) name = `new_table_${i++}`;
-    const idType = DIALECTS[dialect].types.find(t => /int|serial|number/i.test(t)) || 'bigint';
-    const res = addTable(sql, name, idType);
+    const idType = fmt === 'dbml' ? 'integer' : (DIALECTS[dialect].types.find(t => /int|serial|number/i.test(t)) || 'bigint');
+    const res = addTable(sql, name, idType, fmt);
     if (!res) return null;
     commitSql(res.sql, { pinKey: res.tableKey });
     return { key: res.tableKey, name };
   },
   deleteTable(tableKey) {
     const sql = sqlEl.value;
-    const res = deleteTable(sql, parseSchema(sql, 'sql'), tableKey);
+    const fmt = currentFormat();
+    const res = deleteTable(sql, parseSchema(sql, fmt), tableKey);
     if (res) commitSql(res.sql);
   },
   focusTable(tableKey) { diagram.centerOn(tableKey); diagram.pinByKey(tableKey); },
@@ -1013,7 +1034,7 @@ const veActions = {
 visualEditor = createVisualEditor({
   mount: $('visual-editor'),
   getModel: () => diagram.model,
-  getDialect: () => DIALECTS[dialect],
+  getDialect: () => (currentFormat() === 'dbml' ? DBML_DIALECT : DIALECTS[dialect]),
   getEditable: () => diagram.editable,
   getFormatLabel: () => FORMATS[lastModel && lastModel.format] || 'another format',
   actions: veActions,
