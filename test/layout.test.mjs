@@ -147,3 +147,35 @@ test('getTableAnchor separates parallel connections with laneOffset', async () =
   assert.strictEqual(a2.y - a1.y, 24, 'Distance between anchors matches laneOffset difference');
 });
 
+test('computeGroupBounds auto-fits bounding box to encompass member tables with standard padding', async () => {
+  const { computeGroupBounds } = await import('../src/annotations.js');
+  const group = {
+    id: 'g1',
+    type: 'group',
+    text: 'Accounts',
+    tables: ['users', 'profiles']
+  };
+  const tables = [
+    { key: 'users', x: 100, y: 150, w: 200, h: 100 },
+    { key: 'profiles', x: 350, y: 200, w: 180, h: 120 },
+    { key: 'other', x: 800, y: 800, w: 200, h: 100 }
+  ];
+
+  // minX = 100, maxX = 350 + 180 = 530 -> w = (530 - 100) + 28*2 = 430 + 56 = 486
+  // minY = 150, maxY = 200 + 120 = 320 -> h = (320 - 150) + 38 + 24 = 170 + 62 = 232
+  // x = 100 - 28 = 72, y = 150 - 38 = 112
+  const bounds = computeGroupBounds(group, tables);
+  assert.strictEqual(bounds.x, 72);
+  assert.strictEqual(bounds.y, 112);
+  assert.strictEqual(bounds.w, 486);
+  assert.strictEqual(bounds.h, 232);
+
+  // Moving users to (50, 80) updates bounds accordingly
+  tables[0].x = 50;
+  tables[0].y = 80;
+  const updatedBounds = computeGroupBounds(group, tables);
+  assert.strictEqual(updatedBounds.x, 50 - 28);
+  assert.strictEqual(updatedBounds.y, 80 - 38);
+});
+
+

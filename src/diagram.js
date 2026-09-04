@@ -81,6 +81,7 @@ export class Diagram {
       if (old && Number.isFinite(old.x)) { t.x = old.x; t.y = old.y; }
     }
     this.model = model;
+    this.fitAllGroups();
     this.bitmaps.clear();
     this._tmapDirty = true;
     this.pinned = null;
@@ -108,6 +109,7 @@ export class Diagram {
         t.y = Math.round(t.y + (oldH - t.h) / 2);
       }
     }
+    this.fitAllGroups();
     this.bitmaps.clear();
     this._tmapDirty = true;
     this.markDirty();
@@ -180,6 +182,7 @@ export class Diagram {
     this.selectedEdgeKey = null;
     this.hoverEdge = null;
     this.hoverVertex = null;
+    this.fitAllGroups();
     this.markDirty();
     this.onHiddenChange?.();
   }
@@ -539,7 +542,32 @@ export class Diagram {
   setAnnotations(arr) {
     this.annotations = Array.isArray(arr) ? arr : [];
     this.selectedAnno = null;
+    this.fitAllGroups();
     this.markDirty();
+  }
+
+  fitAllGroups() {
+    if (!this.annotations?.length || !this.model?.tables?.length) return false;
+    let changed = false;
+    for (const a of this.annotations) {
+      if (a.type === 'group' && Array.isArray(a.tables) && a.tables.length > 0) {
+        const bounds = computeGroupBounds(a, this.model.tables);
+        if (bounds) {
+          if (a.x !== bounds.x || a.y !== bounds.y || a.w !== bounds.w || a.h !== bounds.h) {
+            a.x = bounds.x;
+            a.y = bounds.y;
+            a.w = bounds.w;
+            a.h = bounds.h;
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      this.markDirty();
+      this.onLayoutChange?.();
+    }
+    return changed;
   }
 
   addAnnotation(type) {

@@ -261,6 +261,7 @@ function applyLayoutData(model, data) {
     diagram.setDiagramLevel(data.diagramLevel);
     syncDiagramLevelUI();
   }
+  diagram.fitAllGroups();
   if (data.edgeColorMode) {
     diagram.setEdgeColorMode(data.edgeColorMode);
     syncEdgeColorsBtn();
@@ -291,7 +292,10 @@ function placeNewTables(model) {
   for (const t of missing) { t.x = x; t.y = y; y += t.h + 40; }
 }
 
-diagram.onLayoutChange = saveLayoutDebounced;
+diagram.onLayoutChange = () => {
+  saveLayoutDebounced();
+  if (editorMode === 'layout') updateLayoutTextarea();
+};
 
 // theme: restore preference
 const savedTheme = localStorage.getItem('dbdiga-theme') || 'dark';
@@ -649,10 +653,12 @@ function rebuild({ arrange = false, restore = null } = {}) {
     diagram.setAnnotations(syncModelGroups(result, diagram.annotations));
   }
 
+  diagram.fitAllGroups();
   diagram.markDirty();
   lastModel = result;
   firstRender = false;
   saveLayoutDebounced();
+  if (editorMode === 'layout') updateLayoutTextarea();
   renderTables();
   if (visualEditor) visualEditor.render();
 }
