@@ -13,7 +13,7 @@ import { encodeShare, decodeShare } from './share.js';
 import { sanitizeAnnotations, computeGroupBounds, newId } from './annotations.js';
 import { EXAMPLE_SQL } from './examples.js';
 import { HistoryManager } from './history.js';
-import { reorderWithGemini, reorderWithLocalAI } from './ai-layout.js';
+import { reorderWithGemini, reorderWithLocalAI, reorderWithExistingGroups } from './ai-layout.js';
 
 const $ = (id) => document.getElementById(id);
 const sqlEl = $('sql');
@@ -787,6 +787,12 @@ arrangeMenu.addEventListener('click', (e) => {
   const item = e.target.closest('.menu-item');
   if (!item) return;
 
+  if (item.id === 'btn-arrange-existing-groups') {
+    arrangeMenu.hidden = true;
+    executeExistingGroupsReorder();
+    return;
+  }
+
   if (item.id === 'btn-arrange-ai') {
     arrangeMenu.hidden = true;
     openAIModal();
@@ -816,6 +822,7 @@ const btnCloseAIModal = $('btn-close-ai-modal');
 const btnCancelAI = $('btn-cancel-ai');
 const btnRunLocalAI = $('btn-run-local-ai');
 const btnRunGeminiAI = $('btn-run-gemini-ai');
+const btnRunExistingGroups = $('btn-run-existing-groups');
 const aiKeyInput = $('ai-gemini-key');
 const aiLineStyle = $('ai-line-style');
 const aiCreateGroups = $('ai-create-groups');
@@ -905,8 +912,49 @@ async function executeAIReorder(isGemini = false) {
   }
 }
 
+function executeExistingGroupsReorder() {
+  if (!diagram.model || !diagram.model.tables || !diagram.model.tables.length) {
+    alert('No hay tablas en el diagrama para organizar.');
+    return;
+  }
+
+  const selectedLineStyle = aiLineStyle ? aiLineStyle.value : (diagram.edgeRouting || 'ortho-rounded');
+
+  try {
+    const res = reorderWithExistingGroups(diagram.model, diagram.annotations, {
+      createGroups: true,
+      lineStyle: selectedLineStyle,
+    });
+
+    diagram.onHistorySnapshot?.(diagram.getSnapshot());
+
+    if (res.annotations && res.annotations.length) {
+      const notes = diagram.annotations.filter(a => a.type === 'note');
+      diagram.setAnnotations([...notes, ...res.annotations]);
+    }
+
+    if (selectedLineStyle) {
+      diagram.setEdgeRouting(selectedLineStyle);
+    }
+
+    diagram.markDirty();
+    diagram.fit();
+    diagram.onLayoutChange?.();
+    saveLayoutDebounced();
+    if (editorMode === 'layout') updateLayoutTextarea();
+    if (editorMode === 'visual') visualEditor?.render();
+
+    closeAIModal();
+    flashButton($('btn-arrange'), 'Grupos Organizados');
+  } catch (err) {
+    console.warn('Arrange existing groups warning:', err);
+    alert(err.message || 'No se pudieron organizar los grupos existentes.');
+  }
+}
+
 btnRunLocalAI?.addEventListener('click', () => executeAIReorder(false));
 btnRunGeminiAI?.addEventListener('click', () => executeAIReorder(true));
+btnRunExistingGroups?.addEventListener('click', executeExistingGroupsReorder);
 
 $('btn-fit').addEventListener('click', () => diagram.fit());
 

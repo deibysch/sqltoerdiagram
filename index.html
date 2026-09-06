@@ -339,6 +339,9 @@
             <button class="menu-item" data-algo="force">Physics (Force-Directed)</button>
             <button class="menu-item" data-algo="radial">Radial Hub &amp; Satellites</button>
             <div class="menu-sep"></div>
+            <button class="menu-item" id="btn-arrange-existing-groups">
+              <span>📦 Organizar grupos actuales</span>
+            </button>
             <button class="menu-item" id="btn-arrange-ai" style="color: var(--accent); font-weight: 600;">
               <span>✨ Reorganizar con IA...</span>
             </button>
@@ -411,6 +414,7 @@
 
       <div class="modal-footer">
         <button id="btn-cancel-ai" class="btn ghost">Cancelar</button>
+        <button id="btn-run-existing-groups" class="btn ghost" title="Organiza el diagrama con el algoritmo físico preservando tus grupos actuales">Organizar grupos actuales</button>
         <button id="btn-run-local-ai" class="btn ghost">Ejecutar con IA Local</button>
         <button id="btn-run-gemini-ai" class="btn primary">Ejecutar con Gemini</button>
       </div>

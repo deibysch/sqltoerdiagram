@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { dagreLayout, forceLayout, radialLayout, removeOverlaps } from '../src/layout.js';
 import { segmentIntersectsBox, routeAroundObstacles } from '../src/routing.js';
-import { clusterTablesLocalAI, reorderWithLocalAI } from '../src/ai-layout.js';
+import { clusterTablesLocalAI, reorderWithLocalAI, reorderWithExistingGroups } from '../src/ai-layout.js';
 
 function createMockModel() {
   return {
@@ -176,6 +176,41 @@ test('computeGroupBounds auto-fits bounding box to encompass member tables with 
   const updatedBounds = computeGroupBounds(group, tables);
   assert.strictEqual(updatedBounds.x, 50 - 28);
   assert.strictEqual(updatedBounds.y, 80 - 38);
+});
+
+test('reorderWithExistingGroups arranges tables according to user existing groups', () => {
+  const model = createMockModel();
+  const annotations = [
+    {
+      id: 'g_auth',
+      type: 'group',
+      text: 'Auth & Users',
+      color: 'blue',
+      tables: ['users', 'profiles', 'tokens']
+    },
+    {
+      id: 'g_orders',
+      type: 'group',
+      text: 'Orders & Catalog',
+      color: 'emerald',
+      tables: ['orders', 'order_items', 'products']
+    }
+  ];
+
+  const result = reorderWithExistingGroups(model, annotations, { createGroups: true });
+  assert.ok(result.domains.length >= 2, 'Has at least 2 domains');
+  assert.ok(result.annotations.length >= 2, 'Generated group annotations for domains');
+
+  // Verify all tables have valid finite positions
+  for (const t of model.tables) {
+    assert.ok(Number.isFinite(t.x), `table ${t.key} x is finite`);
+    assert.ok(Number.isFinite(t.y), `table ${t.key} y is finite`);
+  }
+
+  // Preserved original IDs if provided
+  const groupIds = result.annotations.map(a => a.id);
+  assert.ok(groupIds.includes('g_auth'), 'Preserved g_auth ID');
+  assert.ok(groupIds.includes('g_orders'), 'Preserved g_orders ID');
 });
 
 

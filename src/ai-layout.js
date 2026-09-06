@@ -368,7 +368,7 @@ export function applySemanticDomainLayout(model, domains, createGroups = true, o
 
     if (createGroups) {
       generatedAnnotations.push({
-        id: 'group_ai_' + dIdx + '_' + Date.now().toString(36),
+        id: domain.id || ('group_ai_' + dIdx + '_' + Date.now().toString(36)),
         type: 'group',
         text: domain.name,
         color: domain.color || 'blue',
@@ -576,5 +576,100 @@ Include every single table from the schema. Do not omit any tables.`;
  */
 export function reorderWithLocalAI(model, options = {}) {
   const domains = clusterTablesLocalAI(model);
+  return applySemanticDomainLayout(model, domains, options.createGroups !== false, options);
+}
+
+/**
+ * Execute reordering with physical layout algorithm preserving the user's existing groups.
+ */
+export function reorderWithExistingGroups(model, annotations = [], options = {}) {
+  const tables = model?.tables || [];
+  if (!tables.length) {
+    throw new Error('No hay tablas en el modelo.');
+  }
+
+  const tableMap = new Map(tables.map(t => [t.key.toLowerCase(), t]));
+  const groupAnnos = (annotations || []).filter(a => a.type === 'group');
+
+  const rawGroups = [];
+  if (groupAnnos.length) {
+    for (const a of groupAnnos) {
+      let memberKeys = [];
+      if (Array.isArray(a.tables) && a.tables.length) {
+        memberKeys = a.tables
+          .map(k => String(k).toLowerCase())
+          .filter(k => tableMap.has(k));
+      }
+      // If a.tables is empty, detect tables inside group's bounding box
+      if (!memberKeys.length && Number.isFinite(a.x) && Number.isFinite(a.y)) {
+        for (const t of tables) {
+          if (Number.isFinite(t.x) && Number.isFinite(t.y) &&
+              t.x >= a.x - 20 && t.x + (t.w || 100) <= a.x + a.w + 20 &&
+              t.y >= a.y - 20 && t.y + (t.h || 50) <= a.y + a.h + 20) {
+            memberKeys.push(t.key.toLowerCase());
+          }
+        }
+      }
+      if (memberKeys.length) {
+        rawGroups.push({
+          id: a.id,
+          name: a.text || 'Group',
+          color: a.color || 'blue',
+          tables: memberKeys,
+        });
+      }
+    }
+  } else if (Array.isArray(model.groups) && model.groups.length) {
+    for (const g of model.groups) {
+      const memberKeys = (g.tables || [])
+        .map(k => String(k).toLowerCase())
+        .filter(k => tableMap.has(k));
+      if (memberKeys.length) {
+        rawGroups.push({
+          name: g.name || 'Group',
+          color: g.color || 'blue',
+          tables: memberKeys,
+        });
+      }
+    }
+  }
+
+  if (!rawGroups.length) {
+    throw new Error('No se encontraron grupos definidos con tablas. Crea grupos con "+ Group" o con "Reorganizar con IA".');
+  }
+
+  // Deduplicate tables across groups (each table assigned to at most one group)
+  const seenTables = new Set();
+  const domains = [];
+  for (const g of rawGroups) {
+    const uniqueTables = [];
+    for (const tk of g.tables) {
+      if (!seenTables.has(tk)) {
+        seenTables.add(tk);
+        uniqueTables.push(tk);
+      }
+    }
+    if (uniqueTables.length) {
+      domains.push({
+        id: g.id,
+        name: g.name,
+        color: g.color,
+        tables: uniqueTables,
+      });
+    }
+  }
+
+  // Any table not in a group is placed in a "General" / unassigned group so it is organized cleanly
+  const unassigned = tables
+    .filter(t => !seenTables.has(t.key.toLowerCase()))
+    .map(t => t.key.toLowerCase());
+  if (unassigned.length) {
+    domains.push({
+      name: 'General',
+      color: 'cyan',
+      tables: unassigned,
+    });
+  }
+
   return applySemanticDomainLayout(model, domains, options.createGroups !== false, options);
 }
