@@ -6,6 +6,7 @@ import {
   organizeLinesSmartFaces,
   organizeLinesPerimeterBus,
   organizeLinesAStar,
+  organizeLinesElkPorts,
   resetLines,
 } from '../src/line-organizer.js';
 import { segmentIntersectsBox, getTableAnchor } from '../src/routing.js';
@@ -158,3 +159,72 @@ test('resetLines restores direct lines and clears waypoints and custom anchors',
   assert.strictEqual(diagram.edgeAnchors.has(edgeKey), false);
   assert.strictEqual(diagram.edgeWaypoints.has(edgeKey), false);
 });
+
+test('organizeLinesElkPorts sorts ports monotonically preventing border crossings', () => {
+  // Table "hub" connects to 3 targets at different heights on the right
+  const tHub = { key: 'hub', name: 'hub', x: 100, y: 300, w: 160, h: 200, columns: [{ name: 'id' }] };
+  const tTop = { key: 't_top', name: 't_top', x: 500, y: 100, w: 160, h: 100, columns: [{ name: 'id' }, { name: 'hub_id' }] };
+  const tMid = { key: 't_mid', name: 't_mid', x: 500, y: 350, w: 160, h: 100, columns: [{ name: 'id' }, { name: 'hub_id' }] };
+  const tBot = { key: 't_bot', name: 't_bot', x: 500, y: 700, w: 160, h: 100, columns: [{ name: 'id' }, { name: 'hub_id' }] };
+
+  const relations = [
+    // Deliberately inserted in reverse order: bot, mid, top
+    { fromTable: 't_bot', toTable: 'hub', fromCols: ['hub_id'], toCols: ['id'] },
+    { fromTable: 't_mid', toTable: 'hub', fromCols: ['hub_id'], toCols: ['id'] },
+    { fromTable: 't_top', toTable: 'hub', fromCols: ['hub_id'], toCols: ['id'] },
+  ];
+
+  const diagram = {
+    model: { tables: [tHub, tTop, tMid, tBot], relations },
+    manualLinks: [],
+    hidden: new Set(),
+    edgeAnchors: new Map(),
+    edgeWaypoints: new Map(),
+    markDirty() {},
+    onLayoutChange() {},
+    diagramLevel: 'physical',
+  };
+
+  const count = organizeLinesElkPorts(diagram);
+  assert.strictEqual(count, 3);
+
+  // Check the toAnchors at "hub" on the right side:
+  const aTop = diagram.edgeAnchors.get('t_top.hub_id->hub.id').toAnchor;
+  const aMid = diagram.edgeAnchors.get('t_mid.hub_id->hub.id').toAnchor;
+  const aBot = diagram.edgeAnchors.get('t_bot.hub_id->hub.id').toAnchor;
+
+  assert.strictEqual(aTop.side, 'right');
+  assert.strictEqual(aMid.side, 'right');
+  assert.strictEqual(aBot.side, 'right');
+
+  // Because t_top (y=100) < t_mid (y=350) < t_bot (y=700),
+  // their offsets on the right face of hub must be strictly ascending (no line crossing!)
+  assert.ok(aTop.offset < aMid.offset, `aTop (${aTop.offset}) must be less than aMid (${aMid.offset})`);
+  assert.ok(aMid.offset < aBot.offset, `aMid (${aMid.offset}) must be less than aBot (${aBot.offset})`);
+});
+
+test('organizeLinesElkPorts routes blocked lines via channel avoiding intermediate tables', () => {
+  const { diagram, tPermiso } = createMockDiagram();
+  const edgeKey = 'rol.id->rol_permiso.rol_id';
+
+  const count = organizeLinesElkPorts(diagram);
+  assert.strictEqual(count, 2, 'Organized both lines');
+
+  assert.ok(diagram.edgeAnchors.has(edgeKey));
+  assert.ok(diagram.edgeWaypoints.has(edgeKey));
+
+  const anchors = diagram.edgeAnchors.get(edgeKey);
+  assert.strictEqual(anchors.fromAnchor.side, 'top');
+  assert.strictEqual(anchors.toAnchor.side, 'top');
+
+  const waypoints = diagram.edgeWaypoints.get(edgeKey);
+  const p1 = getTableAnchor(diagram.model.tables[0], 'id', null, anchors.fromAnchor, 0, diagram.diagramLevel);
+  const p2 = getTableAnchor(diagram.model.tables[2], 'rol_id', null, anchors.toAnchor, 0, diagram.diagramLevel);
+  const fullPath = [p1, ...waypoints, p2];
+
+  for (let i = 0; i < fullPath.length - 1; i++) {
+    const hit = segmentIntersectsBox(fullPath[i], fullPath[i + 1], tPermiso, 4).hit;
+    assert.strictEqual(hit, false, `ELK channel segment ${i} must not intersect permiso`);
+  }
+});
+

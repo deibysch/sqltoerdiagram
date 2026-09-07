@@ -361,10 +361,28 @@ export function segmentIntersectsBox(p1, p2, box, margin = 12) {
       }
     }
   } else {
-    // Slanted or diagonal segment
-    const segMinX = Math.min(p1.x, p2.x), segMaxX = Math.max(p1.x, p2.x);
-    const segMinY = Math.min(p1.y, p2.y), segMaxY = Math.max(p1.y, p2.y);
-    if (segMaxX > minX && segMinX < maxX && segMaxY > minY && segMinY < maxY) {
+    // Slanted or diagonal segment: exact Liang-Barsky line-box clipping
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const p = [-dx, dx, -dy, dy];
+    const q = [p1.x - minX, maxX - p1.x, p1.y - minY, maxY - p1.y];
+    let u1 = 0, u2 = 1;
+    let hit = true;
+    for (let i = 0; i < 4; i++) {
+      if (p[i] === 0) {
+        if (q[i] < 0) { hit = false; break; }
+      } else {
+        const t = q[i] / p[i];
+        if (p[i] < 0) {
+          if (t > u2) { hit = false; break; }
+          if (t > u1) u1 = t;
+        } else {
+          if (t < u1) { hit = false; break; }
+          if (t < u2) u2 = t;
+        }
+      }
+    }
+    if (hit && u1 <= u2) {
       return { hit: true, axis: 'diagonal', minX, maxX, minY, maxY, box };
     }
   }

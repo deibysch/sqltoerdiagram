@@ -376,6 +376,238 @@ export function organizeLinesAStar(diagram, targetKeys = null) {
 }
 
 /**
+ * ALGORITHM 4: ELK Layered Port Allocation & Manhattan Channel Router
+ * Industry-standard approach from Eclipse ELK / yFiles:
+ * 1. Categorizes natural approach faces between source and target boxes.
+ * 2. Port Sorter Heuristic: Sorts all edge endpoints on each face (N, S, E, W)
+ *    by the physical coordinate (X for top/bottom, Y for left/right) of their target node.
+ *    This completely eliminates crossings at node boundaries!
+ * 3. Channel Router: Routes inter-group / blocked connections through obstacle-free
+ *    corridors with indexed tracks (laneOffsets) to prevent collisions and overlap.
+ */
+export function organizeLinesElkPorts(diagram, targetKeys = null) {
+  const edges = getDiagramEdges(diagram, targetKeys);
+  if (!edges.length) return 0;
+
+  diagram.onHistorySnapshot?.(diagram.getSnapshot());
+
+  // Step 1: Determine natural faces for each edge endpoint
+  const tablePorts = new Map();
+  const getTablePortList = (tableKey, side) => {
+    const k = (tableKey || '').toLowerCase();
+    if (!tablePorts.has(k)) {
+      tablePorts.set(k, { top: [], bottom: [], left: [], right: [] });
+    }
+    return tablePorts.get(k)[side];
+  };
+
+  const edgeAssignments = new Map();
+
+  for (const e of edges) {
+    const from = e.from;
+    const to = e.to;
+    const obstacles = getObstacles(diagram, e.fk, e.tk);
+
+    const fromCenter = { x: from.x + from.w / 2, y: from.y + from.h / 2 };
+    const toCenter = { x: to.x + to.w / 2, y: to.y + to.h / 2 };
+    const dx = toCenter.x - fromCenter.x;
+    const dy = toCenter.y - fromCenter.y;
+
+    let fromSide, toSide;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      if (dx >= 0) {
+        fromSide = 'right';
+        toSide = 'left';
+      } else {
+        fromSide = 'left';
+        toSide = 'right';
+      }
+    } else {
+      if (dy >= 0) {
+        fromSide = 'bottom';
+        toSide = 'top';
+      } else {
+        fromSide = 'top';
+        toSide = 'bottom';
+      }
+    }
+
+    // Test whether the natural orthogonal path intersects intermediate obstacles
+    const p1Test = getTableAnchor(from, e.fc, null, { side: fromSide, offset: 0.5 }, 0, diagram.diagramLevel);
+    const p2Test = getTableAnchor(to, e.tc, null, { side: toSide, offset: 0.5 }, 0, diagram.diagramLevel);
+    const midX = (p1Test.x + p2Test.x) / 2;
+    const testPath = [p1Test, { x: midX, y: p1Test.y }, { x: midX, y: p2Test.y }, p2Test];
+    const directHits = obstacles.filter(obs => pathIntersectsObstacles(testPath, [obs], 8));
+
+    if (directHits.length > 0) {
+      // Direct orthogonal path is blocked by intermediate tables (e.g. rol -> [permiso] -> rol_permiso)
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        const useTop = Math.min(from.y, to.y, ...directHits.map(o => o.y)) >= 40;
+        fromSide = useTop ? 'top' : 'bottom';
+        toSide = useTop ? 'top' : 'bottom';
+      } else {
+        const useLeft = Math.min(from.x, to.x, ...directHits.map(o => o.x)) >= 40;
+        fromSide = useLeft ? 'left' : 'right';
+        toSide = useLeft ? 'left' : 'right';
+      }
+    }
+
+    edgeAssignments.set(e.key, { edge: e, fromSide, toSide, directHits });
+  }
+
+  // Register all endpoints into tablePorts for port sorting
+  for (const [key, assign] of edgeAssignments.entries()) {
+    const { edge, fromSide, toSide } = assign;
+    getTablePortList(edge.fk, fromSide).push({
+      key,
+      isFrom: true,
+      partnerTable: edge.to,
+      edge,
+    });
+    getTablePortList(edge.tk, toSide).push({
+      key,
+      isFrom: false,
+      partnerTable: edge.from,
+      edge,
+    });
+  }
+
+  // Step 2: Port Sorter Heuristic (ELK / yFiles)
+  // For each table and each side, sort ports so lines never cross at the perimeter
+  const computedAnchors = new Map();
+
+  for (const [tableKey, sides] of tablePorts.entries()) {
+    for (const [side, ports] of Object.entries(sides)) {
+      if (!ports.length) continue;
+
+      if (side === 'top' || side === 'bottom') {
+        // Horizontal side: sort by partner center X
+        ports.sort((a, b) => {
+          const ax = a.partnerTable.x + a.partnerTable.w / 2;
+          const bx = b.partnerTable.x + b.partnerTable.w / 2;
+          return ax - bx;
+        });
+      } else {
+        // Vertical side: sort by partner center Y
+        ports.sort((a, b) => {
+          const ay = a.partnerTable.y + a.partnerTable.h / 2;
+          const by = b.partnerTable.y + b.partnerTable.h / 2;
+          return ay - by;
+        });
+      }
+
+      // Distribute offsets evenly
+      const N = ports.length;
+      for (let i = 0; i < N; i++) {
+        const item = ports[i];
+        const offset = N === 1 ? 0.5 : 0.15 + (i / (N - 1)) * 0.7;
+
+        if (!computedAnchors.has(item.key)) {
+          computedAnchors.set(item.key, {});
+        }
+        const obj = computedAnchors.get(item.key);
+        if (item.isFrom) {
+          obj.fromAnchor = { side, offset };
+        } else {
+          obj.toAnchor = { side, offset };
+        }
+      }
+    }
+  }
+
+  // Step 3: Channel Router & Waypoint generation
+  let modifiedCount = 0;
+  const channelCounter = new Map();
+
+  for (const e of edges) {
+    const assign = edgeAssignments.get(e.key);
+    const anchors = computedAnchors.get(e.key);
+    if (!assign || !anchors?.fromAnchor || !anchors?.toAnchor) continue;
+
+    const fromAnchor = anchors.fromAnchor;
+    const toAnchor = anchors.toAnchor;
+    diagram.edgeAnchors.set(e.key, { fromAnchor, toAnchor });
+
+    const p1 = getTableAnchor(e.from, e.fc, null, fromAnchor, 0, diagram.diagramLevel);
+    const p2 = getTableAnchor(e.to, e.tc, null, toAnchor, 0, diagram.diagramLevel);
+
+    const obstacles = getObstacles(diagram, e.fk, e.tk);
+
+    // If both anchors are on top/bottom, route via corridor channel
+    if (fromAnchor.side === toAnchor.side && (fromAnchor.side === 'top' || fromAnchor.side === 'bottom')) {
+      const useTop = fromAnchor.side === 'top';
+      const hits = assign.directHits.length ? assign.directHits : obstacles;
+      const relevant = [e.from, e.to, ...hits];
+      const minY = Math.min(...relevant.map(t => t.y));
+      const maxY = Math.max(...relevant.map(t => t.y + t.h));
+
+      const chanKey = useTop ? `top_chan_${Math.round(minY / 150)}` : `bot_chan_${Math.round(maxY / 150)}`;
+      const trackIdx = channelCounter.get(chanKey) || 0;
+      channelCounter.set(chanKey, trackIdx + 1);
+
+      const trackOffset = (trackIdx % 6) * 14;
+      const detourY = useTop ? (minY - 26 - trackOffset) : (maxY + 26 + trackOffset);
+
+      diagram.edgeWaypoints.set(e.key, [
+        { x: p1.x, y: detourY },
+        { x: p2.x, y: detourY },
+      ]);
+      modifiedCount++;
+    } else if (fromAnchor.side === toAnchor.side && (fromAnchor.side === 'left' || fromAnchor.side === 'right')) {
+      const useLeft = fromAnchor.side === 'left';
+      const hits = assign.directHits.length ? assign.directHits : obstacles;
+      const relevant = [e.from, e.to, ...hits];
+      const minX = Math.min(...relevant.map(t => t.x));
+      const maxX = Math.max(...relevant.map(t => t.x + t.w));
+
+      const chanKey = useLeft ? `left_chan_${Math.round(minX / 150)}` : `right_chan_${Math.round(maxX / 150)}`;
+      const trackIdx = channelCounter.get(chanKey) || 0;
+      channelCounter.set(chanKey, trackIdx + 1);
+
+      const trackOffset = (trackIdx % 6) * 14;
+      const detourX = useLeft ? (minX - 26 - trackOffset) : (maxX + 26 + trackOffset);
+
+      diagram.edgeWaypoints.set(e.key, [
+        { x: detourX, y: p1.y },
+        { x: detourX, y: p2.y },
+      ]);
+      modifiedCount++;
+    } else {
+      // Check if natural S-bend or L-bend intersects any obstacle
+      const midX = (p1.x + p2.x) / 2;
+      const testPath = [p1, { x: midX, y: p1.y }, { x: midX, y: p2.y }, p2];
+      const blocked = pathIntersectsObstacles(testPath, obstacles, 8);
+
+      if (blocked) {
+        // Route via corridor channel
+        const allRelevant = [e.from, e.to, ...obstacles.filter(o => segmentIntersectsBox(p1, p2, o, 10).hit)];
+        const minY = Math.min(...allRelevant.map(t => t.y));
+        const chanKey = `obs_detour_${Math.round(minY / 150)}`;
+        const trackIdx = channelCounter.get(chanKey) || 0;
+        channelCounter.set(chanKey, trackIdx + 1);
+
+        const detourY = minY - 26 - (trackIdx % 5) * 14;
+        diagram.edgeWaypoints.set(e.key, [
+          { x: p1.x, y: detourY },
+          { x: p2.x, y: detourY },
+        ]);
+        modifiedCount++;
+      } else {
+        // Clean direct route with sorted ports: clear any old waypoints
+        if (diagram.edgeWaypoints.has(e.key)) {
+          diagram.edgeWaypoints.delete(e.key);
+        }
+        modifiedCount++;
+      }
+    }
+  }
+
+  diagram.markDirty();
+  diagram.onLayoutChange?.();
+  return modifiedCount;
+}
+
+/**
  * Reset lines back to clean automatic direct S-bends / L-bends.
  */
 export function resetLines(diagram, targetKeys = null) {

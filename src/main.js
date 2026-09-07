@@ -14,7 +14,7 @@ import { sanitizeAnnotations, computeGroupBounds, newId } from './annotations.js
 import { EXAMPLE_SQL } from './examples.js';
 import { HistoryManager } from './history.js';
 import { reorderWithGemini, reorderWithLocalAI, reorderWithExistingGroups } from './ai-layout.js';
-import { organizeLinesSmartFaces, organizeLinesPerimeterBus, organizeLinesAStar, resetLines } from './line-organizer.js';
+import { organizeLinesElkPorts, organizeLinesSmartFaces, organizeLinesPerimeterBus, organizeLinesAStar, resetLines } from './line-organizer.js';
 
 const $ = (id) => document.getElementById(id);
 const sqlEl = $('sql');
@@ -1204,6 +1204,14 @@ if (btnEdgeRouting && routingMenu) {
     routingMenu.hidden = true;
 
     const selectedKeys = diagram.selectedEdgeKey ? [diagram.selectedEdgeKey] : null;
+
+    if (item.id === 'btn-route-elk-ports') {
+      const count = organizeLinesElkPorts(diagram, selectedKeys);
+      saveLayoutDebounced();
+      if (editorMode === 'layout') updateLayoutTextarea();
+      flashButton(btnEdgeRouting, count ? `${count} ruta${count !== 1 ? 's' : ''} ELK` : 'Rutas limpias');
+      return;
+    }
 
     if (item.id === 'btn-route-smart-faces') {
       const count = organizeLinesSmartFaces(diagram, selectedKeys);
