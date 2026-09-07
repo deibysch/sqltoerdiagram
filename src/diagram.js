@@ -968,12 +968,10 @@ export class Diagram {
 
       if (focusKey || this.selectedEdgeKey || this.hoverEdge) {
         if (connected) { highlighted.push(seg); continue; }
-        this._strokeRoute(seg, edgeColor, 1.1, fadeAlpha, e.manual, false, false);
+        this._strokeRoute(seg, edgeColor, 1.2, fadeAlpha, e.manual, false, false);
       } else {
-        // Calm resting state: subtle lines so tables are readable without spaghetti clutter
-        const baseAlpha = this.edgeColorMode === 'single' ? 0.35 : 0.40;
-        const baseWidth = 1.3;
-        this._strokeRoute(seg, edgeColor, baseWidth, baseAlpha, e.manual, false, false);
+        const baseAlpha = this.edgeColorMode === 'single' ? 0.6 : 0.85;
+        this._strokeRoute(seg, edgeColor, 1.6, baseAlpha, e.manual, false, false);
       }
     }
     for (const seg of highlighted) {
