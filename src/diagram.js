@@ -773,7 +773,10 @@ export class Diagram {
   }
 
   // Compute connection endpoint anchors and route data for an edge
-  _edgeSeg(fromKey, fromCol, toKey, toCol, cull, key = '', laneOffset = 0) {
+  _edgeSeg(fromKey, fromCol, toKey, toCol, cull, key = '', fromLaneOffset = 0, toLaneOffset = null, corridorLaneOffset = null) {
+    const effectiveToOffset = toLaneOffset !== null ? toLaneOffset : fromLaneOffset;
+    const effectiveCorridorOffset = corridorLaneOffset !== null ? corridorLaneOffset : fromLaneOffset;
+
     const byKey = this._tableMap();
     const from = byKey.get(fromKey), to = byKey.get(toKey);
     if (!from || !to || !Number.isFinite(from.x) || !Number.isFinite(to.x)) return null;
@@ -790,8 +793,8 @@ export class Diagram {
       ? waypoints[waypoints.length - 1]
       : (from ? { x: from.x + from.w / 2, y: from.y + from.h / 2 } : null);
 
-    const p1 = getTableAnchor(from, fromCol, targetForFrom, anchorCfg?.fromAnchor, laneOffset, this.diagramLevel);
-    const p2 = getTableAnchor(to, toCol, targetForTo, anchorCfg?.toAnchor, laneOffset, this.diagramLevel);
+    const p1 = getTableAnchor(from, fromCol, targetForFrom, anchorCfg?.fromAnchor, fromLaneOffset, this.diagramLevel);
+    const p2 = getTableAnchor(to, toCol, targetForTo, anchorCfg?.toAnchor, effectiveToOffset, this.diagramLevel);
 
     const routingStyle = (lk ? this.edgeRoutings.get(lk) : null) || this.edgeRoutings.get(key) || this.edgeRouting || 'curved';
     const isOrthogonal = routingStyle === 'ortho-sharp' || routingStyle === 'ortho-rounded';
@@ -814,6 +817,7 @@ export class Diagram {
       obstacles,
       routingStyle,
       isOrthogonal,
+      laneOffset: effectiveCorridorOffset,
     };
   }
 
@@ -885,6 +889,11 @@ export class Diagram {
     for (const e of edges) {
       fromCounts.set(e.fk, (fromCounts.get(e.fk) || 0) + 1);
     }
+    const toCounts = new Map();
+    const toIndices = new Map();
+    for (const e of edges) {
+      toCounts.set(e.tk, (toCounts.get(e.tk) || 0) + 1);
+    }
 
     // Map each source table to a consistent distinct color from EDGE_COLORS
     const srcTableColors = new Map();
@@ -907,14 +916,34 @@ export class Diagram {
       fromIndices.set(e.fk, fIdx + 1);
       const fCount = fromCounts.get(e.fk) || 1;
 
-      let laneOffset = 0;
+      const tIdx = toIndices.get(e.tk) || 0;
+      toIndices.set(e.tk, tIdx + 1);
+      const tCount = toCounts.get(e.tk) || 1;
+
+      let fromLaneOffset = 0;
+      let toLaneOffset = 0;
+      let corridorLaneOffset = 0;
+
       if (pCount > 1) {
-        laneOffset = (pIdx - (pCount - 1) / 2) * 14;
-      } else if (fCount > 1) {
-        laneOffset = (fIdx - (fCount - 1) / 2) * 8;
+        const offset = (pIdx - (pCount - 1) / 2) * 14;
+        fromLaneOffset = offset;
+        toLaneOffset = offset;
+        corridorLaneOffset = offset;
+      } else {
+        if (fCount > 1) {
+          fromLaneOffset = (fIdx - (fCount - 1) / 2) * 12;
+        }
+        if (tCount > 1) {
+          toLaneOffset = (tIdx - (tCount - 1) / 2) * 12;
+        }
+        if (tCount > 1 && tCount >= fCount) {
+          corridorLaneOffset = (tIdx - (tCount - 1) / 2) * 14;
+        } else if (fCount > 1) {
+          corridorLaneOffset = (fIdx - (fCount - 1) / 2) * 14;
+        }
       }
 
-      const seg = this._edgeSeg(e.fk, e.fc, e.tk, e.tc, cull, e.key, laneOffset);
+      const seg = this._edgeSeg(e.fk, e.fc, e.tk, e.tc, cull, e.key, fromLaneOffset, toLaneOffset, corridorLaneOffset);
       if (!seg) { idx++; continue; }
       seg.manual = e.manual;
       seg.card = e.card;
@@ -939,18 +968,20 @@ export class Diagram {
 
       if (focusKey || this.selectedEdgeKey || this.hoverEdge) {
         if (connected) { highlighted.push(seg); continue; }
-        this._strokeRoute(seg, edgeColor, 1.2, fadeAlpha, e.manual, false, false);
+        this._strokeRoute(seg, edgeColor, 1.1, fadeAlpha, e.manual, false, false);
       } else {
-        const baseAlpha = this.edgeColorMode === 'single' ? 0.6 : 0.85;
-        this._strokeRoute(seg, edgeColor, 1.6, baseAlpha, e.manual, false, false);
+        // Calm resting state: subtle lines so tables are readable without spaghetti clutter
+        const baseAlpha = this.edgeColorMode === 'single' ? 0.35 : 0.40;
+        const baseWidth = 1.3;
+        this._strokeRoute(seg, edgeColor, baseWidth, baseAlpha, e.manual, false, false);
       }
     }
     for (const seg of highlighted) {
       const isSelectedEdge = this.selectedEdgeKey === seg.key;
       const isHoveredEdge = this.hoverEdge?.key === seg.key;
       const hiColor = (this.edgeColorMode === 'single' && !this.edgeColors.get(seg.key)) ? theme.edgeHi : seg.color;
-      const width = isSelectedEdge ? 3.0 : 2.4;
-      this._strokeRoute(seg, hiColor, width, 1, seg.manual, isSelectedEdge, isHoveredEdge);
+      const width = isSelectedEdge ? 3.0 : 2.5;
+      this._strokeRoute(seg, hiColor, width, 1.0, seg.manual, isSelectedEdge, isHoveredEdge);
     }
     for (const seg of highlighted) this._drawEdgeLabel(seg);   // words, on top of the lines
   }
@@ -964,7 +995,7 @@ export class Diagram {
     ctx.lineWidth = width / cam.scale;
     if (dashed) ctx.setLineDash([6 / cam.scale, 5 / cam.scale]);
     ctx.beginPath();
-    drawRoutePath(ctx, routingStyle, p1, p2, waypoints, 8, seg.obstacles);
+    drawRoutePath(ctx, routingStyle, p1, p2, waypoints, 8, seg.obstacles, seg.laneOffset || 0);
     ctx.stroke();
     if (dashed) ctx.setLineDash([]);
 

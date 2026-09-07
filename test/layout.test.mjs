@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { dagreLayout, forceLayout, radialLayout, removeOverlaps } from '../src/layout.js';
-import { segmentIntersectsBox, routeAroundObstacles } from '../src/routing.js';
+import { segmentIntersectsBox, routeAroundObstacles, buildOrthogonalPoints } from '../src/routing.js';
 import { clusterTablesLocalAI, reorderWithLocalAI, reorderWithExistingGroups } from '../src/ai-layout.js';
 
 function createMockModel() {
@@ -212,5 +212,23 @@ test('reorderWithExistingGroups arranges tables according to user existing group
   assert.ok(groupIds.includes('g_auth'), 'Preserved g_auth ID');
   assert.ok(groupIds.includes('g_orders'), 'Preserved g_orders ID');
 });
+
+test('buildOrthogonalPoints applies laneOffset to transit corridor so parallel routes do not overlap', () => {
+  const p1 = { x: 100, y: 100, nx: 1, ny: 0 };
+  const p2 = { x: 500, y: 300, nx: -1, ny: 0 };
+
+  const routeA = buildOrthogonalPoints(p1, p2, [], [], -12);
+  const routeB = buildOrthogonalPoints(p1, p2, [], [], 12);
+
+  // Both are 4-point S-bends: p1 -> (midX, p1.y) -> (midX, p2.y) -> p2
+  assert.strictEqual(routeA.length, 4);
+  assert.strictEqual(routeB.length, 4);
+
+  const midXA = routeA[1].x;
+  const midXB = routeB[1].x;
+
+  assert.strictEqual(midXB - midXA, 24, 'Parallel corridors are separated by laneOffset difference');
+});
+
 
 

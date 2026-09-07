@@ -445,7 +445,7 @@ export function routeAroundObstacles(pts, obstacles = [], margin = 12) {
 /**
  * Generate orthogonal 90-degree step points between two endpoints with optional waypoints and obstacle avoidance.
  */
-export function buildOrthogonalPoints(p1, p2, waypoints = [], obstacles = []) {
+export function buildOrthogonalPoints(p1, p2, waypoints = [], obstacles = [], laneOffset = 0) {
   if (waypoints && waypoints.length) {
     // Connect p1 -> w1 -> w2 ... -> p2, ensuring each transition is 90°
     const raw = [p1, ...waypoints, p2];
@@ -500,17 +500,41 @@ export function buildOrthogonalPoints(p1, p2, waypoints = [], obstacles = []) {
 
   if (Math.abs(nxa) === 1 && Math.abs(nxb) === 1) {
     // Both exit/enter horizontally: S-bend or U-bend
-    const midX = (nxa === 1 && nxb === -1 && dx > 40)
-      ? p1.x + dx / 2
-      : (nxa === -1 && nxb === 1 && dx < -40)
-      ? p1.x + dx / 2
-      : p1.x + nxa * Math.max(30, Math.abs(dx) * 0.4);
+    let midX;
+    if (nxa === 1 && nxb === -1 && dx > 40) {
+      // Natural forward S-bend: offset corridor while respecting table borders
+      const rawMid = p1.x + dx / 2;
+      const safeMin = p1.x + 20;
+      const safeMax = p2.x - 20;
+      midX = Math.max(safeMin, Math.min(safeMax, rawMid + laneOffset));
+    } else if (nxa === -1 && nxb === 1 && dx < -40) {
+      // Natural backward S-bend
+      const rawMid = p1.x + dx / 2;
+      const safeMin = p2.x + 20;
+      const safeMax = p1.x - 20;
+      midX = Math.max(safeMin, Math.min(safeMax, rawMid + laneOffset));
+    } else {
+      midX = p1.x + nxa * Math.max(30, Math.abs(dx) * 0.4) + laneOffset;
+    }
 
     ortho.push({ x: midX, y: p1.y });
     ortho.push({ x: midX, y: p2.y });
   } else if (Math.abs(nya) === 1 && Math.abs(nyb) === 1) {
     // Both exit/enter vertically
-    const midY = p1.y + nya * Math.max(30, Math.abs(dy) * 0.4);
+    let midY;
+    if (nya === 1 && nyb === -1 && dy > 40) {
+      const rawMid = p1.y + dy / 2;
+      const safeMin = p1.y + 20;
+      const safeMax = p2.y - 20;
+      midY = Math.max(safeMin, Math.min(safeMax, rawMid + laneOffset));
+    } else if (nya === -1 && nyb === 1 && dy < -40) {
+      const rawMid = p1.y + dy / 2;
+      const safeMin = p2.y + 20;
+      const safeMax = p1.y - 20;
+      midY = Math.max(safeMin, Math.min(safeMax, rawMid + laneOffset));
+    } else {
+      midY = p1.y + nya * Math.max(30, Math.abs(dy) * 0.4) + laneOffset;
+    }
     ortho.push({ x: p1.x, y: midY });
     ortho.push({ x: p2.x, y: midY });
   } else if (Math.abs(nxa) === 1) {
@@ -520,12 +544,7 @@ export function buildOrthogonalPoints(p1, p2, waypoints = [], obstacles = []) {
   }
 
   ortho.push({ x: p2.x, y: p2.y, nx: nxb, ny: nyb });
-  const cleaned = cleanOrthogonalPoints(ortho);
-
-  if (obstacles && obstacles.length > 0) {
-    return routeAroundObstacles(cleaned, obstacles);
-  }
-  return cleaned;
+  return cleanOrthogonalPoints(ortho);
 }
 
 /**
@@ -1089,7 +1108,7 @@ export function moveOrthogonalCorner(p1, p2, basePointsOrWaypoints, cornerIndex,
 /**
  * Draw route onto Canvas 2D context based on routing style.
  */
-export function drawRoutePath(ctx, style, p1, p2, waypoints = [], radius = 8, obstacles = []) {
+export function drawRoutePath(ctx, style, p1, p2, waypoints = [], radius = 8, obstacles = [], laneOffset = 0) {
   const pts = [p1, ...(waypoints || []), p2];
 
   if (style === 'straight') {
@@ -1102,12 +1121,6 @@ export function drawRoutePath(ctx, style, p1, p2, waypoints = [], radius = 8, ob
 
   if (style === 'curved') {
     let effectivePts = pts;
-    if ((!waypoints || !waypoints.length) && obstacles && obstacles.length) {
-      const hits = obstacles.some(box => segmentIntersectsBox(p1, p2, box, 12).hit);
-      if (hits) {
-        effectivePts = routeAroundObstacles([p1, p2], obstacles, 16);
-      }
-    }
 
     if (effectivePts.length <= 2) {
       const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
@@ -1141,7 +1154,7 @@ export function drawRoutePath(ctx, style, p1, p2, waypoints = [], radius = 8, ob
   }
 
   // Orthogonal styles ('ortho-sharp' and 'ortho-rounded')
-  const ortho = buildOrthogonalPoints(p1, p2, waypoints, obstacles);
+  const ortho = buildOrthogonalPoints(p1, p2, waypoints, obstacles, laneOffset);
   if (!ortho.length) return;
 
   ctx.moveTo(ortho[0].x, ortho[0].y);
@@ -1166,7 +1179,7 @@ export function drawRoutePath(ctx, style, p1, p2, waypoints = [], radius = 8, ob
 /**
  * Generate SVG path `d` attribute string for the given routing style.
  */
-export function buildSVGPath(style, p1, p2, waypoints = [], radius = 8, obstacles = []) {
+export function buildSVGPath(style, p1, p2, waypoints = [], radius = 8, obstacles = [], laneOffset = 0) {
   const pts = [p1, ...(waypoints || []), p2];
 
   if (style === 'straight') {
@@ -1175,12 +1188,6 @@ export function buildSVGPath(style, p1, p2, waypoints = [], radius = 8, obstacle
 
   if (style === 'curved') {
     let effectivePts = pts;
-    if ((!waypoints || !waypoints.length) && obstacles && obstacles.length) {
-      const hits = obstacles.some(box => segmentIntersectsBox(p1, p2, box, 12).hit);
-      if (hits) {
-        effectivePts = routeAroundObstacles([p1, p2], obstacles, 16);
-      }
-    }
 
     if (effectivePts.length <= 2) {
       const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
@@ -1212,7 +1219,7 @@ export function buildSVGPath(style, p1, p2, waypoints = [], radius = 8, obstacle
   }
 
   // Orthogonal styles
-  const ortho = buildOrthogonalPoints(p1, p2, waypoints, obstacles);
+  const ortho = buildOrthogonalPoints(p1, p2, waypoints, obstacles, laneOffset);
   if (!ortho.length) return `M ${p1.x} ${p1.y}`;
 
   if (style === 'ortho-sharp' || radius <= 0) {

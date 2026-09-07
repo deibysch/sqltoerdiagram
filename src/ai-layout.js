@@ -298,15 +298,15 @@ export function applySemanticDomainLayout(model, domains, createGroups = true, o
         curX = 32;
         rowH = 0;
       }
-      curX += t.w + 48;
+      curX += t.w + 56;
       rowH = Math.max(rowH, t.h);
       subW = Math.max(subW, curX);
-      subH = Math.max(subH, curY + rowH + 28);
+      subH = Math.max(subH, curY + rowH + 32);
     }
 
     return {
-      w: Math.max(280, subW + 20),
-      h: Math.max(200, subH + 16),
+      w: Math.max(280, subW + 24),
+      h: Math.max(200, subH + 20),
       dTables,
       subCols,
     };
@@ -325,8 +325,8 @@ export function applySemanticDomainLayout(model, domains, createGroups = true, o
   }
 
   // Corridors / Gutters between domain boxes: wide channels for cross-domain lines
-  const GUTTER_X = 140;
-  const GUTTER_Y = 130;
+  const GUTTER_X = 180;
+  const GUTTER_Y = 160;
 
   // Calculate X/Y offsets for each grid cell
   const colX = [80];
@@ -356,13 +356,13 @@ export function applySemanticDomainLayout(model, domains, createGroups = true, o
     for (let i = 0; i < size.dTables.length; i++) {
       const t = size.dTables[i];
       if (i > 0 && i % subCols === 0) {
-        subY += subRowMaxH + 36;
+        subY += subRowMaxH + 48;
         subX = currentX + 32;
         subRowMaxH = 0;
       }
       t.x = subX;
       t.y = subY;
-      subX += t.w + 48;
+      subX += t.w + 56;
       subRowMaxH = Math.max(subRowMaxH, t.h);
     }
 
