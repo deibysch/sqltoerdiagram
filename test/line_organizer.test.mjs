@@ -7,6 +7,7 @@ import {
   organizeLinesPerimeterBus,
   organizeLinesAStar,
   organizeLinesElkPorts,
+  organizeLinesClusterHighways,
   resetLines,
 } from '../src/line-organizer.js';
 import { segmentIntersectsBox, getTableAnchor } from '../src/routing.js';
@@ -227,4 +228,70 @@ test('organizeLinesElkPorts routes blocked lines via channel avoiding intermedia
     assert.strictEqual(hit, false, `ELK channel segment ${i} must not intersect permiso`);
   }
 });
+
+test('organizeLinesClusterHighways routes inter-cluster edge via highway outside foreign groups (OGDF Fig. 15.14)', () => {
+  // Setup 3 domain clusters matching OGDF Fig 15.14: Red (left), Green (middle), Blue (right)
+  const tRed = { key: 'order_entry', name: 'order_entry', x: 100, y: 300, w: 160, h: 140, columns: [{ name: 'id' }] };
+  const tGreen1 = { key: 'inventory_main', name: 'inventory_main', x: 400, y: 300, w: 160, h: 140, columns: [{ name: 'id' }] };
+  const tGreen2 = { key: 'inventory_sub', name: 'inventory_sub', x: 400, y: 500, w: 160, h: 140, columns: [{ name: 'id' }, { name: 'main_id' }] };
+  const tBlue = { key: 'accounts', name: 'accounts', x: 700, y: 300, w: 160, h: 140, columns: [{ name: 'id' }, { name: 'order_id' }] };
+
+  const relations = [
+    // Inter-cluster: Red -> Blue (must cross around Green without entering Green!)
+    { fromTable: 'order_entry', toTable: 'accounts', fromCols: ['id'], toCols: ['order_id'] },
+    // Intra-cluster: Green2 -> Green1 (local inside Green)
+    { fromTable: 'inventory_sub', toTable: 'inventory_main', fromCols: ['main_id'], toCols: ['id'] },
+  ];
+
+  const annotations = [
+    { type: 'group', text: 'Order Entry', color: '#ff4444', tables: ['order_entry'], x: 80, y: 280, w: 200, h: 180 },
+    { type: 'group', text: 'Inventory', color: '#44ff44', tables: ['inventory_main', 'inventory_sub'], x: 380, y: 280, w: 200, h: 380 },
+    { type: 'group', text: 'Accounts', color: '#4444ff', tables: ['accounts'], x: 680, y: 280, w: 200, h: 180 },
+  ];
+
+  const diagram = {
+    model: {
+      tables: [tRed, tGreen1, tGreen2, tBlue],
+      relations,
+    },
+    annotations,
+    manualLinks: [],
+    hidden: new Set(),
+    edgeAnchors: new Map(),
+    edgeWaypoints: new Map(),
+    markDirty() {},
+    onLayoutChange() {},
+    diagramLevel: 'physical',
+  };
+
+  const count = organizeLinesClusterHighways(diagram);
+  assert.strictEqual(count, 2, 'Organized both inter-cluster and intra-cluster edges');
+
+  // Check inter-cluster connection: order_entry -> accounts
+  const interKey = 'order_entry.id->accounts.order_id';
+  assert.ok(diagram.edgeWaypoints.has(interKey), 'Inter-cluster edge has highway waypoints');
+
+  const waypoints = diagram.edgeWaypoints.get(interKey);
+  const anchors = diagram.edgeAnchors.get(interKey);
+  const p1 = getTableAnchor(tRed, 'id', null, anchors.fromAnchor, 0, diagram.diagramLevel);
+  const p2 = getTableAnchor(tBlue, 'order_id', null, anchors.toAnchor, 0, diagram.diagramLevel);
+  const fullPath = [p1, ...waypoints, p2];
+
+  // Verify that NONE of the segments in fullPath intersect the intermediate "Inventory" group box
+  const greenGroupBox = annotations[1]; // x: 380, y: 280, w: 200, h: 380
+  for (let i = 0; i < fullPath.length - 1; i++) {
+    const hit = segmentIntersectsBox(fullPath[i], fullPath[i + 1], greenGroupBox, 6).hit;
+    assert.strictEqual(hit, false, `Highway segment ${i} must NOT intersect intermediate Inventory group`);
+  }
+
+  // Check intra-cluster connection: inventory_sub -> inventory_main
+  const intraKey = 'inventory_sub.main_id->inventory_main.id';
+  // If there are waypoints or not, they must stay strictly inside or adjacent to the Inventory group
+  if (diagram.edgeWaypoints.has(intraKey)) {
+    for (const wp of diagram.edgeWaypoints.get(intraKey)) {
+      assert.ok(wp.x >= greenGroupBox.x && wp.x <= (greenGroupBox.x + greenGroupBox.w), 'Intra-cluster waypoint X is within group');
+    }
+  }
+});
+
 

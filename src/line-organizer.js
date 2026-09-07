@@ -68,6 +68,73 @@ export function getObstacles(diagram, fromKey, toKey) {
 }
 
 /**
+ * Extract active group bounding boxes from diagram annotations or model groups.
+ */
+export function getDiagramGroups(diagram) {
+  const groups = [];
+  const byKey = new Map((diagram.model?.tables || []).map(t => [t.key.toLowerCase(), t]));
+
+  // 1. From diagram.annotations (groups on canvas)
+  if (Array.isArray(diagram.annotations) && diagram.annotations.length) {
+    for (const a of diagram.annotations) {
+      if (a.type === 'group' && Array.isArray(a.tables) && a.tables.length > 0) {
+        const memberTables = a.tables
+          .map(k => byKey.get(String(k).toLowerCase()))
+          .filter(t => t && Number.isFinite(t.x));
+
+        if (memberTables.length > 0) {
+          const PAD = 24;
+          const minX = Math.min(...memberTables.map(t => t.x)) - PAD;
+          const minY = Math.min(...memberTables.map(t => t.y)) - PAD;
+          const maxX = Math.max(...memberTables.map(t => t.x + t.w)) + PAD;
+          const maxY = Math.max(...memberTables.map(t => t.y + t.h)) + PAD;
+
+          groups.push({
+            id: a.id || a.text,
+            name: a.text || 'Group',
+            tables: new Set(a.tables.map(t => String(t).toLowerCase())),
+            x: minX,
+            y: minY,
+            w: maxX - minX,
+            h: maxY - minY,
+          });
+        }
+      }
+    }
+  }
+
+  // 2. Fallback: diagram.model.groups
+  if (!groups.length && Array.isArray(diagram.model?.groups) && diagram.model.groups.length) {
+    for (const g of diagram.model.groups) {
+      const gTables = (g.tables || []).map(t => String(t).toLowerCase());
+      const memberTables = gTables
+        .map(k => byKey.get(k))
+        .filter(t => t && Number.isFinite(t.x));
+
+      if (memberTables.length > 0) {
+        const PAD = 24;
+        const minX = Math.min(...memberTables.map(t => t.x)) - PAD;
+        const minY = Math.min(...memberTables.map(t => t.y)) - PAD;
+        const maxX = Math.max(...memberTables.map(t => t.x + t.w)) + PAD;
+        const maxY = Math.max(...memberTables.map(t => t.y + t.h)) + PAD;
+
+        groups.push({
+          id: g.name,
+          name: g.name || 'Group',
+          tables: new Set(gTables),
+          x: minX,
+          y: minY,
+          w: maxX - minX,
+          h: maxY - minY,
+        });
+      }
+    }
+  }
+
+  return groups;
+}
+
+/**
  * Test whether any segment in a sequence of points intersects an obstacle.
  */
 function pathIntersectsObstacles(pts, obstacles, margin = 8) {
@@ -596,6 +663,190 @@ export function organizeLinesElkPorts(diagram, targetKeys = null) {
         // Clean direct route with sorted ports: clear any old waypoints
         if (diagram.edgeWaypoints.has(e.key)) {
           diagram.edgeWaypoints.delete(e.key);
+        }
+        modifiedCount++;
+      }
+    }
+  }
+
+  diagram.markDirty();
+  diagram.onLayoutChange?.();
+  return modifiedCount;
+}
+
+/**
+ * ALGORITHM 5: Clustered Orthogonal Highway Router (OGDF Figure 15.14)
+ * Inspired by OGDF's ClusterPlanarizationLayout:
+ * 1. Clusters (Domains) form inviolable territorial boundaries.
+ * 2. Intra-cluster relations (same domain) route locally with obstacle avoidance inside the group.
+ * 3. Inter-cluster relations (between domains) route through inter-cluster avenues
+ *    or outer perimeter express highways (North, South, East, West), completely circumnavigating
+ *    foreign groups and never penetrating any obstacle table.
+ * 4. Pistas separadas (laneOffset) en cada autopista para evitar solapamientos.
+ */
+export function organizeLinesClusterHighways(diagram, targetKeys = null) {
+  const edges = getDiagramEdges(diagram, targetKeys);
+  if (!edges.length) return 0;
+
+  diagram.onHistorySnapshot?.(diagram.getSnapshot());
+
+  const groups = getDiagramGroups(diagram);
+  const allTables = diagram.model?.tables || [];
+
+  // Map tableKey -> Group
+  const tableToGroup = new Map();
+  for (const g of groups) {
+    for (const tk of g.tables) {
+      tableToGroup.set(tk, g);
+    }
+  }
+
+  // Calculate overall diagram bounds across all tables and groups
+  const minDiagramX = Math.min(...allTables.map(t => t.x), ...groups.map(g => g.x), 50);
+  const maxDiagramX = Math.max(...allTables.map(t => t.x + t.w), ...groups.map(g => g.x + g.w), 800);
+  const minDiagramY = Math.min(...allTables.map(t => t.y), ...groups.map(g => g.y), 50);
+  const maxDiagramY = Math.max(...allTables.map(t => t.y + t.h), ...groups.map(g => g.y + g.h), 600);
+
+  let modifiedCount = 0;
+  const highwayLaneCounter = new Map();
+
+  for (const e of edges) {
+    const fromGroup = tableToGroup.get(e.fk);
+    const toGroup = tableToGroup.get(e.tk);
+    const from = e.from;
+    const to = e.to;
+
+    const isIntraCluster = fromGroup && toGroup && fromGroup === toGroup;
+
+    if (isIntraCluster) {
+      // 1. INTRA-CLUSTER: local connection inside the same domain
+      const localObstacles = getObstacles(diagram, e.fk, e.tk).filter(obs => fromGroup.tables.has(obs.key.toLowerCase()));
+
+      const p1 = getTableAnchor(from, e.fc, to, null, 0, diagram.diagramLevel);
+      const p2 = getTableAnchor(to, e.tc, from, null, 0, diagram.diagramLevel);
+      const midX = (p1.x + p2.x) / 2;
+      const testPath = [p1, { x: midX, y: p1.y }, { x: midX, y: p2.y }, p2];
+
+      const blocked = pathIntersectsObstacles(testPath, localObstacles, 6);
+      if (blocked) {
+        // Detour inside the group bounds
+        const useTop = Math.min(from.y, to.y) >= (fromGroup.y + 30);
+        const detourY = useTop ? (fromGroup.y + 14) : (fromGroup.y + fromGroup.h - 14);
+        const side = useTop ? 'top' : 'bottom';
+        const fromAnchor = { side, offset: 0.5 };
+        const toAnchor = { side, offset: 0.5 };
+
+        diagram.edgeAnchors.set(e.key, { fromAnchor, toAnchor });
+        diagram.edgeWaypoints.set(e.key, [
+          { x: p1.x, y: detourY },
+          { x: p2.x, y: detourY },
+        ]);
+        modifiedCount++;
+      } else {
+        if (diagram.edgeWaypoints.has(e.key)) {
+          diagram.edgeWaypoints.delete(e.key);
+        }
+        modifiedCount++;
+      }
+    } else {
+      // 2. INTER-CLUSTER: connection crossing between different groups (or ungrouped tables)
+      // Foreign groups that must NOT be penetrated:
+      const foreignGroups = groups.filter(g => g !== fromGroup && g !== toGroup);
+      const foreignObstacles = [
+        ...foreignGroups,
+        ...allTables.filter(t => {
+          const k = t.key.toLowerCase();
+          return k !== e.fk && k !== e.tk && !fromGroup?.tables.has(k) && !toGroup?.tables.has(k);
+        }),
+      ];
+
+      const fromCenter = { x: from.x + from.w / 2, y: from.y + from.h / 2 };
+      const toCenter = { x: to.x + to.w / 2, y: to.y + to.h / 2 };
+      const dx = toCenter.x - fromCenter.x;
+      const dy = toCenter.y - fromCenter.y;
+
+      let fromSide, toSide;
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        fromSide = dx >= 0 ? 'right' : 'left';
+        toSide = dx >= 0 ? 'left' : 'right';
+      } else {
+        fromSide = dy >= 0 ? 'bottom' : 'top';
+        toSide = dy >= 0 ? 'top' : 'bottom';
+      }
+
+      const fromAnchor = { side: fromSide, offset: 0.5 };
+      const toAnchor = { side: toSide, offset: 0.5 };
+      diagram.edgeAnchors.set(e.key, { fromAnchor, toAnchor });
+
+      const p1 = getTableAnchor(from, e.fc, null, fromAnchor, 0, diagram.diagramLevel);
+      const p2 = getTableAnchor(to, e.tc, null, toAnchor, 0, diagram.diagramLevel);
+
+      const midX = (p1.x + p2.x) / 2;
+      const midY = (p1.y + p2.y) / 2;
+      const directAvenuePath = Math.abs(dx) >= Math.abs(dy)
+        ? [p1, { x: midX, y: p1.y }, { x: midX, y: p2.y }, p2]
+        : [p1, { x: p1.x, y: midY }, { x: p2.x, y: midY }, p2];
+
+      const directBlocked = pathIntersectsObstacles(directAvenuePath, foreignObstacles, 10);
+
+      if (!directBlocked) {
+        // Direct inter-cluster avenue is clear
+        const avenueKey = Math.abs(dx) >= Math.abs(dy) ? `ave_x_${Math.round(midX / 120)}` : `ave_y_${Math.round(midY / 120)}`;
+        const lane = highwayLaneCounter.get(avenueKey) || 0;
+        highwayLaneCounter.set(avenueKey, lane + 1);
+        const laneShift = ((lane % 5) - 2) * 12;
+
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          const shiftedX = midX + laneShift;
+          diagram.edgeWaypoints.set(e.key, [
+            { x: shiftedX, y: p1.y },
+            { x: shiftedX, y: p2.y },
+          ]);
+        } else {
+          const shiftedY = midY + laneShift;
+          diagram.edgeWaypoints.set(e.key, [
+            { x: p1.x, y: shiftedY },
+            { x: p2.x, y: shiftedY },
+          ]);
+        }
+        modifiedCount++;
+      } else {
+        // Direct avenue is blocked by intermediate groups (like Figure 15.14 of OGDF!)
+        // Circumnavigate via outer express highway (North, South, East, or West)
+        const canUseTop = minDiagramY >= 30;
+        const preferTop = dy <= 0 || canUseTop;
+        const usePerimeterEast = dx > 0 && Math.abs(dx) > 600;
+
+        if (usePerimeterEast) {
+          // East Highway (like the blue line on the right in Fig 15.14!)
+          const lane = highwayLaneCounter.get('hwy_east') || 0;
+          highwayLaneCounter.set('hwy_east', lane + 1);
+          const hwyX = maxDiagramX + 36 + (lane % 6) * 14;
+
+          diagram.edgeWaypoints.set(e.key, [
+            { x: hwyX, y: p1.y },
+            { x: hwyX, y: p2.y },
+          ]);
+        } else if (preferTop) {
+          // North Highway (like the red lines across the top in Fig 15.14!)
+          const lane = highwayLaneCounter.get('hwy_north') || 0;
+          highwayLaneCounter.set('hwy_north', lane + 1);
+          const hwyY = Math.min(from.y, to.y, minDiagramY) - 36 - (lane % 6) * 14;
+
+          diagram.edgeWaypoints.set(e.key, [
+            { x: p1.x, y: hwyY },
+            { x: p2.x, y: hwyY },
+          ]);
+        } else {
+          // South Highway
+          const lane = highwayLaneCounter.get('hwy_south') || 0;
+          highwayLaneCounter.set('hwy_south', lane + 1);
+          const hwyY = Math.max(from.y + from.h, to.y + to.h, maxDiagramY) + 36 + (lane % 6) * 14;
+
+          diagram.edgeWaypoints.set(e.key, [
+            { x: p1.x, y: hwyY },
+            { x: p2.x, y: hwyY },
+          ]);
         }
         modifiedCount++;
       }
