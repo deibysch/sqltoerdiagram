@@ -1,0 +1,160 @@
+import test from 'node:test';
+import assert from 'node:assert';
+import {
+  getDiagramEdges,
+  getObstacles,
+  organizeLinesSmartFaces,
+  organizeLinesPerimeterBus,
+  organizeLinesAStar,
+  resetLines,
+} from '../src/line-organizer.js';
+import { segmentIntersectsBox, getTableAnchor } from '../src/routing.js';
+
+function createMockDiagram() {
+  const tRol = { key: 'rol', name: 'rol', x: 50, y: 150, w: 160, h: 140, columns: [{ name: 'id' }, { name: 'nombre' }] };
+  const tPermiso = { key: 'permiso', name: 'permiso', x: 260, y: 150, w: 160, h: 140, columns: [{ name: 'id' }, { name: 'nombre' }] };
+  const tRolPermiso = { key: 'rol_permiso', name: 'rol_permiso', x: 470, y: 150, w: 160, h: 140, columns: [{ name: 'id' }, { name: 'rol_id' }, { name: 'permiso_id' }] };
+
+  const relations = [
+    // rol.id -> rol_permiso.rol_id (traverses across permiso)
+    { fromTable: 'rol', toTable: 'rol_permiso', fromCols: ['id'], toCols: ['rol_id'] },
+    // permiso.id -> rol_permiso.permiso_id (direct neighbors)
+    { fromTable: 'permiso', toTable: 'rol_permiso', fromCols: ['id'], toCols: ['permiso_id'] },
+  ];
+
+  const diagram = {
+    model: {
+      tables: [tRol, tPermiso, tRolPermiso],
+      relations,
+    },
+    manualLinks: [],
+    hidden: new Set(),
+    edgeAnchors: new Map(),
+    edgeWaypoints: new Map(),
+    historySnapshots: [],
+    markDirty() { this.dirty = true; },
+    onLayoutChange() { this.layoutChanged = true; },
+    onHistorySnapshot(s) { this.historySnapshots.push(s); },
+    getSnapshot() {
+      return {
+        edgeAnchors: new Map(this.edgeAnchors),
+        edgeWaypoints: new Map(this.edgeWaypoints),
+      };
+    },
+    diagramLevel: 'physical',
+  };
+
+  return { diagram, tRol, tPermiso, tRolPermiso };
+}
+
+test('getDiagramEdges and getObstacles extract edges and exclude end tables', () => {
+  const { diagram } = createMockDiagram();
+  const edges = getDiagramEdges(diagram);
+  assert.strictEqual(edges.length, 2);
+
+  const edgeRol = edges.find(e => e.fk === 'rol');
+  assert.ok(edgeRol, 'Found rol relation');
+  assert.strictEqual(edgeRol.tk, 'rol_permiso');
+
+  const obstacles = getObstacles(diagram, 'rol', 'rol_permiso');
+  assert.strictEqual(obstacles.length, 1);
+  assert.strictEqual(obstacles[0].key, 'permiso', 'permiso is correctly identified as obstacle');
+});
+
+test('organizeLinesSmartFaces routes rol -> rol_permiso above permiso avoiding collision', () => {
+  const { diagram, tPermiso } = createMockDiagram();
+  const edgeKey = 'rol.id->rol_permiso.rol_id';
+
+  // Initially, a direct horizontal line between rol and rol_permiso intersects permiso
+  const directP1 = getTableAnchor(diagram.model.tables[0], 'id', diagram.model.tables[2], null, 0, diagram.diagramLevel);
+  const directP2 = getTableAnchor(diagram.model.tables[2], 'rol_id', diagram.model.tables[0], null, 0, diagram.diagramLevel);
+  const midX = (directP1.x + directP2.x) / 2;
+  const directPath = [directP1, { x: midX, y: directP1.y }, { x: midX, y: directP2.y }, directP2];
+
+  let directHitsPermiso = false;
+  for (let i = 0; i < directPath.length - 1; i++) {
+    if (segmentIntersectsBox(directPath[i], directPath[i + 1], tPermiso, 8).hit) {
+      directHitsPermiso = true;
+      break;
+    }
+  }
+  assert.strictEqual(directHitsPermiso, true, 'Direct path without smart faces cuts through permiso');
+
+  // Run Smart Faces algorithm
+  const modifiedCount = organizeLinesSmartFaces(diagram);
+  assert.strictEqual(modifiedCount, 1, 'Only the blocked edge was rerouted; clean direct edge was preserved');
+
+  assert.ok(diagram.edgeAnchors.has(edgeKey), 'edgeAnchors set for rol -> rol_permiso');
+  assert.ok(diagram.edgeWaypoints.has(edgeKey), 'edgeWaypoints set for rol -> rol_permiso');
+
+  const anchors = diagram.edgeAnchors.get(edgeKey);
+  assert.strictEqual(anchors.fromAnchor.side, 'top', 'Switched to top face');
+  assert.strictEqual(anchors.toAnchor.side, 'top', 'Switched to top face');
+
+  const waypoints = diagram.edgeWaypoints.get(edgeKey);
+  assert.ok(waypoints.length >= 2, 'Has waypoints in top corridor');
+
+  // Verify none of the rerouted segments intersect permiso
+  const p1 = getTableAnchor(diagram.model.tables[0], 'id', null, anchors.fromAnchor, 0, diagram.diagramLevel);
+  const p2 = getTableAnchor(diagram.model.tables[2], 'rol_id', null, anchors.toAnchor, 0, diagram.diagramLevel);
+  const fullRoutedPath = [p1, ...waypoints, p2];
+
+  for (let i = 0; i < fullRoutedPath.length - 1; i++) {
+    const hit = segmentIntersectsBox(fullRoutedPath[i], fullRoutedPath[i + 1], tPermiso, 4).hit;
+    assert.strictEqual(hit, false, `Segment ${i} must NOT intersect permiso`);
+  }
+  assert.ok(diagram.historySnapshots.length > 0, 'Saved history snapshot for undo/redo');
+});
+
+test('organizeLinesPerimeterBus routes cross-table lines via outer channel', () => {
+  const { diagram, tPermiso } = createMockDiagram();
+  const edgeKey = 'rol.id->rol_permiso.rol_id';
+
+  const modifiedCount = organizeLinesPerimeterBus(diagram);
+  assert.strictEqual(modifiedCount, 1);
+
+  assert.ok(diagram.edgeWaypoints.has(edgeKey));
+  const waypoints = diagram.edgeWaypoints.get(edgeKey);
+  assert.ok(waypoints.length >= 2);
+
+  // All waypoints must be well above or below the tables
+  for (const wp of waypoints) {
+    const isAboveOrBelow = wp.y < tPermiso.y || wp.y > (tPermiso.y + tPermiso.h);
+    assert.ok(isAboveOrBelow, `Waypoint y=${wp.y} is outside table bounds`);
+  }
+});
+
+test('organizeLinesAStar finds collision-free orthogonal path on grid', () => {
+  const { diagram, tPermiso } = createMockDiagram();
+  const edgeKey = 'rol.id->rol_permiso.rol_id';
+
+  const count = organizeLinesAStar(diagram);
+  assert.strictEqual(count, 1, 'Rerouted blocked edge using A*');
+
+  assert.ok(diagram.edgeWaypoints.has(edgeKey));
+  const waypoints = diagram.edgeWaypoints.get(edgeKey);
+  assert.ok(waypoints.length > 0, 'A* generated waypoints');
+
+  const p1 = getTableAnchor(diagram.model.tables[0], 'id', diagram.model.tables[2], null, 0, diagram.diagramLevel);
+  const p2 = getTableAnchor(diagram.model.tables[2], 'rol_id', diagram.model.tables[0], null, 0, diagram.diagramLevel);
+  const fullPath = [p1, ...waypoints, p2];
+
+  for (let i = 0; i < fullPath.length - 1; i++) {
+    const hit = segmentIntersectsBox(fullPath[i], fullPath[i + 1], tPermiso, 4).hit;
+    assert.strictEqual(hit, false, `A* Segment ${i} must not intersect permiso`);
+  }
+});
+
+test('resetLines restores direct lines and clears waypoints and custom anchors', () => {
+  const { diagram } = createMockDiagram();
+  const edgeKey = 'rol.id->rol_permiso.rol_id';
+
+  organizeLinesSmartFaces(diagram);
+  assert.ok(diagram.edgeAnchors.has(edgeKey));
+  assert.ok(diagram.edgeWaypoints.has(edgeKey));
+
+  const resetCount = resetLines(diagram);
+  assert.strictEqual(resetCount, 1);
+  assert.strictEqual(diagram.edgeAnchors.has(edgeKey), false);
+  assert.strictEqual(diagram.edgeWaypoints.has(edgeKey), false);
+});

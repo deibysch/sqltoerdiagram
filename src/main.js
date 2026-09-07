@@ -14,6 +14,7 @@ import { sanitizeAnnotations, computeGroupBounds, newId } from './annotations.js
 import { EXAMPLE_SQL } from './examples.js';
 import { HistoryManager } from './history.js';
 import { reorderWithGemini, reorderWithLocalAI, reorderWithExistingGroups } from './ai-layout.js';
+import { organizeLinesSmartFaces, organizeLinesPerimeterBus, organizeLinesAStar, resetLines } from './line-organizer.js';
 
 const $ = (id) => document.getElementById(id);
 const sqlEl = $('sql');
@@ -1201,6 +1202,41 @@ if (btnEdgeRouting && routingMenu) {
     const item = e.target.closest('.menu-item');
     if (!item) return;
     routingMenu.hidden = true;
+
+    const selectedKeys = diagram.selectedEdgeKey ? [diagram.selectedEdgeKey] : null;
+
+    if (item.id === 'btn-route-smart-faces') {
+      const count = organizeLinesSmartFaces(diagram, selectedKeys);
+      saveLayoutDebounced();
+      if (editorMode === 'layout') updateLayoutTextarea();
+      flashButton(btnEdgeRouting, count ? `${count} ruta${count !== 1 ? 's' : ''}` : 'Rutas limpias');
+      return;
+    }
+
+    if (item.id === 'btn-route-perimeter-bus') {
+      const count = organizeLinesPerimeterBus(diagram, selectedKeys);
+      saveLayoutDebounced();
+      if (editorMode === 'layout') updateLayoutTextarea();
+      flashButton(btnEdgeRouting, count ? `${count} bus${count !== 1 ? 'es' : ''}` : 'Rutas limpias');
+      return;
+    }
+
+    if (item.id === 'btn-route-astar-grid') {
+      const count = organizeLinesAStar(diagram, selectedKeys);
+      saveLayoutDebounced();
+      if (editorMode === 'layout') updateLayoutTextarea();
+      flashButton(btnEdgeRouting, count ? `${count} ruta${count !== 1 ? 's' : ''} A*` : 'Rutas limpias');
+      return;
+    }
+
+    if (item.id === 'btn-route-reset-lines') {
+      resetLines(diagram, selectedKeys);
+      saveLayoutDebounced();
+      if (editorMode === 'layout') updateLayoutTextarea();
+      flashButton(btnEdgeRouting, 'Líneas directas');
+      return;
+    }
+
     const style = item.dataset.routing;
     if (style) {
       diagram.setEdgeRouting(style);

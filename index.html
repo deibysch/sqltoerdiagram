@@ -311,12 +311,26 @@
               <path d="M4 18c4 0 4-12 8-12s4 12 8 12"/>
             </svg>
           </button>
-          <div id="routing-menu" class="menu up" hidden>
+          <div id="routing-menu" class="menu up" hidden style="min-width: 250px;">
             <div class="menu-label">Line Style</div>
             <button class="menu-item" data-routing="curved">Curved (Bézier)</button>
             <button class="menu-item" data-routing="straight">Straight (Direct)</button>
             <button class="menu-item" data-routing="ortho-sharp">90° Step (Sharp)</button>
             <button class="menu-item" data-routing="ortho-rounded">90° Step (Rounded)</button>
+            <div class="menu-sep"></div>
+            <div class="menu-label">Organizar Líneas (Sin Mover Tablas)</div>
+            <button class="menu-item" id="btn-route-smart-faces" title="Desvía anclajes para rodear tablas bloqueadas (como rol -> permiso -> rol_permiso)">
+              <span>🎯 Anclajes Inteligentes (Caras libres)</span>
+            </button>
+            <button class="menu-item" id="btn-route-perimeter-bus" title="Enruta conexiones largas por canales exteriores limpios">
+              <span>🚌 Canales Perimetrales (Bus)</span>
+            </button>
+            <button class="menu-item" id="btn-route-astar-grid" title="Calcula el camino ortogonal óptimo sin atravesar ninguna tabla">
+              <span>🧭 A* Grid (Camino sin obstáculos)</span>
+            </button>
+            <button class="menu-item" id="btn-route-reset-lines" style="color: var(--text-muted); font-size: 11px;" title="Restablece las líneas seleccionadas o todas a su trazado directo automático">
+              <span>↺ Restablecer líneas directas</span>
+            </button>
           </div>
         </div>
         <span class="vsep" aria-hidden="true"></span>
