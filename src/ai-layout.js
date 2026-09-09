@@ -268,6 +268,18 @@ export function optimizeDomainGridPositions(domains, relations = [], cols = 2) {
  * and arranges tables within each domain cluster in a compact, readable formation.
  */
 export function applySemanticDomainLayout(model, domains, createGroups = true, options = {}) {
+  // Spacing from the Arrange menu. "comfortable" reproduces the original fixed
+  // numbers exactly, so the default layout is unchanged; gutters between domain
+  // boxes are damped to half the factor because widening them hurts routing
+  // more than widening the gaps between tables.
+  const SPACING = { compact: 0.75, comfortable: 1, spacious: 1.45 };
+  const sf = SPACING[options.spacing] ?? 1;
+  const gf = 1 + (sf - 1) * 0.5;
+  const px = (v) => Math.round(v * sf);
+  const gx = (v) => Math.round(v * gf);
+  // Direction: "TB" stacks the domains in a column, "LR" spreads them in rows.
+  const vertical = options.dir === 'TB';
+
   const tableMap = new Map(model.tables.map(t => [t.key.toLowerCase(), t]));
 
   // Measure all tables
@@ -279,7 +291,7 @@ export function applySemanticDomainLayout(model, domains, createGroups = true, o
   const n = domains.length;
   if (!n) return { domains: [], annotations: [] };
 
-  const cols = Math.max(1, Math.min(3, Math.ceil(Math.sqrt(n))));
+  const cols = vertical ? 1 : Math.max(1, Math.min(3, Math.ceil(Math.sqrt(n))));
   const gridPositions = optimizeDomainGridPositions(domains, model.relations || [], cols);
 
   // Measure each domain's internal layout size first
@@ -289,24 +301,24 @@ export function applySemanticDomainLayout(model, domains, createGroups = true, o
 
     const subCols = Math.max(1, Math.min(3, Math.ceil(Math.sqrt(dTables.length))));
     let subW = 0, subH = 0;
-    let curX = 32, curY = 56, rowH = 0;
+    let curX = px(32), curY = px(56), rowH = 0;
 
     for (let i = 0; i < dTables.length; i++) {
       const t = dTables[i];
       if (i > 0 && i % subCols === 0) {
-        curY += rowH + 36;
-        curX = 32;
+        curY += rowH + px(36);
+        curX = px(32);
         rowH = 0;
       }
-      curX += t.w + 56;
+      curX += t.w + px(56);
       rowH = Math.max(rowH, t.h);
       subW = Math.max(subW, curX);
       subH = Math.max(subH, curY + rowH + 32);
     }
 
     return {
-      w: Math.max(280, subW + 24),
-      h: Math.max(200, subH + 20),
+      w: Math.max(280, subW + px(24)),
+      h: Math.max(200, subH + px(20)),
       dTables,
       subCols,
     };
@@ -325,8 +337,8 @@ export function applySemanticDomainLayout(model, domains, createGroups = true, o
   }
 
   // Corridors / Gutters between domain boxes: wide channels for cross-domain lines
-  const GUTTER_X = 180;
-  const GUTTER_Y = 160;
+  const GUTTER_X = gx(180);
+  const GUTTER_Y = gx(160);
 
   // Calculate X/Y offsets for each grid cell
   const colX = [80];
@@ -349,20 +361,20 @@ export function applySemanticDomainLayout(model, domains, createGroups = true, o
 
     // Place tables inside this domain box
     const subCols = size.subCols;
-    let subX = currentX + 32;
-    let subY = currentY + 56;
+    let subX = currentX + px(32);
+    let subY = currentY + px(56);
     let subRowMaxH = 0;
 
     for (let i = 0; i < size.dTables.length; i++) {
       const t = size.dTables[i];
       if (i > 0 && i % subCols === 0) {
-        subY += subRowMaxH + 48;
-        subX = currentX + 32;
+        subY += subRowMaxH + px(48);
+        subX = currentX + px(32);
         subRowMaxH = 0;
       }
       t.x = subX;
       t.y = subY;
-      subX += t.w + 56;
+      subX += t.w + px(56);
       subRowMaxH = Math.max(subRowMaxH, t.h);
     }
 

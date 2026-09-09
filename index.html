@@ -362,18 +362,30 @@
             <button class="menu-item" data-algo="force">Physics (Force-Directed)</button>
             <button class="menu-item" data-algo="radial">Radial Hub &amp; Satellites</button>
             <div class="menu-sep"></div>
-            <button class="menu-item" id="btn-arrange-existing-groups">
-              <span>📦 Organizar grupos actuales</span>
+            <div class="menu-label">Organizar por Grupos</div>
+            <button class="menu-item" id="btn-groups-fast-grid" title="Instantáneo (4 ms). Reparte los grupos en una cuadrícula y las tablas por orden de lista, sin mirar las relaciones. Lienzo cuadrado (1,03:1). Medido en 35 tablas / 8 grupos: 84 cruces, 76.098 px de línea, la más larga 4.247 px, 93 vértices, 21,8 % de lienzo útil. Borra los vértices y anclajes actuales.">
+              <span>⚡ Cuadrícula rápida</span>
             </button>
-            <button class="menu-item" id="btn-arrange-ai" style="color: var(--accent); font-weight: 600;">
+            <button class="menu-item" id="btn-groups-single-axis" title="186 ms. Apila los grupos en una sola columna, sin dagre. Lienzo alto y estrecho (3,54:1). Medido en 35 tablas / 8 grupos: 59 cruces, 82.644 px de línea, la más larga 6.282 px, 73 vértices, 13,2 % de lienzo útil. Borra los vértices y anclajes actuales.">
+              <span>📏 1 Columna o 1 Fila</span>
+            </button>
+            <button class="menu-item" id="btn-groups-min-crossings" title="1,8 s. Dagre dentro y fuera de los grupos, sin restringir la forma. Los menos cruces y vértices de los cuatro, pero lienzo ancho (2,85:1). Medido en 35 tablas / 8 grupos: 44 cruces, 55.915 px de línea, la más larga 4.323 px, 68 vértices, 21,9 % de lienzo útil. Borra los vértices y anclajes actuales.">
+              <span>✂️ Mínimos Cruces</span>
+            </button>
+            <button class="menu-item" id="btn-groups-compact" style="color: var(--accent); font-weight: 600;" title="2,4 s. Dagre ordena y una rejilla decide la forma. Las líneas más cortas y el lienzo más aprovechado, casi de proporción de pantalla (1,36:1). Medido en 35 tablas / 8 grupos: 69 cruces, 44.748 px de línea, la más larga 2.843 px, 78 vértices, 30,2 % de lienzo útil. Borra los vértices y anclajes actuales. Después aplica 'Ruta Óptima' para el trazado final.">
+              <span>📐 Líneas cortas y compacto</span>
+            </button>
+            <div class="menu-sep"></div>
+            <div class="menu-label">Inteligencia Artificial</div>
+            <button class="menu-item" id="btn-arrange-ai" style="color: var(--accent); font-weight: 600;" title="Agrupa las tablas por dominio semántico y reorganiza el diagrama, en local o con Gemini">
               <span>✨ Reorganizar con IA...</span>
             </button>
             <div class="menu-sep"></div>
-            <div class="menu-label">Direction (Hierarchical)</div>
+            <div class="menu-label" title="Se aplica a Hierarchical y a las cuatro opciones de Organizar por Grupos">Direction</div>
             <button class="menu-item active" data-dir="LR">Horizontal&nbsp;→</button>
             <button class="menu-item" data-dir="TB">Vertical&nbsp;↓</button>
             <div class="menu-sep"></div>
-            <div class="menu-label">Spacing</div>
+            <div class="menu-label" title="Se aplica a Hierarchical y a las cuatro opciones de Organizar por Grupos. Comfortable reproduce exactamente los valores con los que se midio cada algoritmo; los pasillos entre grupos escalan a la mitad del factor porque castigan el ruteo mas que los huecos entre tablas">Spacing</div>
             <button class="menu-item" data-spacing="compact">Compact</button>
             <button class="menu-item active" data-spacing="comfortable">Comfortable</button>
             <button class="menu-item" data-spacing="spacious">Spacious</button>

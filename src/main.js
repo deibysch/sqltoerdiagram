@@ -14,6 +14,9 @@ import { sanitizeAnnotations, computeGroupBounds, newId } from './annotations.js
 import { EXAMPLE_SQL } from './examples.js';
 import { HistoryManager } from './history.js';
 import { reorderWithGemini, reorderWithLocalAI, reorderWithExistingGroups } from './ai-layout.js';
+import { arrangeGroupsCompact } from './group-layout-compact.js';
+import { arrangeGroupsSingleAxis } from './group-layout-axis.js';
+import { arrangeGroupsMinCrossings } from './group-layout-crossings.js';
 import { organizeLinesClusterHighways, organizeLinesElkPorts, organizeLinesSmartFaces, organizeLinesPerimeterBus, organizeLinesAStar, organizeLinesShortestPath, resetLines } from './line-organizer.js';
 
 const $ = (id) => document.getElementById(id);
@@ -788,9 +791,15 @@ arrangeMenu.addEventListener('click', (e) => {
   const item = e.target.closest('.menu-item');
   if (!item) return;
 
-  if (item.id === 'btn-arrange-existing-groups') {
+  const groupArrangers = {
+    'btn-groups-fast-grid': executeExistingGroupsReorder,
+    'btn-groups-single-axis': () => runGroupArrange(arrangeGroupsSingleAxis, '1 Columna o 1 Fila'),
+    'btn-groups-min-crossings': () => runGroupArrange(arrangeGroupsMinCrossings, 'Minimos Cruces'),
+    'btn-groups-compact': () => runGroupArrange(arrangeGroupsCompact, 'Lineas cortas y compacto'),
+  };
+  if (groupArrangers[item.id]) {
     arrangeMenu.hidden = true;
-    executeExistingGroupsReorder();
+    groupArrangers[item.id]();
     return;
   }
 
@@ -913,6 +922,42 @@ async function executeAIReorder(isGemini = false) {
   }
 }
 
+// Re-arranges the existing groups (and the tables inside them) for short,
+// untangled connections. Only the cheap estimate runs here; the user applies
+// "Ruta Optima" afterwards once they are happy with the arrangement.
+// The three group-layout algorithms are independent, deliberately frozen
+// alternatives that trade crossings against canvas shape differently; the tooltip
+// on each menu entry carries the measured numbers. They all run the cheap
+// estimate only — the user applies "Ruta Óptima" afterwards for the real routing.
+function runGroupArrange(arrange, label) {
+  // Even the fast one can take a moment on a big schema, so paint before blocking.
+  const btn = $('btn-arrange');
+  const original = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px"></span>';
+  btn.disabled = true;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    let res;
+    try {
+      res = arrange(diagram, { dir: layoutOpts.dir, spacing: layoutOpts.spacing });
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = original;
+      console.warn(`${label} warning:`, err);
+      alert(err.message || 'No se pudieron organizar los grupos.');
+      return;
+    }
+    btn.disabled = false;
+    btn.innerHTML = original;
+    diagram.fit();
+    saveLayoutDebounced();
+    if (editorMode === 'layout') updateLayoutTextarea();
+    if (editorMode === 'visual') visualEditor?.render();
+    const loose = res?.loose ? ` + ${res.loose} suelta${res.loose !== 1 ? 's' : ''}` : '';
+    const groups = res?.groups ?? 0;
+    flashButton(btn, `${groups} grupo${groups !== 1 ? 's' : ''}${loose}`);
+  }));
+}
+
 function executeExistingGroupsReorder() {
   if (!diagram.model || !diagram.model.tables || !diagram.model.tables.length) {
     alert('No hay tablas en el diagrama para organizar.');
@@ -925,9 +970,17 @@ function executeExistingGroupsReorder() {
     const res = reorderWithExistingGroups(diagram.model, diagram.annotations, {
       createGroups: true,
       lineStyle: selectedLineStyle,
+      dir: layoutOpts.dir,
+      spacing: layoutOpts.spacing,
     });
 
     diagram.onHistorySnapshot?.(diagram.getSnapshot());
+
+    // Every table just moved, so any stored vertex or anchor position now refers
+    // to geometry that no longer exists. Wipe them, as the other three group
+    // algorithms do, and let the lines be re-derived from scratch.
+    diagram.edgeWaypoints.clear();
+    diagram.edgeAnchors.clear();
 
     if (res.annotations && res.annotations.length) {
       const notes = diagram.annotations.filter(a => a.type === 'note');
