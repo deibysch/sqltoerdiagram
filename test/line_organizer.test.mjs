@@ -8,6 +8,7 @@ import {
   organizeLinesAStar,
   organizeLinesElkPorts,
   organizeLinesClusterHighways,
+  organizeLinesShortestPath,
   resetLines,
 } from '../src/line-organizer.js';
 import { segmentIntersectsBox, getTableAnchor } from '../src/routing.js';
@@ -295,3 +296,133 @@ test('organizeLinesClusterHighways routes inter-cluster edge via highway outside
 });
 
 
+
+// --- Algorithm 6: shortest orthogonal path with free perimeter ports ---
+
+const CLEARANCE = 16;
+
+// Rebuild the full point sequence the renderer will draw for an edge.
+function routeOf(diagram, key, from, to, fromCol, toCol) {
+  const a = diagram.edgeAnchors.get(key);
+  const wps = diagram.edgeWaypoints.get(key) || [];
+  const p1 = getTableAnchor(from, fromCol, a ? null : to, a?.fromAnchor, 0, diagram.diagramLevel);
+  const p2 = getTableAnchor(to, toCol, a ? null : from, a?.toAnchor, 0, diagram.diagramLevel);
+  return [p1, ...wps, p2];
+}
+
+function assertOrthogonal(pts, label) {
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const ok = Math.abs(a.x - b.x) < 0.6 || Math.abs(a.y - b.y) < 0.6;
+    assert.ok(ok, `${label}: segment ${i} is not axis-aligned (${a.x},${a.y} -> ${b.x},${b.y})`);
+  }
+}
+
+function assertClears(pts, obstacles, label) {
+  for (let i = 0; i < pts.length - 1; i++) {
+    for (const o of obstacles) {
+      assert.ok(
+        !segmentIntersectsBox(pts[i], pts[i + 1], o, CLEARANCE - 0.5).hit,
+        `${label}: segment ${i} comes within ${CLEARANCE}px of ${o.key}`
+      );
+    }
+  }
+}
+
+function onPerimeter(t, p) {
+  const onX = Math.abs(p.x - t.x) < 0.6 || Math.abs(p.x - (t.x + t.w)) < 0.6;
+  const onY = Math.abs(p.y - t.y) < 0.6 || Math.abs(p.y - (t.y + t.h)) < 0.6;
+  const inX = p.x >= t.x - 0.6 && p.x <= t.x + t.w + 0.6;
+  const inY = p.y >= t.y - 0.6 && p.y <= t.y + t.h + 0.6;
+  return (onX && inY) || (onY && inX);
+}
+
+test('organizeLinesShortestPath routes rol -> rol_permiso around permiso with clearance', () => {
+  const { diagram, tRol, tPermiso, tRolPermiso } = createMockDiagram();
+  const key = 'rol.id->rol_permiso.rol_id';
+
+  const count = organizeLinesShortestPath(diagram);
+  assert.strictEqual(count, 2, 'both relations were re-routed');
+
+  const pts = routeOf(diagram, key, tRol, tRolPermiso, 'id', 'rol_id');
+  assertOrthogonal(pts, 'rol->rol_permiso');
+  assertClears(pts, [tPermiso], 'rol->rol_permiso');
+  assert.ok(onPerimeter(tRol, pts[0]), 'starts on the rol perimeter');
+  assert.ok(onPerimeter(tRolPermiso, pts[pts.length - 1]), 'ends on the rol_permiso perimeter');
+});
+
+test('organizeLinesShortestPath wipes previous vertices and anchors first', () => {
+  const { diagram } = createMockDiagram();
+  const key = 'permiso.id->rol_permiso.permiso_id';
+
+  // Junk left over from a previous organizer run.
+  diagram.edgeWaypoints.set(key, [{ x: -900, y: -900 }, { x: -900, y: 900 }]);
+  diagram.edgeAnchors.set(key, { fromAnchor: { side: 'top', offset: 0.02 }, toAnchor: { side: 'bottom', offset: 0.98 } });
+
+  organizeLinesShortestPath(diagram);
+
+  const wps = diagram.edgeWaypoints.get(key) || [];
+  assert.ok(!wps.some(p => p.x === -900), 'stale vertices are gone');
+  const anch = diagram.edgeAnchors.get(key);
+  assert.ok(anch && anch.fromAnchor.offset > 0.02, 'stale anchor offset was recomputed');
+});
+
+test('organizeLinesShortestPath keeps neighbours direct and forces rounded 90 corners', () => {
+  const { diagram, tPermiso, tRolPermiso } = createMockDiagram();
+  const key = 'permiso.id->rol_permiso.permiso_id';
+
+  organizeLinesShortestPath(diagram);
+  assert.strictEqual(diagram.edgeRouting, 'ortho-rounded');
+
+  const pts = routeOf(diagram, key, tPermiso, tRolPermiso, 'id', 'permiso_id');
+  assertOrthogonal(pts, 'permiso->rol_permiso');
+  // Facing tables with overlapping spans: straight shot, no vertices at all.
+  assert.strictEqual((diagram.edgeWaypoints.get(key) || []).length, 0, 'no needless vertices');
+  assert.strictEqual(diagram.edgeAnchors.get(key).fromAnchor.side, 'right');
+  assert.strictEqual(diagram.edgeAnchors.get(key).toAnchor.side, 'left');
+});
+
+test('organizeLinesShortestPath honours a selection and leaves other edges alone', () => {
+  const { diagram } = createMockDiagram();
+  const target = 'rol.id->rol_permiso.rol_id';
+  const other = 'permiso.id->rol_permiso.permiso_id';
+
+  const count = organizeLinesShortestPath(diagram, [target]);
+  assert.strictEqual(count, 1);
+  assert.ok(diagram.edgeAnchors.has(target), 'selected edge was routed');
+  assert.ok(!diagram.edgeAnchors.has(other), 'unselected edge was untouched');
+});
+
+test('organizeLinesShortestPath separates lines sharing a corridor into lanes', () => {
+  const { diagram } = createMockDiagram();
+  // Two relations from the same table to the same target: without lane
+  // separation both would dock on the identical perimeter point.
+  diagram.model.relations.push({ fromTable: 'rol', toTable: 'permiso', fromCols: ['nombre'], toCols: ['nombre'] });
+  diagram.model.tables[0].columns.push({ name: 'otro' });
+  diagram.model.relations.push({ fromTable: 'rol', toTable: 'permiso', fromCols: ['otro'], toCols: ['id'] });
+
+  organizeLinesShortestPath(diagram);
+
+  const a = diagram.edgeAnchors.get('rol.nombre->permiso.nombre');
+  const b = diagram.edgeAnchors.get('rol.otro->permiso.id');
+  assert.ok(a && b, 'both parallel relations were routed');
+  const sameSpot = a.fromAnchor.side === b.fromAnchor.side
+    && Math.abs(a.fromAnchor.offset - b.fromAnchor.offset) < 1e-6;
+  assert.ok(!sameSpot, 'parallel lines do not overlap on the same anchor point');
+});
+
+test('organizeLinesShortestPath escapes a table boxed in on three sides', () => {
+  const { diagram, tRol, tRolPermiso } = createMockDiagram();
+  // Wall off the direct corridor above and below permiso so the only way out
+  // is around the outside of the diagram.
+  const wallTop = { key: 'wall_top', name: 'wall_top', x: 230, y: -60, w: 220, h: 190, columns: [] };
+  const wallBottom = { key: 'wall_bottom', name: 'wall_bottom', x: 230, y: 310, w: 220, h: 190, columns: [] };
+  diagram.model.tables.push(wallTop, wallBottom);
+
+  const count = organizeLinesShortestPath(diagram, ['rol.id->rol_permiso.rol_id']);
+  assert.strictEqual(count, 1, 'a route was still found');
+
+  const pts = routeOf(diagram, 'rol.id->rol_permiso.rol_id', tRol, tRolPermiso, 'id', 'rol_id');
+  assertOrthogonal(pts, 'boxed-in route');
+  assertClears(pts, [diagram.model.tables[1], wallTop, wallBottom], 'boxed-in route');
+});
