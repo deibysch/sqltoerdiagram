@@ -556,3 +556,64 @@ test('organizeLinesShortestPath fans ten converging lines out without crossings'
     seen.add(spot);
   }
 });
+
+test('organizeLinesShortestPath keeps parallel lines at least 12px apart', () => {
+  // Not overlapping is not the same as being readable: two lines seeded on grid
+  // tracks 4px apart used to end up almost touching in a wide-open channel.
+  const diagram = gridDiagram(5, 6);
+  organizeLinesShortestPath(diagram);
+
+  const segs = [];
+  for (const r of drawnRoutes(diagram)) {
+    for (let i = 0; i < r.pts.length - 1; i++) {
+      const a = r.pts[i], b = r.pts[i + 1];
+      const horiz = Math.abs(a.y - b.y) < 0.6;
+      segs.push({
+        r, horiz,
+        coord: horiz ? a.y : a.x,
+        lo: horiz ? Math.min(a.x, b.x) : Math.min(a.y, b.y),
+        hi: horiz ? Math.max(a.x, b.x) : Math.max(a.y, b.y),
+      });
+    }
+  }
+
+  let tightest = Infinity;
+  for (let i = 0; i < segs.length; i++) {
+    for (let j = i + 1; j < segs.length; j++) {
+      const a = segs[i], b = segs[j];
+      if (a.r === b.r || a.horiz !== b.horiz) continue;
+      // Only pairs that actually run alongside each other, not corner brushes.
+      if (Math.min(a.hi, b.hi) - Math.max(a.lo, b.lo) <= 8) continue;
+      tightest = Math.min(tightest, Math.abs(a.coord - b.coord));
+    }
+  }
+
+  assert.ok(tightest >= 11.5, `closest parallel pair should be >= 12px apart, got ${tightest}`);
+});
+
+test('organizeLinesShortestPath unpicks a crossing two lines can simply swap out of', () => {
+  // Both lines run from the same table to two targets on the same side. Taking
+  // them in the wrong lane order crosses them for nothing; only moving BOTH at
+  // once fixes it, which single-line rip-up can never discover.
+  const src = { key: 'src', name: 'src', x: 600, y: 60, w: 180, h: 126, columns: [{ name: 'id' }, { name: 'a_id' }, { name: 'b_id' }] };
+  const left = { key: 'left', name: 'left', x: 200, y: 420, w: 180, h: 126, columns: [{ name: 'id' }] };
+  const right = { key: 'right', name: 'right', x: 1000, y: 420, w: 180, h: 126, columns: [{ name: 'id' }] };
+  const diagram = {
+    model: {
+      tables: [src, left, right],
+      relations: [
+        { fromTable: 'src', toTable: 'left', fromCols: ['a_id'], toCols: ['id'] },
+        { fromTable: 'src', toTable: 'right', fromCols: ['b_id'], toCols: ['id'] },
+      ],
+    },
+    manualLinks: [], hidden: new Set(),
+    edgeAnchors: new Map(), edgeWaypoints: new Map(), edgeRoutings: new Map(),
+    diagramLevel: 'physical',
+    markDirty() {}, onLayoutChange() {}, onHistorySnapshot() {}, getSnapshot() { return {}; },
+  };
+
+  const res = organizeLinesShortestPath(diagram);
+  assert.strictEqual(res.routed, 2);
+  assert.strictEqual(res.crossings, 0, 'the two lines must not cross each other');
+  assert.strictEqual(res.overlaps, 0);
+});

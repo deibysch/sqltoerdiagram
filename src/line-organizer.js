@@ -918,7 +918,13 @@ const SP_CLEARANCE = 16;          // minimum gap kept from every foreign table
 const SP_STUB = 16;               // perpendicular stub leaving each anchor (== clearance, lands on the grid)
 const SP_TURN_COST = 20;          // px charged per vertex
 const SP_CROSS_COST = 150;        // px charged per crossing with another line
-const SP_CROSS_COST_SHARED = 60;  // ... when both lines touch the same table
+// Crossings between lines that share a table get NO discount: they look like the
+// unavoidable ones but are in fact the easiest to undo, because both ends land on
+// the same face and only their lane order has to swap. The pairwise pass below is
+// what actually resolves them, so they are priced like any other crossing.
+const SP_CROSS_COST_SHARED = SP_CROSS_COST;
+const SP_MIN_SEPARATION = 12;     // two parallel lines must never run closer than this
+const SP_NEAR_MIN_SPAN = 8;       // ... unless they only brush past each other near a corner
 const SP_OVERLAP_COST = 6;        // px charged per px run on top of another line, once
                                   // the corridors are so full that nothing else fits
 const SP_LANE_GAP = 12;           // spacing of the corridor lanes
@@ -928,6 +934,11 @@ const SP_MAX_AXIS = 700;          // hard cap of grid lines per axis
 const SP_DETOUR_FACTOR = 1.7;     // a line may not exceed this multiple of its unobstructed length
 const SP_DETOUR_SLACK = 250;      // ... plus this many px, so short lines still have room
 const SP_MAX_PASSES = 12;         // rip-up and reroute rounds before giving up on further gains
+const SP_SWAP_ROUNDS = 3;         // pairwise lane-swap rounds after the single-line passes settle
+const SP_SPREAD_ROUNDS = 3;       // rounds of the final even-distribution pass
+const SP_SPREAD_RANGE = 72;       // how far a run may slide sideways looking for air
+const SP_SPREAD_CAP = 56;         // beyond this a neighbour is far enough to stop caring
+const SP_SPREAD_SLACK = 24;       // px of extra length a nicer spacing may cost
 const SP_MAX_POPS = 300000;       // A* expansion guard
 
 /** Binary min-heap on `.f`, so A* does not pay a sort per pop. */
@@ -1077,14 +1088,14 @@ class SpReservations {
   }
 
   /** How many px of this interval already carry another line. */
-  overlapAmount(horiz, line, a, b) {
+  overlapAmount(horiz, line, a, b, minOv = 1) {
     const arr = (horiz ? this.h : this.v).get(line);
     if (!arr || !arr.length) return 0;
     const lo = Math.min(a, b), hi = Math.max(a, b);
     let sum = 0;
     for (const e of arr) {
       const ov = Math.min(e.hi, hi) - Math.max(e.lo, lo);
-      if (ov > 1) sum += ov;
+      if (ov > minOv) sum += ov;
     }
     return sum;
   }
@@ -1133,6 +1144,18 @@ class SpRouter {
     this.crossStamp = new Int32Array(this.N * 2);
     this.occVal = new Float64Array(this.N * 2);
     this.occStamp = new Int32Array(this.N * 2);
+
+    // Grid lines closer than SP_MIN_SEPARATION to each other. Two lines may not
+    // run in parallel across any of these, so a crowded corridor cannot produce
+    // routes 4px apart just because two tables happened to seed adjacent tracks.
+    const buildNear = (arr) => arr.map((v, i) => {
+      const list = [];
+      for (let j = i - 1; j >= 0 && v - arr[j] < SP_MIN_SEPARATION; j--) list.push(j);
+      for (let j = i + 1; j < arr.length && arr[j] - v < SP_MIN_SEPARATION; j++) list.push(j);
+      return list;
+    });
+    this.nearX = buildNear(xs);
+    this.nearY = buildNear(ys);
 
     this.res = new SpReservations();
     this._owners = new Int32Array(8);
@@ -1233,10 +1256,27 @@ class SpRouter {
     const line = horiz ? j : i;
     const a = horiz ? this.xs[i] : this.ys[j];
     const b = horiz ? this.xs[ni] : this.ys[nj];
-    const v = this.res.overlapAmount(horiz, line, a, b);
+    // Running on top of another line, plus running too close beside one.
+    let v = this.res.overlapAmount(horiz, line, a, b);
+    for (const other of (horiz ? this.nearY : this.nearX)[line]) {
+      v += this.res.overlapAmount(horiz, other, a, b, SP_NEAR_MIN_SPAN);
+    }
     this.occStamp[key] = this.gen;
     this.occVal[key] = v;
     return banned && v > 0 ? Infinity : v;
+  }
+
+  /** Px of the anchor stub that would run on top of, or too close beside, another line. */
+  _stubConflict(p) {
+    const horiz = p.dir === 0;
+    const line = horiz ? p.sj : p.si;
+    const a = horiz ? p.x : p.y;
+    const b = horiz ? p.sx : p.sy;
+    let v = this.res.overlapAmount(horiz, line, a, b);
+    for (const other of (horiz ? this.nearY : this.nearX)[line]) {
+      v += this.res.overlapAmount(horiz, other, a, b, SP_NEAR_MIN_SPAN);
+    }
+    return v;
   }
 
   /**
@@ -1269,21 +1309,14 @@ class SpRouter {
         if (segmentIntersectsBox(a, b, t, margin).hit) return false;
       }
       if (segmentIntersectsBox(a, b, partner, -1).hit) return false;
-      if (useRes && overlapCost === 0) {
-        const horiz = p.dir === 0;
-        const line = horiz ? p.sj : p.si;
-        if (this.res.blocks(horiz, line, horiz ? p.x : p.y, horiz ? p.sx : p.sy)) return false;
-      }
+      if (useRes && overlapCost === 0 && this._stubConflict(p) > 0) return false;
       return true;
     };
 
     // Extra cost of the stub when overlap is merely expensive rather than banned.
-    const stubPenalty = (p) => {
-      if (!useRes || overlapCost === 0) return 0;
-      const horiz = p.dir === 0;
-      const line = horiz ? p.sj : p.si;
-      return this.res.overlapAmount(horiz, line, horiz ? p.x : p.y, horiz ? p.sx : p.sy) * overlapCost;
-    };
+    const stubPenalty = (p) => (
+      !useRes || overlapCost === 0 ? 0 : this._stubConflict(p) * overlapCost
+    );
 
     for (const p of fromPorts) {
       if (!stubUsable(p, to)) continue;
@@ -1378,6 +1411,112 @@ class SpRouter {
     return { pts, fromPort: src, toPort: bestPort };
   }
 
+  /** Distance from `coord` to the nearest parallel line running alongside [lo, hi]. */
+  _spacing(horiz, coord, lo, hi, owner) {
+    const map = horiz ? this.res.h : this.res.v;
+    const axis = horiz ? this.ys : this.xs;
+    let best = SP_SPREAD_CAP;
+    for (const [line, arr] of map.entries()) {
+      const d = Math.abs(axis[line] - coord);
+      if (d >= best) continue;
+      for (const e of arr) {
+        if (e.owner === owner) continue;
+        if (Math.min(e.hi, hi) - Math.max(e.lo, lo) > SP_NEAR_MIN_SPAN) { best = d; break; }
+      }
+    }
+    return best;
+  }
+
+  /** Obstacle clearance of a whole route, stubs included. */
+  _routeClears(pts, from, to) {
+    const last = pts.length - 2;
+    for (let i = 0; i <= last; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if ((i === 0 || i === last) && Math.abs(a.x - b.x) + Math.abs(a.y - b.y) < 8) return false;
+      if (!this._clearFor(a, b, from, to)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Final pass. The routes are settled and legal, but a line can still hug its
+   * neighbour at the bare minimum while the rest of the channel sits empty.
+   * Slide each straight run sideways to the track that leaves the most air,
+   * refusing any move that costs clearance, a crossing, or real length.
+   */
+  spreadLines(items, sharesWith) {
+    let moves = 0;
+    for (let round = 0; round < SP_SPREAD_ROUNDS; round++) {
+      let moved = false;
+
+      for (const it of items) {
+        const shares = sharesWith(it.idx);
+        this.res.clearOwner(it.idx);
+
+        for (let i = 0; i <= it.route.pts.length - 2; i++) {
+          const pts = it.route.pts;
+          const last = pts.length - 2;
+          const a = pts[i], b = pts[i + 1];
+          const horiz = Math.abs(a.y - b.y) < 0.6;
+          if (horiz === (Math.abs(a.x - b.x) < 0.6)) continue;   // zero length
+
+          // A run touching a table may only slide within that docking face.
+          let lo = -Infinity, hi = Infinity;
+          if (i === 0) {
+            const s = spSpan(it.e.from, horiz);
+            lo = Math.max(lo, s.lo); hi = Math.min(hi, s.hi);
+          }
+          if (i === last) {
+            const s = spSpan(it.e.to, horiz);
+            lo = Math.max(lo, s.lo); hi = Math.min(hi, s.hi);
+          }
+
+          const axis = horiz ? this.ys : this.xs;
+          const cur = horiz ? a.y : a.x;
+          const span = horiz
+            ? [Math.min(a.x, b.x), Math.max(a.x, b.x)]
+            : [Math.min(a.y, b.y), Math.max(a.y, b.y)];
+
+          const before = this.evaluate(it.route, it.idx, shares);
+          let bestC = cur;
+          let bestGap = this._spacing(horiz, cur, span[0], span[1], it.idx);
+
+          for (const c of axis) {
+            if (c === cur || c < lo || c > hi) continue;
+            if (Math.abs(c - cur) > SP_SPREAD_RANGE) continue;
+
+            const gap = this._spacing(horiz, c, span[0], span[1], it.idx);
+            // Only move for a real gain, and never for a smaller one.
+            if (gap <= bestGap + 0.5) continue;
+
+            const cand = pts.map(p => ({ x: p.x, y: p.y }));
+            if (horiz) { cand[i].y = c; cand[i + 1].y = c; } else { cand[i].x = c; cand[i + 1].x = c; }
+            if (!this._routeClears(cand, it.e.from, it.e.to)) continue;
+
+            const after = this.evaluate({ pts: cand }, it.idx, shares);
+            if (after.overlap > 0) continue;
+            if (after.cross > before.cross) continue;
+            if (after.len > before.len + SP_SPREAD_SLACK) continue;
+
+            bestGap = gap;
+            bestC = c;
+          }
+
+          if (bestC !== cur) {
+            if (horiz) { a.y = bestC; b.y = bestC; } else { a.x = bestC; b.x = bestC; }
+            moved = true;
+            moves++;
+          }
+        }
+
+        this.reserve(it.route, it.idx);
+      }
+
+      if (!moved) break;
+    }
+    return moves;
+  }
+
   /** Grid line a finished segment sits on, or -1 when it is off-grid. */
   _lineOf(horiz, pt) {
     const idx = horiz ? this.yIdx.get(Math.round(pt.y)) : this.xIdx.get(Math.round(pt.x));
@@ -1412,13 +1551,21 @@ class SpRouter {
       const hi = horiz ? Math.max(a.x, b.x) : Math.max(a.y, b.y);
       len += hi - lo;
 
-      // Running along another line: forbidden, so score it out of contention.
-      const sameArr = (horiz ? this.res.h : this.res.v).get(this._lineOf(horiz, a));
-      if (sameArr) {
-        for (const e of sameArr) {
-          if (e.owner === owner) continue;
-          const ov = Math.min(e.hi, hi) - Math.max(e.lo, lo);
-          if (ov > 1) overlap += ov;
+      // Running along another line, or too close beside one: both forbidden, so
+      // score them out of contention rather than merely penalising them.
+      const own = this._lineOf(horiz, a);
+      if (own >= 0) {
+        const map = horiz ? this.res.h : this.res.v;
+        const near = (horiz ? this.nearY : this.nearX)[own];
+        for (let n = -1; n < near.length; n++) {
+          const arr = map.get(n < 0 ? own : near[n]);
+          if (!arr) continue;
+          const floor = n < 0 ? 1 : SP_NEAR_MIN_SPAN;
+          for (const e of arr) {
+            if (e.owner === owner) continue;
+            const ov = Math.min(e.hi, hi) - Math.max(e.lo, lo);
+            if (ov > floor) overlap += ov;
+          }
         }
       }
 
@@ -1524,27 +1671,95 @@ export function organizeLinesShortestPath(diagram, targetKeys = null) {
 
   // Pass 2..N: rip up the worst offender first and reroute against the rest.
   let passes = 0;
-  for (; passes < SP_MAX_PASSES; passes++) {
-    let improved = false;
-    // Score once per edge, then sort — scoring inside the comparator would run
-    // the (linear in reservations) evaluation O(n log n) times per pass.
-    const worstFirst = items
-      .map(it => ({ it, cost: router.evaluate(it.route, it.idx, sharesWith(it.idx)).cost }))
-      .sort((a, b) => b.cost - a.cost)
-      .map(entry => entry.it);
-    for (const it of worstFirst) {
-      const shares = sharesWith(it.idx);
-      router.res.clearOwner(it.idx);
-      const before = router.evaluate(it.route, it.idx, shares).cost;
-      const fresh = attempt(it);
-      if (fresh && router.evaluate(fresh, it.idx, shares).cost < before - 0.5) {
-        it.route = fresh;
-        improved = true;
+  const ripUpUntilStable = () => {
+    for (let n = 0; n < SP_MAX_PASSES; n++) {
+      passes++;
+      let improved = false;
+      // Score once per edge, then sort — scoring inside the comparator would run
+      // the (linear in reservations) evaluation O(n log n) times per pass.
+      const worstFirst = items
+        .map(it => ({ it, cost: router.evaluate(it.route, it.idx, sharesWith(it.idx)).cost }))
+        .sort((a, b) => b.cost - a.cost)
+        .map(entry => entry.it);
+      for (const it of worstFirst) {
+        const shares = sharesWith(it.idx);
+        router.res.clearOwner(it.idx);
+        const before = router.evaluate(it.route, it.idx, shares).cost;
+        const fresh = attempt(it);
+        if (fresh && router.evaluate(fresh, it.idx, shares).cost < before - 0.5) {
+          it.route = fresh;
+          improved = true;
+        }
+        router.reserve(it.route, it.idx);
       }
-      router.reserve(it.route, it.idx);
+      if (!improved) return;
     }
+  };
+  ripUpUntilStable();
+
+  /**
+   * Joint cost of two routes, each scored with the other in place. Ripping up
+   * one line at a time can never undo a crossing that only disappears when both
+   * lines swap lanes, because neither move helps on its own.
+   */
+  const scorePair = (A, B, rA, rB) => {
+    router.res.clearOwner(A.idx);
+    router.res.clearOwner(B.idx);
+    router.reserve(rB, B.idx);
+    const cA = router.evaluate(rA, A.idx, sharesWith(A.idx)).cost;
+    router.res.clearOwner(B.idx);
+    router.reserve(rA, A.idx);
+    const cB = router.evaluate(rB, B.idx, sharesWith(B.idx)).cost;
+    router.res.clearOwner(A.idx);
+    return cA + cB;
+  };
+
+  // Pass N+1: pairwise swaps. Both crossing lines come out, and both orders of
+  // reinstating them are tried; whichever scores best is kept.
+  let swaps = 0;
+  for (let round = 0; round < SP_SWAP_ROUNDS; round++) {
+    const pairs = [];
+    for (let a = 0; a < items.length; a++) {
+      for (let b = a + 1; b < items.length; b++) {
+        if (spRoutesCross(items[a].route.pts, items[b].route.pts)) pairs.push([items[a], items[b]]);
+      }
+    }
+    if (!pairs.length) break;
+
+    let improved = false;
+    for (const [A, B] of pairs) {
+      // An earlier swap in this round may already have separated them.
+      if (!spRoutesCross(A.route.pts, B.route.pts)) continue;
+
+      let bestA = A.route, bestB = B.route;
+      let bestCost = scorePair(A, B, bestA, bestB);
+
+      for (const [first, second] of [[A, B], [B, A]]) {
+        router.res.clearOwner(A.idx);
+        router.res.clearOwner(B.idx);
+        const rFirst = attempt(first);
+        router.reserve(rFirst, first.idx);
+        const rSecond = attempt(second);
+        router.res.clearOwner(first.idx);
+        const rA = first === A ? rFirst : rSecond;
+        const rB = first === A ? rSecond : rFirst;
+        const cost = scorePair(A, B, rA, rB);
+        if (cost < bestCost - 0.5) { bestCost = cost; bestA = rA; bestB = rB; }
+      }
+
+      if (bestA !== A.route || bestB !== B.route) { improved = true; swaps++; }
+      A.route = bestA;
+      B.route = bestB;
+      router.reserve(A.route, A.idx);
+      router.reserve(B.route, B.idx);
+    }
+
     if (!improved) break;
+    ripUpUntilStable();
   }
+
+  // Final pass: use the width of each channel instead of hugging the minimum.
+  router.spreadLines(items, sharesWith);
 
   for (const it of items) {
     const pts = it.route.pts;
@@ -1579,6 +1794,25 @@ export function organizeLinesShortestPath(diagram, targetKeys = null) {
     overlaps: Math.round(spCountOverlap(finished)),
     passes: passes + 1,
   };
+}
+
+/** Do these two routes cross in an X anywhere? */
+export function spRoutesCross(a, b) {
+  for (let i = 0; i < a.length - 1; i++) {
+    const a1 = a[i], a2 = a[i + 1];
+    const aH = Math.abs(a1.y - a2.y) < 0.6;
+    for (let j = 0; j < b.length - 1; j++) {
+      const b1 = b[j], b2 = b[j + 1];
+      const bH = Math.abs(b1.y - b2.y) < 0.6;
+      if (aH === bH) continue;
+      const h = aH ? [a1, a2] : [b1, b2];
+      const v = aH ? [b1, b2] : [a1, a2];
+      const hLo = Math.min(h[0].x, h[1].x), hHi = Math.max(h[0].x, h[1].x);
+      const vLo = Math.min(v[0].y, v[1].y), vHi = Math.max(v[0].y, v[1].y);
+      if (v[0].x > hLo + 1 && v[0].x < hHi - 1 && h[0].y > vLo + 1 && h[0].y < vHi - 1) return true;
+    }
+  }
+  return false;
 }
 
 /** True X crossings between the finished routes (diagnostics and tests). */
