@@ -934,7 +934,10 @@ const SP_MAX_AXIS = 700;          // hard cap of grid lines per axis
 const SP_DETOUR_FACTOR = 1.7;     // a line may not exceed this multiple of its unobstructed length
 const SP_DETOUR_SLACK = 250;      // ... plus this many px, so short lines still have room
 const SP_MAX_PASSES = 12;         // rip-up and reroute rounds before giving up on further gains
-const SP_SWAP_ROUNDS = 3;         // pairwise lane-swap rounds after the single-line passes settle
+// Pairwise lane-swap rounds. Measured on a 30-table / 58-relation layout, round
+// one takes crossings 205 -> 175 and round two 175 -> 174; a third buys nothing
+// and costs seconds, so two is where the curve flattens.
+const SP_SWAP_ROUNDS = 2;
 const SP_SPREAD_ROUNDS = 3;       // rounds of the final even-distribution pass
 const SP_SPREAD_RANGE = 72;       // how far a run may slide sideways looking for air
 const SP_SPREAD_CAP = 56;         // beyond this a neighbour is far enough to stop caring
