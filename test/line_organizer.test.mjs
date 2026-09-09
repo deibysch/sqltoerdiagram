@@ -9,9 +9,11 @@ import {
   organizeLinesElkPorts,
   organizeLinesClusterHighways,
   organizeLinesShortestPath,
+  spCountCrossings,
+  spCountOverlap,
   resetLines,
 } from '../src/line-organizer.js';
-import { segmentIntersectsBox, getTableAnchor } from '../src/routing.js';
+import { segmentIntersectsBox, getTableAnchor, buildOrthogonalPoints } from '../src/routing.js';
 
 function createMockDiagram() {
   const tRol = { key: 'rol', name: 'rol', x: 50, y: 150, w: 160, h: 140, columns: [{ name: 'id' }, { name: 'nombre' }] };
@@ -341,8 +343,9 @@ test('organizeLinesShortestPath routes rol -> rol_permiso around permiso with cl
   const { diagram, tRol, tPermiso, tRolPermiso } = createMockDiagram();
   const key = 'rol.id->rol_permiso.rol_id';
 
-  const count = organizeLinesShortestPath(diagram);
-  assert.strictEqual(count, 2, 'both relations were re-routed');
+  const res = organizeLinesShortestPath(diagram);
+  assert.strictEqual(res.routed, 2, 'both relations were re-routed');
+  assert.strictEqual(res.overlaps, 0, 'no line is drawn on top of another');
 
   const pts = routeOf(diagram, key, tRol, tRolPermiso, 'id', 'rol_id');
   assertOrthogonal(pts, 'rol->rol_permiso');
@@ -387,8 +390,8 @@ test('organizeLinesShortestPath honours a selection and leaves other edges alone
   const target = 'rol.id->rol_permiso.rol_id';
   const other = 'permiso.id->rol_permiso.permiso_id';
 
-  const count = organizeLinesShortestPath(diagram, [target]);
-  assert.strictEqual(count, 1);
+  const res = organizeLinesShortestPath(diagram, [target]);
+  assert.strictEqual(res.routed, 1);
   assert.ok(diagram.edgeAnchors.has(target), 'selected edge was routed');
   assert.ok(!diagram.edgeAnchors.has(other), 'unselected edge was untouched');
 });
@@ -419,10 +422,137 @@ test('organizeLinesShortestPath escapes a table boxed in on three sides', () => 
   const wallBottom = { key: 'wall_bottom', name: 'wall_bottom', x: 230, y: 310, w: 220, h: 190, columns: [] };
   diagram.model.tables.push(wallTop, wallBottom);
 
-  const count = organizeLinesShortestPath(diagram, ['rol.id->rol_permiso.rol_id']);
-  assert.strictEqual(count, 1, 'a route was still found');
+  const res = organizeLinesShortestPath(diagram, ['rol.id->rol_permiso.rol_id']);
+  assert.strictEqual(res.routed, 1, 'a route was still found');
 
   const pts = routeOf(diagram, 'rol.id->rol_permiso.rol_id', tRol, tRolPermiso, 'id', 'rol_id');
   assertOrthogonal(pts, 'boxed-in route');
   assertClears(pts, [diagram.model.tables[1], wallTop, wallBottom], 'boxed-in route');
+});
+
+// --- Crossing-awareness and the never-overlap guarantee ---
+
+function gridDiagram(rows, cols, seed = 12345) {
+  const tables = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      tables.push({
+        key: `t${i}`, name: `t${i}`, x: 60 + c * 260, y: 60 + r * 230, w: 180, h: 126,
+        columns: [{ name: 'id' }, { name: 'a_id' }, { name: 'b_id' }, { name: 'c_id' }],
+      });
+    }
+  }
+  const rnd = (() => { let s = seed; return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; })();
+  const names = ['a_id', 'b_id', 'c_id'];
+  const relations = [];
+  for (let i = 0; i < tables.length; i++) {
+    for (let k = 0; k < 2; k++) {
+      const j = Math.floor(rnd() * tables.length);
+      if (j !== i) relations.push({ fromTable: tables[i].key, toTable: tables[j].key, fromCols: ['id'], toCols: [names[k % 3]] });
+    }
+  }
+  return {
+    model: { tables, relations }, manualLinks: [], hidden: new Set(),
+    edgeAnchors: new Map(), edgeWaypoints: new Map(), edgeRoutings: new Map(),
+    diagramLevel: 'physical',
+    markDirty() {}, onLayoutChange() {}, onHistorySnapshot() {}, getSnapshot() { return {}; },
+  };
+}
+
+// Rebuild exactly what the renderer will draw, for every relation.
+function drawnRoutes(diagram) {
+  const byKey = new Map(diagram.model.tables.map(t => [t.key.toLowerCase(), t]));
+  const out = [];
+  for (const r of diagram.model.relations) {
+    const fk = r.fromTable.toLowerCase(), tk = r.toTable.toLowerCase();
+    const key = `${fk}.${(r.fromCols[0] || '').toLowerCase()}->${tk}.${(r.toCols[0] || '').toLowerCase()}`;
+    const a = diagram.edgeAnchors.get(key);
+    if (!a) continue;
+    const from = byKey.get(fk), to = byKey.get(tk);
+    const p1 = getTableAnchor(from, r.fromCols[0], null, a.fromAnchor, 0, diagram.diagramLevel);
+    const p2 = getTableAnchor(to, r.toCols[0], null, a.toAnchor, 0, diagram.diagramLevel);
+    const wps = (diagram.edgeWaypoints.get(key) || []).map(p => ({ ...p }));
+    out.push({ from, to, pts: buildOrthogonalPoints(p1, p2, wps, [], 0) });
+  }
+  return out;
+}
+
+test('organizeLinesShortestPath never draws one line on top of another', () => {
+  const diagram = gridDiagram(5, 6);
+  const res = organizeLinesShortestPath(diagram);
+  assert.strictEqual(res.routed, diagram.model.relations.length, 'every relation was routed');
+
+  const routes = drawnRoutes(diagram);
+  assert.strictEqual(Math.round(spCountOverlap(routes.map(r => r.pts))), 0,
+    'collinear overlap must be zero — lines may cross in an X but never share a corridor');
+  assert.strictEqual(res.overlaps, 0, 'the reported summary agrees');
+});
+
+test('organizeLinesShortestPath keeps clearance and 90 degree corners under load', () => {
+  const diagram = gridDiagram(5, 6);
+  organizeLinesShortestPath(diagram);
+
+  for (const r of drawnRoutes(diagram)) {
+    for (let i = 0; i < r.pts.length - 1; i++) {
+      const a = r.pts[i], b = r.pts[i + 1];
+      assert.ok(Math.abs(a.x - b.x) < 0.6 || Math.abs(a.y - b.y) < 0.6, 'every segment is axis-aligned');
+      for (const t of diagram.model.tables) {
+        if (t === r.from || t === r.to) continue;
+        assert.ok(!segmentIntersectsBox(a, b, t, 15.5).hit, `line keeps 16px clear of ${t.key}`);
+      }
+    }
+  }
+});
+
+test('organizeLinesShortestPath holds its crossing count on a fixed dense diagram', () => {
+  // Regression guard on the seeded 30-table / 58-relation layout. Routing that
+  // ignores other lines scores 446 crossings here; crossing-aware routing with
+  // SP_CROSS_COST = 150 scores 162, and raising the weight further buys almost
+  // nothing. Fail if a change pushes it back towards the blind number.
+  const diagram = gridDiagram(5, 6);
+  const res = organizeLinesShortestPath(diagram);
+  const crossings = spCountCrossings(drawnRoutes(diagram).map(r => r.pts));
+
+  assert.strictEqual(crossings, res.crossings, 'the reported crossing count matches the drawn geometry');
+  assert.ok(crossings <= 200, `expected at most 200 crossings, got ${crossings}`);
+
+  // Same input, same output: the search must not drift between runs.
+  const again = gridDiagram(5, 6);
+  assert.strictEqual(organizeLinesShortestPath(again).crossings, res.crossings, 'routing is deterministic');
+});
+
+test('organizeLinesShortestPath fans ten converging lines out without crossings', () => {
+  const hub = { key: 'hub', name: 'hub', x: 700, y: 400, w: 200, h: 150, columns: [{ name: 'id' }] };
+  const tables = [hub];
+  const relations = [];
+  for (let i = 0; i < 10; i++) {
+    const ang = (i / 10) * Math.PI * 2;
+    tables.push({
+      key: `s${i}`, name: `s${i}`,
+      x: Math.round(700 + Math.cos(ang) * 460), y: Math.round(400 + Math.sin(ang) * 330),
+      w: 170, h: 126, columns: [{ name: 'id' }, { name: 'hub_id' }],
+    });
+    relations.push({ fromTable: `s${i}`, toTable: 'hub', fromCols: ['hub_id'], toCols: ['id'] });
+  }
+  const diagram = {
+    model: { tables, relations }, manualLinks: [], hidden: new Set(),
+    edgeAnchors: new Map(), edgeWaypoints: new Map(), edgeRoutings: new Map(),
+    diagramLevel: 'physical',
+    markDirty() {}, onLayoutChange() {}, onHistorySnapshot() {}, getSnapshot() { return {}; },
+  };
+
+  const res = organizeLinesShortestPath(diagram);
+  assert.strictEqual(res.routed, 10);
+  assert.strictEqual(res.crossings, 0, 'a clean hub needs no crossings at all');
+  assert.strictEqual(res.overlaps, 0);
+
+  // Every line must dock on its own point of the hub perimeter.
+  const seen = new Set();
+  for (const r of relations) {
+    const a = diagram.edgeAnchors.get(`${r.fromTable}.hub_id->hub.id`);
+    const spot = `${a.toAnchor.side}:${a.toAnchor.offset.toFixed(4)}`;
+    assert.ok(!seen.has(spot), `hub anchor ${spot} is used only once`);
+    seen.add(spot);
+  }
 });

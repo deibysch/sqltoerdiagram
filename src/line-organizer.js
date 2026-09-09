@@ -885,34 +885,50 @@ export function resetLines(diagram, targetKeys = null) {
   diagram.onLayoutChange?.();
   return resetCount;
 }
-
 /* ------------------------------------------------------------------------ *
- * ALGORITHM 6: Shortest Orthogonal Path with Free Perimeter Ports
+ * ALGORITHM 6: Crossing-Aware Shortest Orthogonal Router
  * ------------------------------------------------------------------------
- * Wipes every existing vertex and anchor position, then recomputes each line
- * from scratch as the shortest 90 degree route between ANY point of the source
- * perimeter and ANY point of the target perimeter, never coming closer than
- * SP_CLEARANCE to a table that is not one of its two endpoints.
+ * Wipes every existing vertex and anchor position, then recomputes every line
+ * from scratch. A line may dock on ANY point of either perimeter and must stay
+ * at least SP_CLEARANCE away from every table that is not one of its two
+ * endpoints. Tables are never moved.
  *
- * 1. Hanan grid: candidate corridors are the lines offset SP_CLEARANCE around
- *    every nearby table, plus each table dockable span limit and centre.
- * 2. Multi-source / multi-target A* over (node, travel direction) states, so a
- *    90 degree corner has a real cost. Length dominates; SP_TURN_COST only
- *    breaks ties towards fewer vertices.
- * 3. Lane separation: segments that end up sharing a corridor are pushed apart
- *    by SP_LANE_GAP; a shifted endpoint segment simply slides its anchor along
- *    the docking face. Any shift that would break clearance is reverted.
- * Tables are never moved. Corners render 90 degrees and rounded.
+ * Unlike a per-edge shortest path, the router is aware of the other lines:
+ *
+ * 1. Global lane grid. One grid shared by every edge. Besides the clearance
+ *    ring around each table it carries corridor lanes fanning outwards from
+ *    each ring and docking lanes across each face, so parallel lines have real
+ *    coordinates to spread onto instead of being nudged apart afterwards.
+ * 2. Corridor reservations. A routed line reserves the intervals it occupies.
+ *    Travelling ALONG a reserved interval is forbidden outright, so two lines
+ *    can never be drawn on top of each other; they either share a table face,
+ *    take different lanes, or cross in an X.
+ * 3. Crossing cost. Passing through a node covered by a perpendicular
+ *    reservation costs SP_CROSS_COST (less between lines that share a table,
+ *    where crossings are often unavoidable).
+ * 4. Rip-up and reroute. Edges are routed shortest-first, then repeatedly
+ *    ripped up and rerouted against everything else until no edge can improve.
+ *
+ * Cost of a route = length + SP_TURN_COST per vertex + crossing costs, capped
+ * by a detour budget derived from the same edge routed with no other line in
+ * the way. Corners render 90 degrees and rounded.
  */
 
-const SP_CLEARANCE = 16;    // minimum gap kept from every foreign table
-const SP_STUB = 16;         // perpendicular stub leaving each anchor (== clearance, so it lands on the grid)
-const SP_TURN_COST = 20;    // px charged per corner; shortest length still wins
-const SP_LANE_GAP = 12;     // separation applied to lines sharing a corridor
-const SP_SEARCH_PAD = 300;  // how far past the endpoint bbox the grid may reach
-const SP_MAX_AXIS = 64;     // hard cap of grid lines per axis
-const SP_PORTS_PER_SIDE = 9;
-const SP_MAX_POPS = 60000;
+const SP_CLEARANCE = 16;          // minimum gap kept from every foreign table
+const SP_STUB = 16;               // perpendicular stub leaving each anchor (== clearance, lands on the grid)
+const SP_TURN_COST = 20;          // px charged per vertex
+const SP_CROSS_COST = 150;        // px charged per crossing with another line
+const SP_CROSS_COST_SHARED = 60;  // ... when both lines touch the same table
+const SP_OVERLAP_COST = 6;        // px charged per px run on top of another line, once
+                                  // the corridors are so full that nothing else fits
+const SP_LANE_GAP = 12;           // spacing of the corridor lanes
+const SP_LANE_DEPTH = 4;          // corridor lanes on each side of a clearance ring
+const SP_PORT_STEP = 14;          // spacing of the docking lanes across a table face
+const SP_MAX_AXIS = 700;          // hard cap of grid lines per axis
+const SP_DETOUR_FACTOR = 1.7;     // a line may not exceed this multiple of its unobstructed length
+const SP_DETOUR_SLACK = 250;      // ... plus this many px, so short lines still have room
+const SP_MAX_PASSES = 12;         // rip-up and reroute rounds before giving up on further gains
+const SP_MAX_POPS = 300000;       // A* expansion guard
 
 /** Binary min-heap on `.f`, so A* does not pay a sort per pop. */
 class SpHeap {
@@ -957,342 +973,471 @@ function spSpan(t, vertical) {
     : { lo: Math.ceil(t.x + 16), hi: Math.floor(t.x + t.w - 16) };
 }
 
-function spSample(list, limit) {
-  if (list.length <= limit) return list;
-  const out = [];
-  const step = (list.length - 1) / (limit - 1);
-  for (let i = 0; i < limit; i++) out.push(list[Math.round(i * step)]);
-  return Array.from(new Set(out));
+/** Does the bounding box of a segment come within `pad` of a table? */
+function spNearBox(a, b, t, pad) {
+  return !(Math.max(a.x, b.x) + pad < t.x || Math.min(a.x, b.x) - pad > t.x + t.w
+        || Math.max(a.y, b.y) + pad < t.y || Math.min(a.y, b.y) - pad > t.y + t.h);
 }
 
 /**
- * Build the routing grid for one edge: corridors around the endpoints (never
- * pruned) plus corridors around the tables near them (pruned to SP_MAX_AXIS).
+ * The grid every edge routes on. Base coordinates (clearance rings, face
+ * limits, centres and the outer ring highways) are never dropped; docking
+ * lanes come next, and corridor lanes are the first to go if the axis cap bites.
  */
-function spBuildGrid(from, to, tables) {
-  const focusX = (from.x + from.w / 2 + to.x + to.w / 2) / 2;
-  const focusY = (from.y + from.h / 2 + to.y + to.h / 2) / 2;
-  const rx0 = Math.min(from.x, to.x) - SP_SEARCH_PAD;
-  const rx1 = Math.max(from.x + from.w, to.x + to.w) + SP_SEARCH_PAD;
-  const ry0 = Math.min(from.y, to.y) - SP_SEARCH_PAD;
-  const ry1 = Math.max(from.y + from.h, to.y + to.h) + SP_SEARCH_PAD;
-
-  const reqX = new Set(), reqY = new Set(), optX = new Set(), optY = new Set();
-  const feed = (t, xSet, ySet) => {
-    const hSpan = spSpan(t, false);
-    const vSpan = spSpan(t, true);
-    xSet.add(Math.round(t.x - SP_CLEARANCE));
-    xSet.add(Math.round(t.x + t.w + SP_CLEARANCE));
-    xSet.add(hSpan.lo);
-    xSet.add(hSpan.hi);
-    xSet.add(Math.round(t.x + t.w / 2));
-    ySet.add(Math.round(t.y - SP_CLEARANCE));
-    ySet.add(Math.round(t.y + t.h + SP_CLEARANCE));
-    ySet.add(vSpan.lo);
-    ySet.add(vSpan.hi);
-    ySet.add(Math.round(t.y + t.h / 2));
-  };
-  feed(from, reqX, reqY);
-  feed(to, reqX, reqY);
+function spBuildGlobalGrid(tables) {
+  const baseX = new Set(), baseY = new Set();
+  const portX = new Set(), portY = new Set();
+  const laneX = new Set(), laneY = new Set();
 
   let gx0 = Infinity, gx1 = -Infinity, gy0 = Infinity, gy1 = -Infinity;
   for (const t of tables) {
+    const vs = spSpan(t, true), hs = spSpan(t, false);
+    const oL = Math.round(t.x - SP_CLEARANCE), oR = Math.round(t.x + t.w + SP_CLEARANCE);
+    const oT = Math.round(t.y - SP_CLEARANCE), oB = Math.round(t.y + t.h + SP_CLEARANCE);
+
+    baseX.add(oL); baseX.add(oR); baseX.add(hs.lo); baseX.add(hs.hi);
+    baseX.add(Math.round(t.x + t.w / 2));
+    baseY.add(oT); baseY.add(oB); baseY.add(vs.lo); baseY.add(vs.hi);
+    baseY.add(Math.round(t.y + t.h / 2));
+
+    // Docking lanes across each face, so many lines can share a table cleanly.
+    for (let v = vs.lo; v <= vs.hi; v += SP_PORT_STEP) portY.add(v);
+    for (let v = hs.lo; v <= hs.hi; v += SP_PORT_STEP) portX.add(v);
+
+    // Corridor lanes fanning outwards from the clearance ring.
+    for (let k = 1; k <= SP_LANE_DEPTH; k++) {
+      laneX.add(oL - k * SP_LANE_GAP); laneX.add(oR + k * SP_LANE_GAP);
+      laneY.add(oT - k * SP_LANE_GAP); laneY.add(oB + k * SP_LANE_GAP);
+    }
+
     gx0 = Math.min(gx0, t.x); gx1 = Math.max(gx1, t.x + t.w);
     gy0 = Math.min(gy0, t.y); gy1 = Math.max(gy1, t.y + t.h);
-    if (t === from || t === to) continue;
-    if (t.x + t.w < rx0 || t.x > rx1 || t.y + t.h < ry0 || t.y > ry1) continue;
-    feed(t, optX, optY);
-  }
-  // Escape corridors around the whole diagram, so a line can always get around.
-  if (Number.isFinite(gx0)) {
-    reqX.add(Math.round(gx0 - 48)); reqX.add(Math.round(gx1 + 48));
-    reqY.add(Math.round(gy0 - 48)); reqY.add(Math.round(gy1 + 48));
   }
 
-  const merge = (req, opt, focus) => {
-    for (const v of req) opt.delete(v);
-    let extra = Array.from(opt);
-    const room = SP_MAX_AXIS - req.size;
-    if (extra.length > room) {
-      extra.sort((a, b) => Math.abs(a - focus) - Math.abs(b - focus));
-      extra = extra.slice(0, Math.max(0, room));
+  // Outer ring highways, so a line can always get around the whole diagram.
+  if (Number.isFinite(gx0)) {
+    for (let k = 0; k <= SP_LANE_DEPTH; k++) {
+      const d = 48 + k * SP_LANE_GAP;
+      baseX.add(Math.round(gx0 - d)); baseX.add(Math.round(gx1 + d));
+      baseY.add(Math.round(gy0 - d)); baseY.add(Math.round(gy1 + d));
     }
-    return Array.from(new Set([...req, ...extra])).sort((a, b) => a - b);
+  }
+
+  const merge = (base, port, lane) => {
+    const out = new Set(base);
+    for (const v of port) { if (out.size >= SP_MAX_AXIS) break; out.add(v); }
+    for (const v of lane) { if (out.size >= SP_MAX_AXIS) break; out.add(v); }
+    return Array.from(out).sort((a, b) => a - b);
   };
 
-  return { xs: merge(reqX, optX, focusX), ys: merge(reqY, optY, focusY) };
+  return { xs: merge(baseX, portX, laneX), ys: merge(baseY, portY, laneY) };
 }
 
 /**
- * Candidate docking ports covering all four faces of a table. Each port carries
- * the anchor point (on the perimeter) and its stub node (a grid intersection).
+ * Intervals already occupied by routed lines, indexed by grid line. Travelling
+ * along an occupied interval is forbidden; crossing one costs.
  */
-function spPorts(table, xs, ys) {
-  const ports = [];
-  const pick = (grid, span, mid) => {
-    if (span.hi < span.lo) return [];
-    const set = new Set([span.lo, span.hi]);
-    const m = Math.round(mid);
-    if (m >= span.lo && m <= span.hi) set.add(m);
-    for (const v of grid) if (v >= span.lo && v <= span.hi) set.add(v);
-    return spSample(Array.from(set).sort((a, b) => a - b), SP_PORTS_PER_SIDE);
-  };
-
-  const outL = Math.round(table.x - SP_CLEARANCE);
-  const outR = Math.round(table.x + table.w + SP_CLEARANCE);
-  const outT = Math.round(table.y - SP_CLEARANCE);
-  const outB = Math.round(table.y + table.h + SP_CLEARANCE);
-
-  for (const y of pick(ys, spSpan(table, true), table.y + table.h / 2)) {
-    ports.push({ side: 'left', x: table.x, y, dir: 0, sx: outL, sy: y });
-    ports.push({ side: 'right', x: table.x + table.w, y, dir: 0, sx: outR, sy: y });
+class SpReservations {
+  constructor() {
+    this.h = new Map();       // horizontal line index -> [{ lo, hi, owner }]
+    this.v = new Map();       // vertical line index   -> [{ lo, hi, owner }]
+    this.byOwner = new Map();
   }
-  for (const x of pick(xs, spSpan(table, false), table.x + table.w / 2)) {
-    ports.push({ side: 'top', x, y: table.y, dir: 1, sx: x, sy: outT });
-    ports.push({ side: 'bottom', x, y: table.y + table.h, dir: 1, sx: x, sy: outB });
+
+  add(horiz, line, a, b, owner) {
+    const map = horiz ? this.h : this.v;
+    let arr = map.get(line);
+    if (!arr) { arr = []; map.set(line, arr); }
+    const entry = { lo: Math.min(a, b), hi: Math.max(a, b), owner };
+    arr.push(entry);
+    let own = this.byOwner.get(owner);
+    if (!own) { own = []; this.byOwner.set(owner, own); }
+    own.push({ arr, entry });
   }
-  return ports;
-}
 
-/** A segment is legal when it clears every foreign table and cuts through neither endpoint box. */
-function spSegmentClear(a, b, from, to, foreign) {
-  for (const o of foreign) {
-    if (segmentIntersectsBox(a, b, o, SP_CLEARANCE - 0.5).hit) return false;
-  }
-  if (segmentIntersectsBox(a, b, from, -1).hit) return false;
-  if (segmentIntersectsBox(a, b, to, -1).hit) return false;
-  return true;
-}
-
-/** Multi-source / multi-target A* over (grid node, travel direction) states. */
-function spRoute(from, to, foreign, xs, ys, fromPorts, toPorts) {
-  const NX = xs.length, NY = ys.length;
-  const N = NX * NY;
-  if (!N) return null;
-
-  const xIdx = new Map(); xs.forEach((v, i) => xIdx.set(v, i));
-  const yIdx = new Map(); ys.forEach((v, i) => yIdx.set(v, i));
-
-  const hEdge = new Uint8Array(N); // 0 unknown, 1 free, 2 blocked
-  const vEdge = new Uint8Array(N);
-  const hOk = (i, j) => {
-    const k = j * NX + i;
-    if (hEdge[k]) return hEdge[k] === 1;
-    const ok = spSegmentClear({ x: xs[i], y: ys[j] }, { x: xs[i + 1], y: ys[j] }, from, to, foreign);
-    hEdge[k] = ok ? 1 : 2;
-    return ok;
-  };
-  const vOk = (i, j) => {
-    const k = j * NX + i;
-    if (vEdge[k]) return vEdge[k] === 1;
-    const ok = spSegmentClear({ x: xs[i], y: ys[j] }, { x: xs[i], y: ys[j + 1] }, from, to, foreign);
-    vEdge[k] = ok ? 1 : 2;
-    return ok;
-  };
-
-  const gScore = new Float64Array(N * 2).fill(Infinity);
-  const parent = new Int32Array(N * 2).fill(-1);
-  const heap = new SpHeap();
-
-  // Admissible heuristic: Manhattan distance to the target clearance box.
-  const hx0 = to.x - SP_CLEARANCE, hx1 = to.x + to.w + SP_CLEARANCE;
-  const hy0 = to.y - SP_CLEARANCE, hy1 = to.y + to.h + SP_CLEARANCE;
-  const heur = (x, y) => {
-    const dx = x < hx0 ? hx0 - x : (x > hx1 ? x - hx1 : 0);
-    const dy = y < hy0 ? hy0 - y : (y > hy1 ? y - hy1 : 0);
-    return dx + dy;
-  };
-
-  const stubClear = (port, partner) => {
-    const a = { x: port.x, y: port.y };
-    const b = { x: port.sx, y: port.sy };
-    for (const o of foreign) {
-      if (segmentIntersectsBox(a, b, o, SP_CLEARANCE - 0.5).hit) return false;
+  clearOwner(owner) {
+    const own = this.byOwner.get(owner);
+    if (!own) return;
+    for (const ref of own) {
+      const i = ref.arr.indexOf(ref.entry);
+      if (i >= 0) ref.arr.splice(i, 1);
     }
-    return !segmentIntersectsBox(a, b, partner, -1).hit;
-  };
-
-  const startPort = new Map();
-  for (const p of fromPorts) {
-    const i = xIdx.get(p.sx), j = yIdx.get(p.sy);
-    if (i === undefined || j === undefined) continue;
-    if (!stubClear(p, to)) continue;
-    const s = ((j * NX + i) << 1) | p.dir;
-    if (SP_STUB >= gScore[s]) continue;
-    gScore[s] = SP_STUB;
-    startPort.set(s, p);
-    heap.push({ s, g: SP_STUB, f: SP_STUB + heur(xs[i], ys[j]) });
+    this.byOwner.delete(owner);
   }
-  if (!startPort.size) return null;
 
-  const goalAt = new Map();
-  for (const p of toPorts) {
-    const i = xIdx.get(p.sx), j = yIdx.get(p.sy);
-    if (i === undefined || j === undefined) continue;
-    if (!stubClear(p, from)) continue;
-    const node = j * NX + i;
-    if (!goalAt.has(node)) goalAt.set(node, []);
-    goalAt.get(node).push(p);
+  /** Hard constraint: would travelling this interval run on top of another line? */
+  blocks(horiz, line, a, b) {
+    const arr = (horiz ? this.h : this.v).get(line);
+    if (!arr || !arr.length) return false;
+    const lo = Math.min(a, b), hi = Math.max(a, b);
+    for (const e of arr) {
+      if (Math.min(e.hi, hi) - Math.max(e.lo, lo) > 1) return true;
+    }
+    return false;
   }
-  if (!goalAt.size) return null;
 
-  let best = Infinity, bestState = -1, bestPort = null;
-  let pops = 0;
+  /** How many px of this interval already carry another line. */
+  overlapAmount(horiz, line, a, b) {
+    const arr = (horiz ? this.h : this.v).get(line);
+    if (!arr || !arr.length) return 0;
+    const lo = Math.min(a, b), hi = Math.max(a, b);
+    let sum = 0;
+    for (const e of arr) {
+      const ov = Math.min(e.hi, hi) - Math.max(e.lo, lo);
+      if (ov > 1) sum += ov;
+    }
+    return sum;
+  }
 
-  while (heap.size && pops++ < SP_MAX_POPS) {
-    const cur = heap.pop();
-    if (cur.g > gScore[cur.s]) continue;
-    if (cur.f >= best) break;
-
-    const s = cur.s;
-    const dir = s & 1;
-    const node = s >> 1;
-    const i = node % NX;
-    const j = (node / NX) | 0;
-
-    const gp = goalAt.get(node);
-    if (gp) {
-      for (const p of gp) {
-        const tot = cur.g + SP_STUB + (p.dir === dir ? 0 : SP_TURN_COST);
-        if (tot < best) { best = tot; bestState = s; bestPort = p; }
+  /** Owners of the reservations covering one point of a grid line. */
+  coverers(horiz, line, coord, out) {
+    const arr = (horiz ? this.h : this.v).get(line);
+    if (!arr || !arr.length) return 0;
+    let n = 0;
+    for (const e of arr) {
+      if (coord >= e.lo - 0.5 && coord <= e.hi + 0.5) {
+        out[n++] = e.owner;
+        if (n >= out.length) break;
       }
     }
+    return n;
+  }
+}
 
-    const relax = (ni, nj, ndir) => {
-      const ns = ((nj * NX + ni) << 1) | ndir;
-      if (startPort.has(ns)) return;
-      const len = ndir === 0 ? Math.abs(xs[ni] - xs[i]) : Math.abs(ys[nj] - ys[j]);
-      const ng = cur.g + len + (ndir === dir ? 0 : SP_TURN_COST);
-      if (ng >= gScore[ns]) return;
-      gScore[ns] = ng;
-      parent[ns] = s;
-      heap.push({ s: ns, g: ng, f: ng + heur(xs[ni], ys[nj]) });
+/** Grid, clearance memos, scratch arrays and reservations shared by every edge. */
+class SpRouter {
+  constructor(tables, xs, ys) {
+    this.tables = tables;
+    this.xs = xs;
+    this.ys = ys;
+    this.NX = xs.length;
+    this.NY = ys.length;
+    this.N = this.NX * this.NY;
+    this.xIdx = new Map(); xs.forEach((v, i) => this.xIdx.set(v, i));
+    this.yIdx = new Map(); ys.forEach((v, i) => this.yIdx.set(v, i));
+
+    // Clearance against ALL tables, computed once and reused by every edge.
+    this.blockH = new Uint8Array(this.N);   // 0 unknown, 1 free, 2 blocked
+    this.blockV = new Uint8Array(this.N);
+
+    // A* scratch, reset by generation stamp rather than refilled per edge.
+    this.g = new Float64Array(this.N * 2);
+    this.parent = new Int32Array(this.N * 2);
+    this.stamp = new Int32Array(this.N * 2);
+    this.gen = 0;
+
+    // Reservations are frozen for the duration of one route(), so the crossing
+    // cost of a node and the occupancy of a grid edge can be memoised against
+    // the same generation counter instead of rescanned on every relaxation.
+    this.crossVal = new Float64Array(this.N * 2);
+    this.crossStamp = new Int32Array(this.N * 2);
+    this.occVal = new Float64Array(this.N * 2);
+    this.occStamp = new Int32Array(this.N * 2);
+
+    this.res = new SpReservations();
+    this._owners = new Int32Array(8);
+  }
+
+  _clearAll(a, b) {
+    for (const t of this.tables) {
+      if (segmentIntersectsBox(a, b, t, SP_CLEARANCE - 0.5).hit) return false;
+    }
+    return true;
+  }
+
+  _clearFor(a, b, from, to) {
+    for (const t of this.tables) {
+      const margin = (t === from || t === to) ? -1 : SP_CLEARANCE - 0.5;
+      if (segmentIntersectsBox(a, b, t, margin).hit) return false;
+    }
+    return true;
+  }
+
+  /** Is the grid segment usable by an edge whose endpoints are `from` and `to`? */
+  _segFree(horiz, i, j, from, to, memo) {
+    const k = j * this.NX + i;
+    const cache = horiz ? this.blockH : this.blockV;
+    const a = { x: this.xs[i], y: this.ys[j] };
+    const b = horiz ? { x: this.xs[i + 1], y: this.ys[j] } : { x: this.xs[i], y: this.ys[j + 1] };
+    let state = cache[k];
+    if (!state) {
+      state = this._clearAll(a, b) ? 1 : 2;
+      cache[k] = state;
+    }
+    if (state === 1) return true;
+    // Blocked against all tables, but the endpoints are allowed to be touched.
+    if (!spNearBox(a, b, from, SP_CLEARANCE) && !spNearBox(a, b, to, SP_CLEARANCE)) return false;
+    const mk = horiz ? k * 2 : k * 2 + 1;
+    const hit = memo.get(mk);
+    if (hit !== undefined) return hit;
+    const ok = this._clearFor(a, b, from, to);
+    memo.set(mk, ok);
+    return ok;
+  }
+
+  /** Docking ports across all four faces of a table, aligned to the grid. */
+  portsFor(table) {
+    const ports = [];
+    const vs = spSpan(table, true), hs = spSpan(table, false);
+    const li = this.xIdx.get(Math.round(table.x - SP_CLEARANCE));
+    const ri = this.xIdx.get(Math.round(table.x + table.w + SP_CLEARANCE));
+    const ti = this.yIdx.get(Math.round(table.y - SP_CLEARANCE));
+    const bi = this.yIdx.get(Math.round(table.y + table.h + SP_CLEARANCE));
+
+    for (let j = 0; j < this.NY; j++) {
+      const y = this.ys[j];
+      if (y < vs.lo) continue;
+      if (y > vs.hi) break;
+      if (li !== undefined) ports.push({ side: 'left', x: table.x, y, dir: 0, si: li, sj: j, sx: this.xs[li], sy: y });
+      if (ri !== undefined) ports.push({ side: 'right', x: table.x + table.w, y, dir: 0, si: ri, sj: j, sx: this.xs[ri], sy: y });
+    }
+    for (let i = 0; i < this.NX; i++) {
+      const x = this.xs[i];
+      if (x < hs.lo) continue;
+      if (x > hs.hi) break;
+      if (ti !== undefined) ports.push({ side: 'top', x, y: table.y, dir: 1, si: i, sj: ti, sx: x, sy: this.ys[ti] });
+      if (bi !== undefined) ports.push({ side: 'bottom', x, y: table.y + table.h, dir: 1, si: i, sj: bi, sx: x, sy: this.ys[bi] });
+    }
+    return ports;
+  }
+
+  /** Crossing cost of passing through node (i, j) travelling in direction `dir`. */
+  _crossCost(i, j, dir, shares) {
+    const key = (((j * this.NX + i) << 1) | dir);
+    if (this.crossStamp[key] === this.gen) return this.crossVal[key];
+    // Vertical travel crosses horizontal reservations, and vice versa.
+    const horiz = dir === 1;
+    const line = dir === 1 ? j : i;
+    const coord = dir === 1 ? this.xs[i] : this.ys[j];
+    const n = this.res.coverers(horiz, line, coord, this._owners);
+    let cost = 0;
+    for (let k = 0; k < n; k++) {
+      cost += shares(this._owners[k]) ? SP_CROSS_COST_SHARED : SP_CROSS_COST;
+    }
+    this.crossStamp[key] = this.gen;
+    this.crossVal[key] = cost;
+    return cost;
+  }
+
+  /**
+   * Px of a grid edge already carrying another line, memoised per route().
+   * Returns Infinity when overlap is banned and the edge is occupied.
+   */
+  _occupancy(horiz, i, j, ni, nj, banned) {
+    // Key on the lower endpoint, so both directions of travel share the entry.
+    const key = ((Math.min(j, nj) * this.NX + Math.min(i, ni)) << 1) | (horiz ? 0 : 1);
+    if (this.occStamp[key] === this.gen) {
+      const v = this.occVal[key];
+      return banned && v > 0 ? Infinity : v;
+    }
+    const line = horiz ? j : i;
+    const a = horiz ? this.xs[i] : this.ys[j];
+    const b = horiz ? this.xs[ni] : this.ys[nj];
+    const v = this.res.overlapAmount(horiz, line, a, b);
+    this.occStamp[key] = this.gen;
+    this.occVal[key] = v;
+    return banned && v > 0 ? Infinity : v;
+  }
+
+  /**
+   * Shortest route for one edge. With `useRes` the search may not run along
+   * another line and pays for every crossing; without it, it is the plain
+   * obstacle-avoiding shortest path used for the detour budget and as fallback.
+   */
+  route(from, to, fromPorts, toPorts, useRes, lenBudget, shares, overlapCost = 0) {
+    const { NX, NY, xs, ys, g, parent, stamp } = this;
+    const gen = ++this.gen;
+    const memo = new Map();
+    const heap = new SpHeap();
+    const startAt = new Map();
+
+    const gOf = (s) => (stamp[s] === gen ? g[s] : Infinity);
+    const setG = (s, v) => { stamp[s] = gen; g[s] = v; };
+
+    const hx0 = to.x - SP_CLEARANCE, hx1 = to.x + to.w + SP_CLEARANCE;
+    const hy0 = to.y - SP_CLEARANCE, hy1 = to.y + to.h + SP_CLEARANCE;
+    const heur = (x, y) => {
+      const dx = x < hx0 ? hx0 - x : (x > hx1 ? x - hx1 : 0);
+      const dy = y < hy0 ? hy0 - y : (y > hy1 ? y - hy1 : 0);
+      return dx + dy;
     };
 
-    if (i > 0 && hOk(i - 1, j)) relax(i - 1, j, 0);
-    if (i < NX - 1 && hOk(i, j)) relax(i + 1, j, 0);
-    if (j > 0 && vOk(i, j - 1)) relax(i, j - 1, 1);
-    if (j < NY - 1 && vOk(i, j)) relax(i, j + 1, 1);
-  }
+    const stubUsable = (p, partner) => {
+      const a = { x: p.x, y: p.y }, b = { x: p.sx, y: p.sy };
+      for (const t of this.tables) {
+        const margin = (t === from || t === to) ? -1 : SP_CLEARANCE - 0.5;
+        if (segmentIntersectsBox(a, b, t, margin).hit) return false;
+      }
+      if (segmentIntersectsBox(a, b, partner, -1).hit) return false;
+      if (useRes && overlapCost === 0) {
+        const horiz = p.dir === 0;
+        const line = horiz ? p.sj : p.si;
+        if (this.res.blocks(horiz, line, horiz ? p.x : p.y, horiz ? p.sx : p.sy)) return false;
+      }
+      return true;
+    };
 
-  if (bestState < 0) return null;
+    // Extra cost of the stub when overlap is merely expensive rather than banned.
+    const stubPenalty = (p) => {
+      if (!useRes || overlapCost === 0) return 0;
+      const horiz = p.dir === 0;
+      const line = horiz ? p.sj : p.si;
+      return this.res.overlapAmount(horiz, line, horiz ? p.x : p.y, horiz ? p.sx : p.sy) * overlapCost;
+    };
 
-  const nodes = [];
-  let s = bestState;
-  let guard = 0;
-  while (s >= 0 && guard++ < 20000) {
-    const node = s >> 1;
-    nodes.push({ x: xs[node % NX], y: ys[(node / NX) | 0] });
-    if (startPort.has(s)) break;
-    s = parent[s];
-  }
-  const src = s >= 0 ? startPort.get(s) : null;
-  if (!src) return null;
-  nodes.reverse();
-
-  return {
-    pts: [{ x: src.x, y: src.y }, ...nodes, { x: bestPort.x, y: bestPort.y }],
-    fromPort: src,
-    toPort: bestPort,
-    cost: best,
-  };
-}
-
-function spRouteValid(pts, from, to, foreign) {
-  if (!pts || pts.length < 2) return false;
-  const last = pts.length - 2;
-  for (let i = 0; i <= last; i++) {
-    const a = pts[i], b = pts[i + 1];
-    const len = Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-    if ((i === 0 || i === last) && len < 8) return false;
-    if (!spSegmentClear(a, b, from, to, foreign)) return false;
-  }
-  return true;
-}
-
-function spAssignLanes(cluster) {
-  if (cluster.length < 2) return;
-  cluster.sort((a, b) => a.lo - b.lo);
-  const placed = [];
-  for (const s of cluster) {
-    const used = new Set();
-    for (const p of placed) {
-      if (p.lo < s.hi - 2 && s.lo < p.hi - 2) used.add(p.lane);
+    for (const p of fromPorts) {
+      if (!stubUsable(p, to)) continue;
+      const s = ((p.sj * NX + p.si) << 1) | p.dir;
+      const cost = SP_STUB + (useRes ? this._crossCost(p.si, p.sj, p.dir, shares) + stubPenalty(p) : 0);
+      if (cost >= gOf(s)) continue;
+      setG(s, cost);
+      parent[s] = -1;
+      startAt.set(s, p);
+      heap.push({ s, g: cost, len: SP_STUB, f: cost + heur(p.sx, p.sy) });
     }
-    let lane = 0;
-    while (used.has(lane)) lane++;
-    s.lane = lane;
-    placed.push(s);
-  }
-}
+    if (!startAt.size) return null;
 
-/**
- * Push apart segments that ended up sharing the same corridor. Shifting the
- * first or last segment slides its anchor along the docking face; a shift that
- * would break clearance (or crush a stub) reverts the whole route.
- */
-function spSeparateLanes(routes) {
-  const segs = [];
-  for (let ri = 0; ri < routes.length; ri++) {
-    const pts = routes[ri].pts;
+    const goalAt = new Map();
+    for (const p of toPorts) {
+      if (!stubUsable(p, from)) continue;
+      const node = p.sj * NX + p.si;
+      let list = goalAt.get(node);
+      if (!list) { list = []; goalAt.set(node, list); }
+      list.push(p);
+    }
+    if (!goalAt.size) return null;
+
+    let best = Infinity, bestState = -1, bestPort = null;
+    let pops = 0;
+
+    while (heap.size && pops++ < SP_MAX_POPS) {
+      const cur = heap.pop();
+      if (cur.g > gOf(cur.s)) continue;
+      if (cur.f >= best) break;
+
+      const s = cur.s;
+      const dir = s & 1;
+      const node = s >> 1;
+      const i = node % NX;
+      const j = (node / NX) | 0;
+
+      const goals = goalAt.get(node);
+      if (goals) {
+        for (const p of goals) {
+          if (cur.len + SP_STUB > lenBudget) continue;
+          const total = cur.g + SP_STUB + (p.dir === dir ? 0 : SP_TURN_COST);
+          if (total < best) { best = total; bestState = s; bestPort = p; }
+        }
+      }
+
+      const relax = (ni, nj, ndir) => {
+        const ns = ((nj * NX + ni) << 1) | ndir;
+        if (startAt.has(ns)) return;
+        const segLen = ndir === 0 ? Math.abs(xs[ni] - xs[i]) : Math.abs(ys[nj] - ys[j]);
+        const nlen = cur.len + segLen;
+        if (nlen > lenBudget) return;
+        let ng = cur.g + segLen + (ndir === dir ? 0 : SP_TURN_COST);
+        if (useRes) {
+          // Never run along a corridor another line occupies. That is a hard
+          // constraint until the corridors are so full that no route exists at
+          // all, at which point the caller retries with overlap merely priced.
+          const occ = this._occupancy(ndir === 0, i, j, ni, nj, overlapCost === 0);
+          if (occ === Infinity) return;
+          ng += occ * overlapCost + this._crossCost(ni, nj, ndir, shares);
+        }
+        if (ng >= gOf(ns)) return;
+        setG(ns, ng);
+        parent[ns] = s;
+        heap.push({ s: ns, g: ng, len: nlen, f: ng + heur(xs[ni], ys[nj]) });
+      };
+
+      if (i > 0 && this._segFree(true, i - 1, j, from, to, memo)) relax(i - 1, j, 0);
+      if (i < NX - 1 && this._segFree(true, i, j, from, to, memo)) relax(i + 1, j, 0);
+      if (j > 0 && this._segFree(false, i, j - 1, from, to, memo)) relax(i, j - 1, 1);
+      if (j < NY - 1 && this._segFree(false, i, j, from, to, memo)) relax(i, j + 1, 1);
+    }
+
+    if (bestState < 0) return null;
+
+    const nodes = [];
+    let s = bestState;
+    let guard = 0;
+    while (s >= 0 && guard++ < 100000) {
+      const node = s >> 1;
+      nodes.push({ x: xs[node % NX], y: ys[(node / NX) | 0] });
+      if (startAt.has(s)) break;
+      s = parent[s];
+    }
+    const src = s >= 0 ? startAt.get(s) : null;
+    if (!src) return null;
+    nodes.reverse();
+
+    const pts = filterRedundantWaypoints(
+      [{ x: src.x, y: src.y }, ...nodes, { x: bestPort.x, y: bestPort.y }], 0.5
+    );
+    return { pts, fromPort: src, toPort: bestPort };
+  }
+
+  /** Grid line a finished segment sits on, or -1 when it is off-grid. */
+  _lineOf(horiz, pt) {
+    const idx = horiz ? this.yIdx.get(Math.round(pt.y)) : this.xIdx.get(Math.round(pt.x));
+    return idx === undefined ? -1 : idx;
+  }
+
+  reserve(route, owner) {
+    const pts = route.pts;
     for (let i = 0; i < pts.length - 1; i++) {
       const a = pts[i], b = pts[i + 1];
-      const horiz = Math.abs(a.y - b.y) < 0.5;
-      const vert = Math.abs(a.x - b.x) < 0.5;
-      if (horiz === vert) continue;
-      segs.push({
-        ri, i, horiz, lane: 0,
-        coord: horiz ? a.y : a.x,
-        lo: horiz ? Math.min(a.x, b.x) : Math.min(a.y, b.y),
-        hi: horiz ? Math.max(a.x, b.x) : Math.max(a.y, b.y),
-      });
+      const horiz = Math.abs(a.y - b.y) < 0.6;
+      const line = this._lineOf(horiz, a);
+      if (line < 0) continue;
+      this.res.add(horiz, line, horiz ? a.x : a.y, horiz ? b.x : b.y, owner);
     }
   }
 
-  for (const axis of [true, false]) {
-    const list = segs.filter(s => s.horiz === axis).sort((a, b) => a.coord - b.coord);
-    let start = 0;
-    for (let i = 1; i <= list.length; i++) {
-      if (i === list.length || list[i].coord - list[i - 1].coord > 4) {
-        spAssignLanes(list.slice(start, i));
-        start = i;
+  /**
+   * Score a finished route against the reservations currently in place.
+   * Geometric, so the same yardstick applies to an old route and a fresh one.
+   */
+  evaluate(route, owner, shares) {
+    const pts = route.pts;
+    let len = 0, cross = 0, overlap = 0;
+    const turns = Math.max(0, pts.length - 2);
+
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const horiz = Math.abs(a.y - b.y) < 0.6;
+      const coord = horiz ? a.y : a.x;
+      const lo = horiz ? Math.min(a.x, b.x) : Math.min(a.y, b.y);
+      const hi = horiz ? Math.max(a.x, b.x) : Math.max(a.y, b.y);
+      len += hi - lo;
+
+      // Running along another line: forbidden, so score it out of contention.
+      const sameArr = (horiz ? this.res.h : this.res.v).get(this._lineOf(horiz, a));
+      if (sameArr) {
+        for (const e of sameArr) {
+          if (e.owner === owner) continue;
+          const ov = Math.min(e.hi, hi) - Math.max(e.lo, lo);
+          if (ov > 1) overlap += ov;
+        }
+      }
+
+      // Crossings: perpendicular reservations cutting through this segment.
+      const perp = horiz ? this.res.v : this.res.h;
+      const axis = horiz ? this.xs : this.ys;
+      for (const [line, arr] of perp.entries()) {
+        const at = axis[line];
+        if (at <= lo + 1 || at >= hi - 1) continue;
+        for (const e of arr) {
+          if (e.owner === owner) continue;
+          if (coord > e.lo + 1 && coord < e.hi - 1) {
+            cross += shares(e.owner) ? SP_CROSS_COST_SHARED : SP_CROSS_COST;
+          }
+        }
       }
     }
-  }
 
-  const shifts = new Map();
-  for (const s of segs) {
-    if (!s.lane) continue;
-    const step = Math.ceil(s.lane / 2) * SP_LANE_GAP;
-    const delta = (s.lane % 2 === 1) ? step : -step;
-    if (!shifts.has(s.ri)) shifts.set(s.ri, []);
-    shifts.get(s.ri).push({ i: s.i, horiz: s.horiz, delta });
-  }
-
-  for (const [ri, list] of shifts.entries()) {
-    const r = routes[ri];
-    const pts = r.pts;
-    const original = pts.map(p => ({ x: p.x, y: p.y }));
-    const last = pts.length - 2;
-    let ok = true;
-
-    for (const sh of list) {
-      const ends = [];
-      if (sh.i === 0) ends.push({ pt: pts[0], t: r.e.from });
-      if (sh.i === last) ends.push({ pt: pts[pts.length - 1], t: r.e.to });
-      for (const end of ends) {
-        const span = spSpan(end.t, sh.horiz);
-        const next = (sh.horiz ? end.pt.y : end.pt.x) + sh.delta;
-        if (next < span.lo || next > span.hi) { ok = false; break; }
-      }
-      if (!ok) break;
-      if (sh.horiz) { pts[sh.i].y += sh.delta; pts[sh.i + 1].y += sh.delta; }
-      else { pts[sh.i].x += sh.delta; pts[sh.i + 1].x += sh.delta; }
-    }
-
-    if (!ok || !spRouteValid(pts, r.e.from, r.e.to, r.foreign)) {
-      r.pts = original;
-    }
+    return { cost: len + turns * SP_TURN_COST + cross + overlap * 5, len, turns, cross, overlap };
   }
 }
 
@@ -1303,11 +1448,13 @@ function spOffset(t, pt, side) {
 
 /**
  * Public entry point: clear every vertex and anchor, then re-route each line as
- * the shortest obstacle-free 90 degree path between the two table perimeters.
+ * the shortest obstacle-free 90 degree path that also avoids running along or
+ * needlessly crossing the other lines.
+ * Returns { routed, crossings, overlaps, passes }.
  */
 export function organizeLinesShortestPath(diagram, targetKeys = null) {
   const edges = getDiagramEdges(diagram, targetKeys);
-  if (!edges.length) return 0;
+  if (!edges.length) return { routed: 0, crossings: 0, overlaps: 0, passes: 0 };
 
   diagram.onHistorySnapshot?.(diagram.getSnapshot());
 
@@ -1317,46 +1464,95 @@ export function organizeLinesShortestPath(diagram, targetKeys = null) {
   const tables = (diagram.model?.tables || []).filter(
     t => Number.isFinite(t.x) && !diagram.hidden?.has((t.key || '').toLowerCase())
   );
+  if (!tables.length) return { routed: 0, crossings: 0, overlaps: 0, passes: 0 };
 
-  const routes = [];
-  for (const e of edges) {
+  const grid = spBuildGlobalGrid(tables);
+  const router = new SpRouter(tables, grid.xs, grid.ys);
+
+  const portCache = new Map();
+  const portsOf = (t) => {
+    let p = portCache.get(t);
+    if (!p) { p = router.portsFor(t); portCache.set(t, p); }
+    return p;
+  };
+
+  // Lines that touch the same table cross each other more forgivingly.
+  const touches = edges.map(e => [e.fk, e.tk]);
+  const shareFns = edges.map((_, i) => (j) => {
+    if (i === j) return false;
+    const a = touches[i], b = touches[j];
+    return a[0] === b[0] || a[0] === b[1] || a[1] === b[0] || a[1] === b[1];
+  });
+  const sharesWith = (i) => shareFns[i];
+
+  const items = [];
+  for (let i = 0; i < edges.length; i++) {
+    const e = edges[i];
     // Drop the current vertices and anchor positions before recomputing.
     diagram.edgeWaypoints.delete(e.key);
     diagram.edgeAnchors.delete(e.key);
     diagram.edgeRoutings?.delete(e.key);
 
-    const foreign = tables.filter(t => {
-      const k = (t.key || '').toLowerCase();
-      return k !== e.fk && k !== e.tk;
-    });
-
-    const grid = spBuildGrid(e.from, e.to, tables);
-    const res = spRoute(
-      e.from, e.to, foreign, grid.xs, grid.ys,
-      spPorts(e.from, grid.xs, grid.ys),
-      spPorts(e.to, grid.xs, grid.ys)
-    );
-    if (!res) continue;
-
-    routes.push({
-      e,
-      foreign,
-      pts: filterRedundantWaypoints(res.pts, 0.5),
-      fromPort: res.fromPort,
-      toPort: res.toPort,
-    });
+    // Unobstructed shortest route: sets the detour budget and is the fallback.
+    const base = router.route(e.from, e.to, portsOf(e.from), portsOf(e.to), false, Infinity, () => false);
+    if (!base) continue;
+    let len = 0;
+    for (let k = 0; k < base.pts.length - 1; k++) {
+      len += Math.abs(base.pts[k].x - base.pts[k + 1].x) + Math.abs(base.pts[k].y - base.pts[k + 1].y);
+    }
+    items.push({ e, idx: i, base, baseLen: len, budget: len * SP_DETOUR_FACTOR + SP_DETOUR_SLACK, route: null });
   }
 
-  spSeparateLanes(routes);
+  // Four tiers, each a fallback for the one above: inside the detour budget,
+  // then at any length, then with overlap priced instead of banned (only when
+  // the corridors are physically full), and finally the unobstructed route.
+  const attempt = (it) => {
+    const shares = sharesWith(it.idx);
+    const fp = portsOf(it.e.from), tp = portsOf(it.e.to);
+    return router.route(it.e.from, it.e.to, fp, tp, true, it.budget, shares)
+        || router.route(it.e.from, it.e.to, fp, tp, true, Infinity, shares)
+        || router.route(it.e.from, it.e.to, fp, tp, true, Infinity, shares, SP_OVERLAP_COST)
+        || it.base;
+  };
 
-  let count = 0;
-  for (const r of routes) {
-    const pts = r.pts;
-    const fromAnchor = { side: r.fromPort.side, offset: spOffset(r.e.from, pts[0], r.fromPort.side) };
-    const toAnchor = { side: r.toPort.side, offset: spOffset(r.e.to, pts[pts.length - 1], r.toPort.side) };
+  // Pass 1: route shortest-first, so tight lines claim the direct corridors.
+  const order = items.slice().sort((a, b) => a.baseLen - b.baseLen);
+  for (const it of order) {
+    it.route = attempt(it);
+    router.reserve(it.route, it.idx);
+  }
 
-    const p1 = getTableAnchor(r.e.from, r.e.fc, null, fromAnchor, 0, diagram.diagramLevel);
-    const p2 = getTableAnchor(r.e.to, r.e.tc, null, toAnchor, 0, diagram.diagramLevel);
+  // Pass 2..N: rip up the worst offender first and reroute against the rest.
+  let passes = 0;
+  for (; passes < SP_MAX_PASSES; passes++) {
+    let improved = false;
+    // Score once per edge, then sort — scoring inside the comparator would run
+    // the (linear in reservations) evaluation O(n log n) times per pass.
+    const worstFirst = items
+      .map(it => ({ it, cost: router.evaluate(it.route, it.idx, sharesWith(it.idx)).cost }))
+      .sort((a, b) => b.cost - a.cost)
+      .map(entry => entry.it);
+    for (const it of worstFirst) {
+      const shares = sharesWith(it.idx);
+      router.res.clearOwner(it.idx);
+      const before = router.evaluate(it.route, it.idx, shares).cost;
+      const fresh = attempt(it);
+      if (fresh && router.evaluate(fresh, it.idx, shares).cost < before - 0.5) {
+        it.route = fresh;
+        improved = true;
+      }
+      router.reserve(it.route, it.idx);
+    }
+    if (!improved) break;
+  }
+
+  for (const it of items) {
+    const pts = it.route.pts;
+    const fromAnchor = { side: it.route.fromPort.side, offset: spOffset(it.e.from, pts[0], it.route.fromPort.side) };
+    const toAnchor = { side: it.route.toPort.side, offset: spOffset(it.e.to, pts[pts.length - 1], it.route.toPort.side) };
+
+    const p1 = getTableAnchor(it.e.from, it.e.fc, null, fromAnchor, 0, diagram.diagramLevel);
+    const p2 = getTableAnchor(it.e.to, it.e.tc, null, toAnchor, 0, diagram.diagramLevel);
 
     // Re-seat the endpoints on the exact points the renderer will use, keeping
     // each stub perpendicular to its docking face.
@@ -1364,17 +1560,79 @@ export function organizeLinesShortestPath(diagram, targetKeys = null) {
     final[0] = { x: p1.x, y: p1.y };
     final[final.length - 1] = { x: p2.x, y: p2.y };
     if (final.length > 2) {
-      if (r.fromPort.dir === 0) final[1].y = p1.y; else final[1].x = p1.x;
-      if (r.toPort.dir === 0) final[final.length - 2].y = p2.y; else final[final.length - 2].x = p2.x;
+      if (it.route.fromPort.dir === 0) final[1].y = p1.y; else final[1].x = p1.x;
+      if (it.route.toPort.dir === 0) final[final.length - 2].y = p2.y; else final[final.length - 2].x = p2.x;
     }
 
-    diagram.edgeAnchors.set(r.e.key, { fromAnchor, toAnchor });
+    diagram.edgeAnchors.set(it.e.key, { fromAnchor, toAnchor });
     const interior = filterRedundantWaypoints(final, 0.5).slice(1, -1);
-    if (interior.length) diagram.edgeWaypoints.set(r.e.key, interior);
-    count++;
+    if (interior.length) diagram.edgeWaypoints.set(it.e.key, interior);
   }
 
+  // Report the real geometry rather than the search's internal cost.
+  const finished = items.map(it => it.route.pts);
   diagram.markDirty();
   diagram.onLayoutChange?.();
-  return count;
+  return {
+    routed: items.length,
+    crossings: spCountCrossings(finished),
+    overlaps: Math.round(spCountOverlap(finished)),
+    passes: passes + 1,
+  };
+}
+
+/** True X crossings between the finished routes (diagnostics and tests). */
+export function spCountCrossings(routes) {
+  const segs = [];
+  for (let r = 0; r < routes.length; r++) {
+    const pts = routes[r];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const horiz = Math.abs(a.y - b.y) < 0.6;
+      segs.push({
+        r, horiz,
+        coord: horiz ? a.y : a.x,
+        lo: horiz ? Math.min(a.x, b.x) : Math.min(a.y, b.y),
+        hi: horiz ? Math.max(a.x, b.x) : Math.max(a.y, b.y),
+      });
+    }
+  }
+  let n = 0;
+  for (let i = 0; i < segs.length; i++) {
+    for (let j = i + 1; j < segs.length; j++) {
+      const a = segs[i], b = segs[j];
+      if (a.r === b.r || a.horiz === b.horiz) continue;
+      const h = a.horiz ? a : b, v = a.horiz ? b : a;
+      if (v.coord > h.lo + 1 && v.coord < h.hi - 1 && h.coord > v.lo + 1 && h.coord < v.hi - 1) n++;
+    }
+  }
+  return n;
+}
+
+/** Total px of line drawn on top of another line (must stay at zero). */
+export function spCountOverlap(routes) {
+  const segs = [];
+  for (let r = 0; r < routes.length; r++) {
+    const pts = routes[r];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const horiz = Math.abs(a.y - b.y) < 0.6;
+      segs.push({
+        r, horiz,
+        coord: horiz ? a.y : a.x,
+        lo: horiz ? Math.min(a.x, b.x) : Math.min(a.y, b.y),
+        hi: horiz ? Math.max(a.x, b.x) : Math.max(a.y, b.y),
+      });
+    }
+  }
+  let px = 0;
+  for (let i = 0; i < segs.length; i++) {
+    for (let j = i + 1; j < segs.length; j++) {
+      const a = segs[i], b = segs[j];
+      if (a.r === b.r || a.horiz !== b.horiz || Math.abs(a.coord - b.coord) > 3) continue;
+      const ov = Math.min(a.hi, b.hi) - Math.max(a.lo, b.lo);
+      if (ov > 1) px += ov;
+    }
+  }
+  return px;
 }

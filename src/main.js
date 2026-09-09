@@ -1206,10 +1206,29 @@ if (btnEdgeRouting && routingMenu) {
     const selectedKeys = diagram.selectedEdgeKey ? [diagram.selectedEdgeKey] : null;
 
     if (item.id === 'btn-route-shortest-path') {
-      const count = organizeLinesShortestPath(diagram, selectedKeys);
-      saveLayoutDebounced();
-      if (editorMode === 'layout') updateLayoutTextarea();
-      flashButton(btnEdgeRouting, count ? `${count} ruta${count !== 1 ? 's' : ''} mínima${count !== 1 ? 's' : ''}` : 'Sin líneas');
+      // Rip-up and reroute is heavy on big diagrams, so park the button on a
+      // spinner and let the browser paint before the search blocks the thread.
+      const icon = btnEdgeRouting.innerHTML;
+      const title = btnEdgeRouting.title;
+      btnEdgeRouting.innerHTML = '<span class="spinner" style="width:14px;height:14px"></span>';
+      btnEdgeRouting.disabled = true;
+      btnEdgeRouting.title = 'Calculando rutas…';
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        let summary;
+        try {
+          summary = organizeLinesShortestPath(diagram, selectedKeys);
+        } finally {
+          btnEdgeRouting.disabled = false;
+          btnEdgeRouting.innerHTML = icon;
+          btnEdgeRouting.title = title;
+        }
+        saveLayoutDebounced();
+        if (editorMode === 'layout') updateLayoutTextarea();
+        const n = summary.routed;
+        flashButton(btnEdgeRouting, n
+          ? `${n} ruta${n !== 1 ? 's' : ''} · ${summary.crossings} cruce${summary.crossings !== 1 ? 's' : ''}`
+          : 'Sin líneas');
+      }));
       return;
     }
 
@@ -1470,9 +1489,15 @@ $('btn-save').addEventListener('click', () => {
 
 // ---- Share link (project encoded in the URL hash; nothing stored server-side) ----
 function flashButton(btn, text) {
-  const orig = btn.textContent;
+  // innerHTML, not textContent: icon buttons carry an <svg> that must survive.
+  const orig = btn.innerHTML;
+  const wasIcon = btn.classList.contains('icon');
+  if (wasIcon) btn.classList.remove('icon');   // let the button size to the message
   btn.textContent = text;
-  setTimeout(() => { btn.textContent = orig; }, 1500);
+  setTimeout(() => {
+    btn.innerHTML = orig;
+    if (wasIcon) btn.classList.add('icon');
+  }, 1500);
 }
 $('btn-share').addEventListener('click', async () => {
   const btn = $('btn-share');
