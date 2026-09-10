@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { computeLineHops } from '../src/line-hops.js';
-import { buildSVGPath } from '../src/routing.js';
+import { buildSVGPath, buildOrthogonalPoints, drawRoutePath } from '../src/routing.js';
 
 const horizontal = (key, y, x0 = 0, x1 = 400, routingStyle = 'ortho-sharp') => ({
   key, routingStyle,
@@ -77,4 +77,34 @@ test('a line travelled right to left bridges the other way round', () => {
   const p1 = { x: 400, y: 100, nx: -1, ny: 0 }, p2 = { x: 0, y: 100, nx: 1, ny: 0 };
   const d = buildSVGPath('ortho-sharp', p1, p2, [], 8, [], 0, [{ x: 200, y: 100 }]);
   assert.ok(d.includes('A 6 6 0 0 0 194 100'), `expected the mirrored bridge, got ${d}`);
+});
+
+// --- the painter the bridges share with the corners ----------------------
+
+test('a rounded corner never asks for more room than its runs can spare', () => {
+  // A short run followed by a 5px jog: arcTo does not clamp the radius itself,
+  // so asking for the full 8px used to double the path back and draw a hook.
+  const p1 = { x: 863, y: 113, nx: 1, ny: 0 };
+  const p2 = { x: 1017, y: 165, nx: 0, ny: -1 };
+  const waypoints = [{ x: 874, y: 113 }, { x: 994, y: 118 }];   // runs of 11, 5, 143 and 47px
+  const pts = buildOrthogonalPoints(p1, p2, waypoints, []);
+
+  const rounded = [];
+  const ctx = {
+    moveTo() {}, lineTo() {}, arc() {},
+    arcTo(x1, y1, x2, y2, r) { rounded.push({ x: x1, y: y1, r }); },
+  };
+  drawRoutePath(ctx, 'ortho-rounded', p1, p2, waypoints, 8, [], 0, null);
+
+  assert.ok(rounded.length, 'corners were drawn');
+  for (const call of rounded) {
+    const i = pts.findIndex(p => Math.abs(p.x - call.x) < 0.01 && Math.abs(p.y - call.y) < 0.01);
+    assert.ok(i > 0 && i < pts.length - 1, 'the rounding sits on a real corner');
+    const room = Math.min(
+      Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y),
+      Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y)) / 2;
+    assert.ok(call.r <= room + 0.001, `corner at ${call.x},${call.y}: radius ${call.r} needs ${room}`);
+    assert.ok(call.r > 0, 'a corner that has room still gets rounded');
+  }
+  assert.ok(rounded.some(c => c.r < 8), 'the tight corner was cut down from the default');
 });

@@ -1222,15 +1222,22 @@ export function drawRoutePath(ctx, style, p1, p2, waypoints = [], radius = 8, ob
     return;
   }
 
-  // 'ortho-rounded' with arcTo rounded corners. A bridge keeps its distance from
-  // the corner rounding, so the two curves never eat into each other.
+  // 'ortho-rounded' with arcTo rounded corners. The radius is cut down to what
+  // the two runs meeting at a corner can actually spare: arcTo does not clamp it
+  // itself, and a corner asked for more room than it has doubles the path back
+  // on itself, which draws as a hook. A bridge keeps clear of the rounding too,
+  // so the two curves never eat into each other.
   const r = Math.max(2, Math.min(14, radius));
   for (let i = 1; i < ortho.length - 1; i++) {
     const prev = ortho[i - 1];
     const cur = ortho[i];
     const next = ortho[i + 1];
-    if (Math.abs(prev.y - cur.y) < 1) canvasBridges(ctx, hops, prev.y, prev.x, cur.x, HOP_RADIUS + r);
-    ctx.arcTo(cur.x, cur.y, next.x, next.y, r);
+    const cr = Math.min(r,
+      Math.hypot(cur.x - prev.x, cur.y - prev.y) / 2,
+      Math.hypot(next.x - cur.x, next.y - cur.y) / 2);
+    if (Math.abs(prev.y - cur.y) < 1) canvasBridges(ctx, hops, prev.y, prev.x, cur.x, HOP_RADIUS + cr);
+    if (cr < 0.5) ctx.lineTo(cur.x, cur.y);
+    else ctx.arcTo(cur.x, cur.y, next.x, next.y, cr);
   }
   const lastA = ortho[ortho.length - 2], lastB = ortho[ortho.length - 1];
   if (Math.abs(lastA.y - lastB.y) < 1) canvasBridges(ctx, hops, lastA.y, lastA.x, lastB.x, HOP_RADIUS + r);
