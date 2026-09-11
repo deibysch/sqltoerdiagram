@@ -243,7 +243,7 @@ export function arrangeGroupsMinCrossings(diagram, opts = {}) {
   const GAP = INNER.nodesep;
 
   const model = diagram?.model;
-  if (!model?.tables?.length) throw new Error('No hay tablas en el diagrama para organizar.');
+  if (!model?.tables?.length) throw new Error('The diagram has no tables to arrange.');
 
   const level = diagram.diagramLevel || 'physical';
   for (const t of model.tables) {

@@ -1,4 +1,5 @@
-// "1 Columna o 1 Fila" — group layout, snapshot of commit c00d210.
+// "Optimized grid" (menu name; was "1 Columna o 1 Fila") — group layout,
+// snapshot of commit c00d210.
 //
 // Takes Spacing from the Arrange menu (added later). Direction is applied
 // afterwards by turning the finished layout (rotate-diagram.js). A diagram with
@@ -335,7 +336,7 @@ export function arrangeGroupsSingleAxis(diagram, opts = {}) {
   const GAP = CELL_GAP;
 
   const model = diagram?.model;
-  if (!model?.tables?.length) throw new Error('No hay tablas en el diagrama para organizar.');
+  if (!model?.tables?.length) throw new Error('The diagram has no tables to arrange.');
 
   const level = diagram.diagramLevel || 'physical';
   for (const t of model.tables) {

@@ -18,7 +18,7 @@ import { arrangeGroupsCompact } from './group-layout-compact.js';
 import { arrangeGroupsSingleAxis } from './group-layout-axis.js';
 import { arrangeGroupsMinCrossings } from './group-layout-crossings.js';
 import { orientDiagram, resetOrientation } from './rotate-diagram.js';
-import { organizeLinesClusterHighways, organizeLinesElkPorts, organizeLinesSmartFaces, organizeLinesPerimeterBus, organizeLinesAStar, organizeLinesShortestPath, resetLines } from './line-organizer.js';
+import { organizeLinesElkPorts, organizeLinesAStar, organizeLinesShortestPath, resetLines } from './line-organizer.js';
 
 const $ = (id) => document.getElementById(id);
 const sqlEl = $('sql');
@@ -42,16 +42,12 @@ diagram.onHistorySnapshot = (snapshot) => {
 
 const btnUndo = $('btn-undo');
 const btnRedo = $('btn-redo');
-const btnCanvasUndo = $('btn-canvas-undo');
-const btnCanvasRedo = $('btn-canvas-redo');
 
 function updateUndoRedoButtons() {
   const canUndo = history.canUndo();
   const canRedo = history.canRedo();
   if (btnUndo) { btnUndo.disabled = !canUndo; btnUndo.setAttribute('aria-disabled', String(!canUndo)); }
   if (btnRedo) { btnRedo.disabled = !canRedo; btnRedo.setAttribute('aria-disabled', String(!canRedo)); }
-  if (btnCanvasUndo) { btnCanvasUndo.disabled = !canUndo; btnCanvasUndo.setAttribute('aria-disabled', String(!canUndo)); }
-  if (btnCanvasRedo) { btnCanvasRedo.disabled = !canRedo; btnCanvasRedo.setAttribute('aria-disabled', String(!canRedo)); }
 }
 history.onChange(updateUndoRedoButtons);
 
@@ -110,8 +106,6 @@ diagram.onToolModeChange = (mode) => syncToolModeButtons(mode);
 
 btnUndo?.addEventListener('click', () => performUndo());
 btnRedo?.addEventListener('click', () => performRedo());
-btnCanvasUndo?.addEventListener('click', () => performUndo());
-btnCanvasRedo?.addEventListener('click', () => performRedo());
 
 // Global keyboard shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, Ctrl+A, V, H, Space)
 let preSpaceToolMode = null;
@@ -282,6 +276,7 @@ function applyLayoutData(model, data) {
   }
   if (data.edgeRouting) {
     diagram.setEdgeRouting(data.edgeRouting);
+    syncRoutingMenu();
   }
   // A layout that does not say which way it flows is taken as left to right,
   // which is how every fresh arrangement comes out. Either way, the directions
@@ -563,6 +558,10 @@ const layoutOpts = {
   spacing: localStorage.getItem('dbdiga-spacing') || 'comfortable',
 };
 
+// Which rearrange method is picked in the Arrange menu. One pick across both of
+// its sections, so 'algo:dagre' and 'group:btn-groups-compact' rule each other out.
+let rearrangePick = localStorage.getItem('dbdiga-rearrange') || `algo:${layoutOpts.algo}`;
+
 // input format: 'auto' detects SQL / Prisma / SQLAlchemy / Sequelize / DBML
 let formatChoice = localStorage.getItem('dbdiga-format') || 'auto';
 if (!FORMATS[formatChoice]) formatChoice = 'auto';
@@ -661,6 +660,11 @@ function rebuild({ arrange = false, restore = null } = {}) {
     diagram.edgeWaypoints.clear();
     diagram.edgeAnchors.clear();
     layout(result, layoutOpts, diagram.hidden);
+    // This lays the tables out with the without-groups algorithm, so that is what
+    // the menu shows, rather than a with-groups option picked earlier.
+    rearrangePick = `algo:${layoutOpts.algo}`;
+    localStorage.setItem('dbdiga-rearrange', rearrangePick);
+    syncMenu();
     resetOrientation(diagram);
     syncOrientation();
     if (result.groups?.length) {
@@ -680,6 +684,11 @@ function rebuild({ arrange = false, restore = null } = {}) {
     else diagram.fit();
   } else if (firstRender) {
     layout(result, layoutOpts, diagram.hidden);
+    // This lays the tables out with the without-groups algorithm, so that is what
+    // the menu shows, rather than a with-groups option picked earlier.
+    rearrangePick = `algo:${layoutOpts.algo}`;
+    localStorage.setItem('dbdiga-rearrange', rearrangePick);
+    syncMenu();
     resetOrientation(diagram);
     if (result.groups?.length) {
       diagram.setAnnotations(syncModelGroups(result, diagram.annotations));
@@ -808,14 +817,42 @@ $('btn-example2')?.addEventListener('click', loadExample);
 // Arrange button: re-arrange with current opts; the ▾ part toggles the menu.
 const arrangeMenu = $('arrange-menu');
 function syncMenu() {
+  // Both rearrange sections share one pick: choosing a with-groups option
+  // unchecks the without-groups one, and the other way round.
   for (const el of arrangeMenu.querySelectorAll('[data-algo]'))
-    el.classList.toggle('active', el.dataset.algo === layoutOpts.algo);
+    el.classList.toggle('active', rearrangePick === `algo:${el.dataset.algo}`);
+  for (const el of arrangeMenu.querySelectorAll('[id^="btn-groups-"]'))
+    el.classList.toggle('active', rearrangePick === `group:${el.id}`);
   for (const el of arrangeMenu.querySelectorAll('[data-orient]'))
     el.classList.toggle('active', el.dataset.orient === (diagram.orientation || 'LR'));
   for (const el of arrangeMenu.querySelectorAll('[data-spacing]'))
     el.classList.toggle('active', el.dataset.spacing === layoutOpts.spacing);
 }
+
+function setRearrangePick(pick) {
+  rearrangePick = pick;
+  localStorage.setItem('dbdiga-rearrange', pick);
+  syncMenu();
+}
+
+// Every section of the Arrange and Line Style menus is a button that expands its
+// own options. One open at a time, so a menu never runs off the screen.
+function wireMenuSections(menu) {
+  menu.addEventListener('click', (e) => {
+    const head = e.target.closest('.menu-section');
+    if (!head) return;
+    const wasOpen = head.getAttribute('aria-expanded') === 'true';
+    for (const h of menu.querySelectorAll('.menu-section')) {
+      const show = !wasOpen && h === head;
+      h.setAttribute('aria-expanded', show ? 'true' : 'false');
+      const body = menu.querySelector(`[data-section-body="${h.dataset.section}"]`);
+      if (body) body.hidden = !show;
+    }
+  });
+}
+
 syncMenu();
+wireMenuSections(arrangeMenu);
 
 $('btn-arrange').addEventListener('click', (e) => {
   e.stopPropagation();
@@ -831,12 +868,13 @@ arrangeMenu.addEventListener('click', (e) => {
 
   const groupArrangers = {
     'btn-groups-fast-grid': executeExistingGroupsReorder,
-    'btn-groups-single-axis': () => runGroupArrange(arrangeGroupsSingleAxis, '1 Columna o 1 Fila'),
-    'btn-groups-min-crossings': () => runGroupArrange(arrangeGroupsMinCrossings, 'Minimos Cruces'),
-    'btn-groups-compact': () => runGroupArrange(arrangeGroupsCompact, 'Lineas cortas y compacto'),
+    'btn-groups-single-axis': () => runGroupArrange(arrangeGroupsSingleAxis, 'Optimized grid'),
+    'btn-groups-min-crossings': () => runGroupArrange(arrangeGroupsMinCrossings, 'Fewest crossings'),
+    'btn-groups-compact': () => runGroupArrange(arrangeGroupsCompact, 'Short lines, compact'),
   };
   if (groupArrangers[item.id]) {
     arrangeMenu.hidden = true;
+    setRearrangePick(`group:${item.id}`);
     groupArrangers[item.id]();
     return;
   }
@@ -850,6 +888,8 @@ arrangeMenu.addEventListener('click', (e) => {
   if (item.dataset.algo) {
     layoutOpts.algo = item.dataset.algo;
     localStorage.setItem('dbdiga-algo', layoutOpts.algo);
+    rearrangePick = `algo:${layoutOpts.algo}`;
+    localStorage.setItem('dbdiga-rearrange', rearrangePick);
   }
   if (item.dataset.orient) {
     // Direction turns what is on the canvas; it never re-arranges anything.
@@ -879,7 +919,7 @@ arrangeMenu.addEventListener('click', (e) => {
         if (editorMode === 'layout') updateLayoutTextarea();
         if (editorMode === 'visual') visualEditor?.render();
         if (res.repaired) {
-          flashButton(btn, `${res.repaired} línea${res.repaired !== 1 ? 's' : ''} re-trazada${res.repaired !== 1 ? 's' : ''}`);
+          flashButton(btn, `${res.repaired} line${res.repaired !== 1 ? 's' : ''} re-routed`);
         }
       }));
     }
@@ -888,6 +928,14 @@ arrangeMenu.addEventListener('click', (e) => {
   if (item.dataset.spacing) {
     layoutOpts.spacing = item.dataset.spacing;
     localStorage.setItem('dbdiga-spacing', layoutOpts.spacing);
+    // Re-run whatever is picked, so the new spacing lands on the arrangement you
+    // chose instead of throwing you back to the hierarchical one.
+    if (rearrangePick.startsWith('group:')) {
+      syncMenu();
+      arrangeMenu.hidden = true;
+      groupArrangers[rearrangePick.slice(6)]?.();
+      return;
+    }
   }
   syncMenu();
   rebuild({ arrange: true });
@@ -933,7 +981,7 @@ modalAI?.addEventListener('click', (e) => {
 
 async function executeAIReorder(isGemini = false) {
   if (!diagram.model || !diagram.model.tables || !diagram.model.tables.length) {
-    alert('No hay tablas en el diagrama para organizar.');
+    alert('The diagram has no tables to arrange.');
     return;
   }
 
@@ -942,7 +990,7 @@ async function executeAIReorder(isGemini = false) {
 
   if (aiStatusBox) {
     aiStatusBox.hidden = false;
-    aiStatusText.textContent = isGemini ? 'Consultando a Google Gemini AI...' : 'Ejecutando IA Semántica Local...';
+    aiStatusText.textContent = isGemini ? 'Asking Google Gemini AI...' : 'Running the local semantic AI...';
   }
 
   diagram.onHistorySnapshot?.(diagram.getSnapshot());
@@ -987,7 +1035,7 @@ async function executeAIReorder(isGemini = false) {
     console.error('AI Arrange Error:', err);
     if (aiStatusBox) {
       aiStatusBox.hidden = false;
-      aiStatusText.textContent = 'Error: ' + (err.message || 'Fallo en reorganización');
+      aiStatusText.textContent = 'Error: ' + (err.message || 'Rearrange failed');
     }
   }
 }
@@ -1017,7 +1065,7 @@ function runGroupArrange(arrange, label) {
       btn.disabled = false;
       btn.innerHTML = original;
       console.warn(`${label} warning:`, err);
-      alert(err.message || 'No se pudieron organizar los grupos.');
+      alert(err.message || 'Could not arrange the groups.');
       return;
     }
     btn.disabled = false;
@@ -1026,19 +1074,19 @@ function runGroupArrange(arrange, label) {
     saveLayoutDebounced();
     if (editorMode === 'layout') updateLayoutTextarea();
     if (editorMode === 'visual') visualEditor?.render();
-    const loose = res?.loose ? ` + ${res.loose} suelta${res.loose !== 1 ? 's' : ''}` : '';
+    const loose = res?.loose ? ` + ${res.loose} loose` : '';
     const groups = res?.groups ?? 0;
     // With no groups the whole diagram was one invisible group: say so, rather
     // than a baffling "0 grupos".
     flashButton(btn, res?.implicit
-      ? `Sin grupos · ${res.tables} tablas`
-      : `${groups} grupo${groups !== 1 ? 's' : ''}${loose}`);
+      ? `No groups · ${res.tables} tables`
+      : `${groups} group${groups !== 1 ? 's' : ''}${loose}`);
   }));
 }
 
 function executeExistingGroupsReorder() {
   if (!diagram.model || !diagram.model.tables || !diagram.model.tables.length) {
-    alert('No hay tablas en el diagrama para organizar.');
+    alert('The diagram has no tables to arrange.');
     return;
   }
 
@@ -1081,10 +1129,10 @@ function executeExistingGroupsReorder() {
     if (editorMode === 'visual') visualEditor?.render();
 
     closeAIModal();
-    flashButton($('btn-arrange'), res.implicit ? 'Organizado sin grupos' : 'Grupos Organizados');
+    flashButton($('btn-arrange'), res.implicit ? 'Arranged without groups' : 'Groups arranged');
   } catch (err) {
     console.warn('Arrange existing groups warning:', err);
-    alert(err.message || 'No se pudieron organizar los grupos existentes.');
+    alert(err.message || 'Could not arrange the existing groups.');
   }
 }
 
@@ -1306,29 +1354,27 @@ modeToggle.addEventListener('click', (e) => {
 });
 setMode(editorMode);
 
-// Connection color mode button in zoom controls
-const btnEdgeColors = $('btn-edge-colors');
+// Connection colors live in the Line Style menu, one item per mode.
 function syncEdgeColorsBtn() {
-  if (!btnEdgeColors) return;
-  const isMulti = diagram.edgeColorMode !== 'single';
-  btnEdgeColors.title = isMulti ? 'Connection colors: Multicolor (Click to switch to Single color)' : 'Connection colors: Single color (Click to switch to Multicolor)';
-  btnEdgeColors.classList.toggle('active', isMulti);
+  const mode = diagram.edgeColorMode === 'single' ? 'single' : 'multi';
+  for (const el of document.querySelectorAll('[data-edge-colors]'))
+    el.classList.toggle('active', el.dataset.edgeColors === mode);
 }
-if (btnEdgeColors) {
-  btnEdgeColors.addEventListener('click', () => {
-    const next = diagram.edgeColorMode === 'single' ? 'multi' : 'single';
-    diagram.setEdgeColorMode(next);
-    syncEdgeColorsBtn();
-    saveLayoutDebounced();
-    if (editorMode === 'layout') updateLayoutTextarea();
-  });
-  syncEdgeColorsBtn();
+syncEdgeColorsBtn();
+
+// ... and the menu ticks the line style the diagram is actually drawn with.
+function syncRoutingMenu() {
+  const style = diagram.edgeRouting || 'ortho-rounded';
+  for (const el of document.querySelectorAll('[data-routing]'))
+    el.classList.toggle('active', el.dataset.routing === style);
 }
+syncRoutingMenu();
 
 // Line routing style selector button and menu
 const btnEdgeRouting = $('btn-edge-routing');
 const routingMenu = $('routing-menu');
 if (btnEdgeRouting && routingMenu) {
+  wireMenuSections(routingMenu);
   btnEdgeRouting.addEventListener('click', (e) => {
     e.stopPropagation();
     routingMenu.hidden = !routingMenu.hidden;
@@ -1338,6 +1384,14 @@ if (btnEdgeRouting && routingMenu) {
     const item = e.target.closest('.menu-item');
     if (!item) return;
     routingMenu.hidden = true;
+
+    if (item.dataset.edgeColors) {
+      diagram.setEdgeColorMode(item.dataset.edgeColors);
+      syncEdgeColorsBtn();
+      saveLayoutDebounced();
+      if (editorMode === 'layout') updateLayoutTextarea();
+      return;
+    }
 
     const selectedKeys = diagram.selectedEdgeKey ? [diagram.selectedEdgeKey] : null;
 
@@ -1349,7 +1403,7 @@ if (btnEdgeRouting && routingMenu) {
       const title = btnEdgeRouting.title;
       btnEdgeRouting.innerHTML = '<span class="spinner" style="width:14px;height:14px"></span>';
       btnEdgeRouting.disabled = true;
-      btnEdgeRouting.title = 'Calculando rutas…';
+      btnEdgeRouting.title = 'Calculating routes…';
       requestAnimationFrame(() => requestAnimationFrame(() => {
         let summary;
         try {
@@ -1363,49 +1417,28 @@ if (btnEdgeRouting && routingMenu) {
         if (editorMode === 'layout') updateLayoutTextarea();
         const n = summary.routed;
         flashButton(btnEdgeRouting, n
-          ? `${n} ruta${n !== 1 ? 's' : ''} · ${summary.crossings} cruce${summary.crossings !== 1 ? 's' : ''}`
-          : 'Sin líneas');
+          ? `${n} route${n !== 1 ? 's' : ''} · ${summary.crossings} crossing${summary.crossings !== 1 ? 's' : ''}`
+          : 'No lines');
       }));
       return;
     }
 
-    if (item.id === 'btn-route-cluster-highway') {
-      const count = organizeLinesClusterHighways(diagram, selectedKeys);
-      saveLayoutDebounced();
-      if (editorMode === 'layout') updateLayoutTextarea();
-      flashButton(btnEdgeRouting, count ? `${count} autopista${count !== 1 ? 's' : ''}` : 'Rutas limpias');
-      return;
-    }
 
     if (item.id === 'btn-route-elk-ports') {
       const count = organizeLinesElkPorts(diagram, selectedKeys);
       saveLayoutDebounced();
       if (editorMode === 'layout') updateLayoutTextarea();
-      flashButton(btnEdgeRouting, count ? `${count} ruta${count !== 1 ? 's' : ''} ELK` : 'Rutas limpias');
+      flashButton(btnEdgeRouting, count ? `${count} route${count !== 1 ? 's' : ''}` : 'Clean routes');
       return;
     }
 
-    if (item.id === 'btn-route-smart-faces') {
-      const count = organizeLinesSmartFaces(diagram, selectedKeys);
-      saveLayoutDebounced();
-      if (editorMode === 'layout') updateLayoutTextarea();
-      flashButton(btnEdgeRouting, count ? `${count} ruta${count !== 1 ? 's' : ''}` : 'Rutas limpias');
-      return;
-    }
 
-    if (item.id === 'btn-route-perimeter-bus') {
-      const count = organizeLinesPerimeterBus(diagram, selectedKeys);
-      saveLayoutDebounced();
-      if (editorMode === 'layout') updateLayoutTextarea();
-      flashButton(btnEdgeRouting, count ? `${count} bus${count !== 1 ? 'es' : ''}` : 'Rutas limpias');
-      return;
-    }
 
     if (item.id === 'btn-route-astar-grid') {
       const count = organizeLinesAStar(diagram, selectedKeys);
       saveLayoutDebounced();
       if (editorMode === 'layout') updateLayoutTextarea();
-      flashButton(btnEdgeRouting, count ? `${count} ruta${count !== 1 ? 's' : ''} A*` : 'Rutas limpias');
+      flashButton(btnEdgeRouting, count ? `${count} route${count !== 1 ? 's' : ''}` : 'Clean routes');
       return;
     }
 
@@ -1413,13 +1446,14 @@ if (btnEdgeRouting && routingMenu) {
       resetLines(diagram, selectedKeys);
       saveLayoutDebounced();
       if (editorMode === 'layout') updateLayoutTextarea();
-      flashButton(btnEdgeRouting, 'Líneas directas');
+      flashButton(btnEdgeRouting, 'Direct lines');
       return;
     }
 
     const style = item.dataset.routing;
     if (style) {
       diagram.setEdgeRouting(style);
+      syncRoutingMenu();
       saveLayoutDebounced();
       if (editorMode === 'layout') updateLayoutTextarea();
     }
@@ -1527,19 +1561,17 @@ function exportImage(kind) {
 // ---- Diagram Level menu (Physical / Logical / Conceptual) ----
 const diagramLevelBtn = $('btn-diagram-level');
 const diagramLevelMenu = $('diagram-level-menu');
-const diagramLevelIcon = $('diagram-level-icon');
 const diagramLevelLabel = $('diagram-level-label');
 
 const LEVEL_META = {
-  physical: { icon: '⚙️', label: 'Physical' },
-  logical: { icon: '📐', label: 'Logical' },
-  conceptual: { icon: '🏢', label: 'Conceptual' },
+  physical: { label: 'Physical' },
+  logical: { label: 'Logical' },
+  conceptual: { label: 'Conceptual' },
 };
 
 function syncDiagramLevelUI() {
   const current = diagram.diagramLevel || 'physical';
   const meta = LEVEL_META[current] || LEVEL_META.physical;
-  if (diagramLevelIcon) diagramLevelIcon.textContent = meta.icon;
   if (diagramLevelLabel) diagramLevelLabel.textContent = meta.label;
   if (diagramLevelMenu) {
     for (const btn of diagramLevelMenu.querySelectorAll('[data-level]')) {

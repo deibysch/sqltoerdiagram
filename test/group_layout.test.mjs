@@ -197,7 +197,7 @@ function buildUngroupedDiagram() {
 
 for (const [name, arrange] of [
   ['Líneas cortas y compacto', arrangeGroupsCompact],
-  ['1 Columna o 1 Fila', arrangeGroupsSingleAxis],
+  ['Optimized grid', arrangeGroupsSingleAxis],
   ['Mínimos Cruces', arrangeGroupsMinCrossings],
 ]) {
   test(`${name} lays out a diagram with no groups as one invisible group`, () => {
@@ -359,7 +359,7 @@ test('arrangeGroupsCompact shortens lines rather than merely untangling them', (
 // the whole point of keeping three, and each one's numbers live in its header.
 
 for (const [name, arrange] of [
-  ['1 Columna o 1 Fila (group-layout-axis)', arrangeGroupsSingleAxis],
+  ['Optimized grid (group-layout-axis)', arrangeGroupsSingleAxis],
   ['Minimos Cruces (group-layout-crossings)', arrangeGroupsMinCrossings],
 ]) {
   test(`${name} honours the shared group-layout contract`, () => {

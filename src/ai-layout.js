@@ -600,7 +600,7 @@ export function reorderWithLocalAI(model, options = {}) {
 export function reorderWithExistingGroups(model, annotations = [], options = {}) {
   const tables = model?.tables || [];
   if (!tables.length) {
-    throw new Error('No hay tablas en el modelo.');
+    throw new Error('The model has no tables.');
   }
 
   const tableMap = new Map(tables.map(t => [t.key.toLowerCase(), t]));
