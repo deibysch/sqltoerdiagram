@@ -656,6 +656,10 @@ function rebuild({ arrange = false, restore = null } = {}) {
 
   if (arrange) {
     diagram.onHistorySnapshot?.(diagram.getSnapshot());
+    // Every table is about to move, so stored vertices and anchor positions would
+    // describe geometry that no longer exists: drop them, as the group layouts do.
+    diagram.edgeWaypoints.clear();
+    diagram.edgeAnchors.clear();
     layout(result, layoutOpts, diagram.hidden);
     resetOrientation(diagram);
     syncOrientation();
@@ -815,8 +819,9 @@ syncMenu();
 
 $('btn-arrange').addEventListener('click', (e) => {
   e.stopPropagation();
-  if (arrangeMenu.hidden) { arrangeMenu.hidden = false; }
-  else { arrangeMenu.hidden = true; rebuild({ arrange: true }); }
+  // Only opens and closes the menu. Arranging is always an explicit pick inside
+  // it, so closing the menu can never re-arrange the diagram behind your back.
+  arrangeMenu.hidden = !arrangeMenu.hidden;
 });
 
 arrangeMenu.addEventListener('click', (e) => {
