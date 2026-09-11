@@ -1028,7 +1028,11 @@ function runGroupArrange(arrange, label) {
     if (editorMode === 'visual') visualEditor?.render();
     const loose = res?.loose ? ` + ${res.loose} suelta${res.loose !== 1 ? 's' : ''}` : '';
     const groups = res?.groups ?? 0;
-    flashButton(btn, `${groups} grupo${groups !== 1 ? 's' : ''}${loose}`);
+    // With no groups the whole diagram was one invisible group: say so, rather
+    // than a baffling "0 grupos".
+    flashButton(btn, res?.implicit
+      ? `Sin grupos · ${res.tables} tablas`
+      : `${groups} grupo${groups !== 1 ? 's' : ''}${loose}`);
   }));
 }
 
@@ -1055,7 +1059,9 @@ function executeExistingGroupsReorder() {
     diagram.edgeWaypoints.clear();
     diagram.edgeAnchors.clear();
 
-    if (res.annotations && res.annotations.length) {
+    // Without groups there is no box to put back, but a stale empty group box
+    // still goes, exactly as the other three algorithms drop it.
+    if (res.annotations && (res.annotations.length || res.implicit)) {
       const notes = diagram.annotations.filter(a => a.type === 'note');
       diagram.setAnnotations([...notes, ...res.annotations]);
     }
@@ -1075,7 +1081,7 @@ function executeExistingGroupsReorder() {
     if (editorMode === 'visual') visualEditor?.render();
 
     closeAIModal();
-    flashButton($('btn-arrange'), 'Grupos Organizados');
+    flashButton($('btn-arrange'), res.implicit ? 'Organizado sin grupos' : 'Grupos Organizados');
   } catch (err) {
     console.warn('Arrange existing groups warning:', err);
     alert(err.message || 'No se pudieron organizar los grupos existentes.');

@@ -1,7 +1,11 @@
 // "1 Columna o 1 Fila" — group layout, snapshot of commit c00d210.
 //
 // Takes Spacing from the Arrange menu (added later). Direction is applied
-// afterwards by turning the finished layout (rotate-diagram.js). Otherwise
+// afterwards by turning the finished layout (rotate-diagram.js). A diagram with
+// no groups is laid out as one invisible group (added later); only then are just
+// the 3 best-seeded grid shapes searched and the settle passes skipped. The
+// crossing count also gained a bounding-box pre-check, which changes speed only:
+// positions verified identical, with and without groups. Otherwise
 // FROZEN. One of four independent group-layout algorithms the user keeps side by
 // side to pick from. Do not refactor it towards the others and do not port fixes
 // into it: it is kept precisely because it lays a diagram out differently, and
@@ -34,6 +38,7 @@ const GL_SWAP_ROUNDS = 6;    // local-search sweeps per group / per group placem
 const GL_MAX_SHAPES = 12;    // candidate grid shapes evaluated per layout problem
 const GL_SETTLE_ITERS = 4;   // inner-layout / group-placement alternations before giving up
 const GL_POLISH_ROUNDS = 6;  // whole-canvas swap sweeps once the hierarchy is seeded
+const GL_IMPLICIT_SHAPES = 3; // grid shapes searched when the whole diagram is one invisible group
 
 /** Do the two boxes share any vertical or horizontal overlap? */
 function sharesAxis(a, b) {
@@ -46,11 +51,17 @@ function centreOf(b) {
   return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
 }
 
+/** Which side of the line p->q the point r falls on: -1, 0 or 1. */
+function orient(p, q, r) {
+  return Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+}
+
 /** Do two centre-to-centre segments properly cross? */
 function segmentsCross(a1, a2, b1, b2) {
-  const d = (p, q, r) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
-  const d1 = d(a1, a2, b1), d2 = d(a1, a2, b2);
-  const d3 = d(b1, b2, a1), d4 = d(b1, b2, a2);
+  // `orient` lives outside so no closure is built per call: this runs millions
+  // of times when the whole diagram is scored as one group.
+  const d1 = orient(a1, a2, b1), d2 = orient(a1, a2, b2);
+  const d3 = orient(b1, b2, a1), d4 = orient(b1, b2, a2);
   return d1 !== d2 && d3 !== d4 && d1 !== 0 && d2 !== 0 && d3 !== 0 && d4 !== 0;
 }
 
@@ -80,8 +91,15 @@ function estimateCost(boxes, links, anchors = []) {
     segs.push([c, { x: an.x, y: an.y }]);
   }
 
+  // Segments whose bounding boxes are apart cannot cross, so they skip the exact
+  // test: the same count, far fewer tests. With no groups the whole diagram is
+  // scored at once, and testing every pair made 60 tables take 19 s.
+  const bb = segs.map(([p, q]) => [Math.min(p.x, q.x), Math.max(p.x, q.x), Math.min(p.y, q.y), Math.max(p.y, q.y)]);
   for (let i = 0; i < segs.length; i++) {
+    const a = bb[i];
     for (let j = i + 1; j < segs.length; j++) {
+      const b = bb[j];
+      if (a[1] < b[0] || b[1] < a[0] || a[3] < b[2] || b[3] < a[2]) continue;
       if (segmentsCross(segs[i][0], segs[i][1], segs[j][0], segs[j][1])) cost += GL_CROSS_COST;
     }
   }
@@ -147,7 +165,7 @@ function placeInGrid(items, order, cols, gap, originX = 0, originY = 0) {
  * Choose the grid shape and the ordering that route best, by trying every
  * sensible shape and improving each with pairwise swaps.
  */
-function solvePlacement(items, links, anchors, gap, wantWide = true) {
+function solvePlacement(items, links, anchors, gap, wantWide = true, maxShapes = Infinity) {
   const n = items.length;
   if (!n) return { boxes: [], w: 0, h: 0, order: [], cols: 1 };
   if (n === 1) {
@@ -160,8 +178,28 @@ function solvePlacement(items, links, anchors, gap, wantWide = true) {
   for (const l of links) { degree[l.a] += l.w; degree[l.b] += l.w; }
   const seed = Array.from({ length: n }, (_, i) => i).sort((a, b) => degree[b] - degree[a]);
 
+  // Every shape costs a full swap search, which takes seconds once one group
+  // holds the whole diagram. When capped, search only the shapes the seed order
+  // already scores best in: on the 60- and 100-table test diagrams without
+  // groups, the winner was among the three best seeds.
+  let shapes = candidateShapes(n);
+  if (shapes.length > maxShapes) {
+    const seedScore = (shape) => {
+      const p = placeInGrid(items, seed, shape.cols, gap);
+      const bulk = Math.max(p.w, p.h) / Math.max(1, Math.min(p.w, p.h));
+      const facesRight = wantWide ? p.w >= p.h : p.h >= p.w;
+      return (estimateCost(p.boxes, links, anchors) + bulk * 12) * (facesRight ? 1 : 3);
+    };
+    const keep = new Set(shapes
+      .map(s => [s, seedScore(s)])
+      .sort((a, b) => a[1] - b[1])
+      .slice(0, maxShapes)
+      .map(e => e[0]));
+    shapes = shapes.filter(s => keep.has(s));  // original order, so ties resolve as before
+  }
+
   let best = null;
-  for (const shape of candidateShapes(n)) {
+  for (const shape of shapes) {
     const order = seed.slice();
     let placed = placeInGrid(items, order, shape.cols, gap);
     let cost = estimateCost(placed.boxes, links, anchors);
@@ -305,9 +343,13 @@ export function arrangeGroupsSingleAxis(diagram, opts = {}) {
     t.w = dims.w; t.h = dims.h; t.rowH = dims.rowH; t.headerH = dims.headerH;
   }
 
-  const { groups, loose, byKey } = collectGroupsSingleAxis(model, diagram.annotations);
-  if (!groups.length) {
-    throw new Error('No hay grupos definidos. Crea grupos con "+ Group" antes de usar esta opción.');
+  let { groups, loose, byKey } = collectGroupsSingleAxis(model, diagram.annotations);
+  // No groups at all: the whole diagram becomes one invisible group, so the same
+  // machinery still lays it out. It never gets a box, and nothing is left loose.
+  const implicit = !groups.length;
+  if (implicit) {
+    groups = [{ keys: model.tables.map(t => t.key.toLowerCase()), tables: model.tables.slice(), implicit }];
+    loose = [];
   }
 
   diagram.onHistorySnapshot?.(diagram.getSnapshot());
@@ -346,7 +388,7 @@ export function arrangeGroupsSingleAxis(diagram, opts = {}) {
           }
         }
       }
-      const sol = solvePlacement(g.tables, inner, anchors, CELL_GAP);
+      const sol = solvePlacement(g.tables, inner, anchors, CELL_GAP, true, g.implicit ? GL_IMPLICIT_SHAPES : Infinity);
       g.inner = sol;
       g.w = sol.w + PAD_X * 2;
       g.h = sol.h + PAD_TOP + PAD_BOTTOM;
@@ -401,20 +443,24 @@ export function arrangeGroupsSingleAxis(diagram, opts = {}) {
   // The inner layouts aim at where the neighbouring groups are, and moving the
   // groups changes that — so alternate the two until the group order settles,
   // otherwise every table is pointed at an address the groups have left.
-  let lastOrder = placement.order.join(',');
-  for (let iter = 0; iter < GL_SETTLE_ITERS; iter++) {
-    layoutInner(snapshotCentres());
-    placement = placeGroups();
-    applyInner();
-    const order = placement.order.join(',');
-    if (order === lastOrder) break;
-    lastOrder = order;
-  }
+  // A lone invisible group has no neighbours to aim at, so these passes would
+  // only recompute the very same inner layout, twice. Skip them.
+  if (!implicit) {
+    let lastOrder = placement.order.join(',');
+    for (let iter = 0; iter < GL_SETTLE_ITERS; iter++) {
+      layoutInner(snapshotCentres());
+      placement = placeGroups();
+      applyInner();
+      const order = placement.order.join(',');
+      if (order === lastOrder) break;
+      lastOrder = order;
+    }
 
-  // One last inner pass against the final group positions, which stay put; the
-  // boxes are measured from the tables afterwards, so a size change is harmless.
-  layoutInner(snapshotCentres());
-  applyInner();
+    // One last inner pass against the final group positions, which stay put; the
+    // boxes are measured from the tables afterwards, so a size change is harmless.
+    layoutInner(snapshotCentres());
+    applyInner();
+  }
   const finalPlacement = placement;
 
   // --- Global polish -------------------------------------------------------
@@ -540,7 +586,7 @@ export function arrangeGroupsSingleAxis(diagram, opts = {}) {
   placeLoose();
   // --- Group boxes, regenerated to wrap what is actually inside them.
   const notes = (diagram.annotations || []).filter(a => a.type !== 'group');
-  const boxes = groups.map((g, i) => {
+  const boxes = groups.filter(g => !g.implicit).map((g, i) => {
     const xs = g.tables.map(t => t.x), ys = g.tables.map(t => t.y);
     const x1 = Math.max(...g.tables.map(t => t.x + t.w));
     const y1 = Math.max(...g.tables.map(t => t.y + t.h));
@@ -563,7 +609,8 @@ export function arrangeGroupsSingleAxis(diagram, opts = {}) {
   diagram.onLayoutChange?.();
 
   return {
-    groups: groups.length,
+    groups: implicit ? 0 : groups.length,
+    implicit,
     tables: model.tables.length,
     loose: loose.length,
     annotations: boxes,

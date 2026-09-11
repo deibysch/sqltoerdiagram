@@ -1,7 +1,9 @@
 // "Minimos Cruces" — group layout, snapshot of commit 6a25125.
 //
 // Takes Spacing from the Arrange menu (added later). Direction is applied
-// afterwards by turning the finished layout (rotate-diagram.js). Otherwise
+// afterwards by turning the finished layout (rotate-diagram.js). A diagram with
+// no groups is laid out as one invisible group (added later), which leaves plain
+// dagre over every table. Otherwise
 // FROZEN. One of four independent group-layout algorithms the user keeps side by
 // side to pick from. Do not refactor it towards the others and do not port fixes
 // into it: it is kept precisely because it lays a diagram out differently, and
@@ -249,9 +251,13 @@ export function arrangeGroupsMinCrossings(diagram, opts = {}) {
     t.w = dims.w; t.h = dims.h; t.rowH = dims.rowH; t.headerH = dims.headerH;
   }
 
-  const { groups, loose } = collectGroupsMinCrossings(model, diagram.annotations);
-  if (!groups.length) {
-    throw new Error('No hay grupos definidos. Crea grupos con "+ Group" antes de usar esta opción.');
+  let { groups, loose } = collectGroupsMinCrossings(model, diagram.annotations);
+  // No groups at all: the whole diagram becomes one invisible group, so the same
+  // machinery still lays it out. It never gets a box, and nothing is left loose.
+  const implicit = !groups.length;
+  if (implicit) {
+    groups = [{ keys: model.tables.map(t => t.key.toLowerCase()), tables: model.tables.slice(), implicit }];
+    loose = [];
   }
 
   diagram.onHistorySnapshot?.(diagram.getSnapshot());
@@ -453,7 +459,7 @@ export function arrangeGroupsMinCrossings(diagram, opts = {}) {
   placeLoose();
   // --- Group boxes, measured from the tables actually inside them.
   const notes = (diagram.annotations || []).filter(a => a.type !== 'group');
-  const boxes = groups.map((g, i) => {
+  const boxes = groups.filter(g => !g.implicit).map((g, i) => {
     const x0 = Math.min(...g.tables.map(t => t.x));
     const y0 = Math.min(...g.tables.map(t => t.y));
     const x1 = Math.max(...g.tables.map(t => t.x + t.w));
@@ -476,7 +482,8 @@ export function arrangeGroupsMinCrossings(diagram, opts = {}) {
   diagram.onLayoutChange?.();
 
   return {
-    groups: groups.length,
+    groups: implicit ? 0 : groups.length,
+    implicit,
     tables: model.tables.length,
     loose: loose.length,
     annotations: boxes,

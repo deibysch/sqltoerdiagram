@@ -174,10 +174,72 @@ test('arrangeGroupsCompact parks ungrouped tables next to the group they talk to
   assert.ok(!boxes.some(b => b.tables.includes('auditoria')), 'loose tables stay unboxed');
 });
 
-test('arrangeGroupsCompact refuses politely when there are no groups', () => {
+// --- No groups at all -----------------------------------------------------
+// Every option then treats the whole diagram as one invisible group: it still
+// lays the tables out, but draws no box and leaves nothing loose.
+
+function assertNoOverlap(tables) {
+  for (let i = 0; i < tables.length; i++) {
+    for (let j = i + 1; j < tables.length; j++) {
+      const a = tables[i], b = tables[j];
+      const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+      const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      assert.ok(ox <= 0 || oy <= 0, `${a.key} and ${b.key} overlap`);
+    }
+  }
+}
+
+function buildUngroupedDiagram() {
   const d = buildDiagram();
-  d.annotations = [];
-  assert.throws(() => arrangeGroupsCompact(d), /No hay grupos definidos/);
+  d.annotations = [{ id: 'n1', type: 'note', text: 'nota', x: 0, y: 0, w: 120, h: 40 }];
+  return d;
+}
+
+for (const [name, arrange] of [
+  ['Líneas cortas y compacto', arrangeGroupsCompact],
+  ['1 Columna o 1 Fila', arrangeGroupsSingleAxis],
+  ['Mínimos Cruces', arrangeGroupsMinCrossings],
+]) {
+  test(`${name} lays out a diagram with no groups as one invisible group`, () => {
+    const d = buildUngroupedDiagram();
+    d.edgeWaypoints.set('pedido.ref_id->usuario.id', [{ x: -500, y: -500 }]);
+
+    const res = arrange(d);
+
+    assert.strictEqual(res.implicit, true, 'reports the invisible group');
+    assert.strictEqual(res.groups, 0, 'no real group is claimed');
+    assert.strictEqual(res.loose, 0, 'no table is left loose');
+    assert.strictEqual(d.annotations.filter(a => a.type === 'group').length, 0, 'no box is drawn');
+    assert.ok(d.annotations.some(a => a.id === 'n1'), 'notes survive');
+    assert.strictEqual(d.edgeWaypoints.size, 0, 'wipes every stored vertex');
+    for (const t of d.model.tables) {
+      assert.ok(Number.isFinite(t.x) && Number.isFinite(t.y), `${t.key} got a real position`);
+    }
+    assertNoOverlap(d.model.tables);
+  });
+}
+
+test('Cuadrícula rápida lays out a diagram with no groups as one invisible group', () => {
+  const d = buildUngroupedDiagram();
+  const res = reorderWithExistingGroups(d.model, d.annotations, { createGroups: true });
+
+  assert.strictEqual(res.implicit, true, 'reports the invisible group');
+  assert.strictEqual(res.annotations.length, 0, 'no box is drawn, not even a "General" one');
+  for (const t of d.model.tables) {
+    assert.ok(Number.isFinite(t.x) && Number.isFinite(t.y), `${t.key} got a real position`);
+  }
+  assertNoOverlap(d.model.tables);
+});
+
+test('a diagram with groups is never treated as one invisible group', () => {
+  const d = buildDiagram();
+  const res = arrangeGroupsCompact(d);
+  assert.strictEqual(res.implicit, false);
+  assert.strictEqual(res.groups, 4);
+  const g = buildDiagram();
+  const grid = reorderWithExistingGroups(g.model, g.annotations, { createGroups: true });
+  assert.ok(!grid.implicit, 'the fast grid keeps its real groups too');
+  assert.strictEqual(grid.annotations.length, 5, 'four groups plus the "General" box for the loose tables');
 });
 
 test('arrangeGroupsCompact keeps the canvas compact and screen-shaped', () => {

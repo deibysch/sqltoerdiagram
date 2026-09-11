@@ -299,7 +299,10 @@ export function applySemanticDomainLayout(model, domains, createGroups = true, o
     const dTables = (domain.tables || []).map(k => tableMap.get(k)).filter(Boolean);
     if (!dTables.length) return { w: 280, h: 200, dTables: [], subCols: 1 };
 
-    const subCols = Math.max(1, Math.min(3, Math.ceil(Math.sqrt(dTables.length))));
+    // A group box holds at most 3 columns; the invisible whole-diagram domain has
+    // no box to keep narrow, so it takes a square grid rather than one tall strip.
+    const maxCols = domain.implicit ? Infinity : 3;
+    const subCols = Math.max(1, Math.min(maxCols, Math.ceil(Math.sqrt(dTables.length))));
     let subW = 0, subH = 0;
     let curX = px(32), curY = px(56), rowH = 0;
 
@@ -378,7 +381,7 @@ export function applySemanticDomainLayout(model, domains, createGroups = true, o
       subRowMaxH = Math.max(subRowMaxH, t.h);
     }
 
-    if (createGroups) {
+    if (createGroups && !domain.implicit) {
       generatedAnnotations.push({
         id: domain.id || ('group_ai_' + dIdx + '_' + Date.now().toString(36)),
         type: 'group',
@@ -646,8 +649,11 @@ export function reorderWithExistingGroups(model, annotations = [], options = {})
     }
   }
 
+  // No groups at all: every table goes into one invisible domain, so the grid
+  // still lays the diagram out. It never gets a box drawn around it.
   if (!rawGroups.length) {
-    throw new Error('No se encontraron grupos definidos con tablas. Crea grupos con "+ Group" o con "Reorganizar con IA".');
+    const all = { name: '', tables: tables.map(t => t.key.toLowerCase()), implicit: true };
+    return { ...applySemanticDomainLayout(model, [all], options.createGroups !== false, options), implicit: true };
   }
 
   // Deduplicate tables across groups (each table assigned to at most one group)

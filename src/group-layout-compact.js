@@ -26,6 +26,12 @@
 //      inside another. Then the boxes are pulled together while the gutters hold.
 //   4. Ungrouped tables are dropped loose beside the group they talk to most.
 //
+// With no groups at all, the whole diagram is laid out as one invisible group
+// (no box drawn). Steps 2 and 3 then have a single node to work with, so the
+// result is plain dagre over every table: identical to "Minimos Cruces", and a
+// strip rather than a compact canvas (measured on generated schemas without
+// groups: 862x4365 at 35 tables, 14716x2244 at 150).
+//
 // Measured on a 35-table / 8-group / 59-relation schema, against filling the
 // groups by list order: crossings 84 -> 69, total line length 76098 -> 44748px,
 // longest single line 4247 -> 2843px, canvas 11.41M -> 8.24M px2, and the share
@@ -305,9 +311,13 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
     t.w = dims.w; t.h = dims.h; t.rowH = dims.rowH; t.headerH = dims.headerH;
   }
 
-  const { groups, loose } = collectGroupsCompact(model, diagram.annotations);
-  if (!groups.length) {
-    throw new Error('No hay grupos definidos. Crea grupos con "+ Group" antes de usar esta opción.');
+  let { groups, loose } = collectGroupsCompact(model, diagram.annotations);
+  // No groups at all: the whole diagram becomes one invisible group, so the same
+  // machinery still lays it out. It never gets a box, and nothing is left loose.
+  const implicit = !groups.length;
+  if (implicit) {
+    groups = [{ keys: model.tables.map(t => t.key.toLowerCase()), tables: model.tables.slice(), implicit }];
+    loose = [];
   }
 
   diagram.onHistorySnapshot?.(diagram.getSnapshot());
@@ -579,7 +589,7 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
   placeLoose();
   // --- Group boxes, measured from the tables actually inside them.
   const notes = (diagram.annotations || []).filter(a => a.type !== 'group');
-  const boxes = groups.map((g, i) => {
+  const boxes = groups.filter(g => !g.implicit).map((g, i) => {
     const x0 = Math.min(...g.tables.map(t => t.x));
     const y0 = Math.min(...g.tables.map(t => t.y));
     const x1 = Math.max(...g.tables.map(t => t.x + t.w));
@@ -602,7 +612,8 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
   diagram.onLayoutChange?.();
 
   return {
-    groups: groups.length,
+    groups: implicit ? 0 : groups.length,
+    implicit,
     tables: model.tables.length,
     loose: loose.length,
     annotations: boxes,
