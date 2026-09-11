@@ -6,6 +6,7 @@ import { arrangeGroupsCompact } from '../src/group-layout-compact.js';
 import { organizeLinesShortestPath, spCountOverlap } from '../src/line-organizer.js';
 import { rotateDiagram, orientDiagram, resetOrientation } from '../src/rotate-diagram.js';
 import { getTableAnchor, buildOrthogonalPoints, segmentIntersectsBox } from '../src/routing.js';
+import { toDBMLLayout } from '../src/formats/serialize.js';
 
 function mockDiagram(model, annotations) {
   return {
@@ -301,4 +302,12 @@ test('a fresh arrangement forgets the directions remembered for the old one', ()
   const res = orientDiagram(d, 'TB');
   assert.ok(!res.restored, 'the old vertical layout must not come back over the new arrangement');
   assert.strictEqual(d.orientation, 'TB');
+});
+
+test('the Layout panel writes the direction, and left to right when there is none', () => {
+  // Pasting the panel's text back must restore which way the diagram flows;
+  // without it, the Direction buttons would turn from the wrong starting point.
+  const model = parseSchema(EXAMPLE_SQL, 'auto');
+  assert.strictEqual(JSON.parse(toDBMLLayout(model, [], null, { orientation: 'BT' })).orientation, 'BT');
+  assert.strictEqual(JSON.parse(toDBMLLayout(model, [], null, {})).orientation, 'LR');
 });

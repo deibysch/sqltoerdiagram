@@ -283,10 +283,12 @@ function applyLayoutData(model, data) {
   if (data.edgeRouting) {
     diagram.setEdgeRouting(data.edgeRouting);
   }
-  if (['LR', 'TB', 'RL', 'BT'].includes(data.orientation)) {
-    diagram.orientation = data.orientation;
-    syncOrientation();
-  }
+  // A layout that does not say which way it flows is taken as left to right,
+  // which is how every fresh arrangement comes out. Either way, the directions
+  // remembered for the previous diagram no longer describe this one.
+  resetOrientation(diagram);
+  if (['TB', 'RL', 'BT'].includes(data.orientation)) diagram.orientation = data.orientation;
+  syncOrientation();
   if (data.connections && typeof data.connections === 'object') {
     for (const [k, v] of Object.entries(data.connections)) {
       if (v.color) diagram.setEdgeColor(k, v.color);
@@ -632,11 +634,25 @@ function rebuild({ arrange = false, restore = null } = {}) {
   const newKeys = result.tables.map(t => t.key).sort().join('|');
   const structureChanged = prevKeys !== newKeys;
 
-  // pre-apply restored positions before setModel (it preserves what we set)
+  // Diagram level, line style, direction and lines come from the restored layout.
   if (restore) applyLayoutData(result, restore);
 
   diagram.setModel(result);
   diagram._tmapDirty = true;
+
+  // setModel keeps the positions of tables already on the canvas, so a live edit
+  // does not make them jump. A restored layout — a project file or a share link
+  // opened over a diagram with the same tables — must win over that, or its
+  // direction and lines land on the old positions.
+  if (restore) {
+    const pos = restore.tables || restore.positions;
+    if (pos) {
+      for (const t of result.tables) {
+        const p = pos[t.key] || pos[t.name];
+        if (p && Number.isFinite(p.x)) { t.x = p.x; t.y = p.y; }
+      }
+    }
+  }
 
   if (arrange) {
     diagram.onHistorySnapshot?.(diagram.getSnapshot());
@@ -1220,6 +1236,7 @@ function generateLayoutJson() {
     diagramLevel: diagram.diagramLevel || 'physical',
     edgeColorMode: diagram.edgeColorMode || 'multi',
     edgeRouting: diagram.edgeRouting || 'curved',
+    orientation: diagram.orientation || 'LR',
     connections: data.connections,
   });
 }
@@ -1633,7 +1650,9 @@ $('btn-share').addEventListener('click', async () => {
   try { payload = await encodeShare(project); }
   catch (err) { console.error(err); flashButton(btn, 'Failed'); return; }
   const hash = '#s=' + payload;
-  history.replaceState(null, '', hash);                 // put it in the address bar too
+  // window.history: in this module `history` is the undo/redo manager, which
+  // shadows the browser's and has no replaceState, so Share used to throw here.
+  window.history.replaceState(null, '', hash);          // put it in the address bar too
   const url = location.origin + location.pathname + hash;
   try { await navigator.clipboard.writeText(url); flashButton(btn, 'Link copied ✓'); }
   catch { flashButton(btn, 'Link in URL ↑'); }          // clipboard blocked → it's in the URL
@@ -1666,7 +1685,7 @@ fileInput.addEventListener('change', () => {
       localStorage.setItem('dbdiga-sql', data.sql);
       if (data.dialect && DIALECTS[data.dialect]) { dialect = data.dialect; localStorage.setItem('dbdiga-dialect', dialect); syncDialect(); }
       firstRender = true;          // ensure a clean restore even if a model exists
-      rebuild({ restore: { positions: data.positions, camera: data.camera, annotations: data.annotations, hidden: data.hidden, manualLinks: data.manualLinks } });
+      rebuild({ restore: data });   // the whole saved layout: positions, lines, line style, direction
       saveLayout();
     } catch (err) {
       statusEl.textContent = 'Invalid project file';
@@ -1757,7 +1776,7 @@ if (isEmbed) {
       // a shared schema with no saved positions (e.g. gallery links) → auto-arrange
       const hasPositions = data.positions && Object.keys(data.positions).length > 0;
       if (hasPositions) {
-        rebuild({ restore: { positions: data.positions, camera: data.camera, annotations: data.annotations, hidden: data.hidden, manualLinks: data.manualLinks } });
+        rebuild({ restore: data });   // the whole saved layout: positions, lines, line style, direction
       } else {
         rebuild({ arrange: true });
       }

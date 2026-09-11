@@ -178,6 +178,7 @@ export function toDBMLLayout(model, annotations = [], camera = null, options = {
     diagramLevel: options.diagramLevel || 'physical',
     edgeColorMode: options.edgeColorMode || 'multi',
     edgeRouting: options.edgeRouting || 'curved',
+    orientation: options.orientation || 'LR',
     tables,
     groups,
     connections: options.connections || {},
