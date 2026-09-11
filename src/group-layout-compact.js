@@ -26,11 +26,16 @@
 //      inside another. Then the boxes are pulled together while the gutters hold.
 //   4. Ungrouped tables are dropped loose beside the group they talk to most.
 //
-// With no groups at all, the whole diagram is laid out as one invisible group
-// (no box drawn). Steps 2 and 3 then have a single node to work with, so the
-// result is plain dagre over every table: identical to "Minimos Cruces", and a
-// strip rather than a compact canvas (measured on generated schemas without
-// groups: 862x4365 at 35 tables, 14716x2244 at 150).
+// With no groups at all, the whole diagram is one invisible group (no box drawn)
+// and gets its own wrap, wrapWholeDiagram. Steps 2 and 3 would have a single
+// node to work with, leaving plain dagre over every table: a strip and a
+// duplicate of "Minimos Cruces". Measured on generated schemas without groups,
+// line length centre to centre, plain dagre -> the wrap:
+//    35 tables    862x4365 (5.06:1)  32433px  ->  1561x1470 (1.06:1)  16136px   87ms
+//    60 tables   6799x1828 (3.72:1)  93419px  ->  2260x2104 (1.07:1)  32619px  308ms
+//   100 tables   8173x2244 (3.64:1) 168589px  ->  3192x2594 (1.23:1)  63138px  795ms
+//   150 tables  14716x2244 (6.56:1) 524330px  ->  3192x3162 (1.01:1) 126982px  3.4s
+// "1 Columna o 1 Fila" reaches 14957 / 36916 / 69040 / 131472px, in up to 50s.
 //
 // Measured on a 35-table / 8-group / 59-relation schema, against filling the
 // groups by list order: crossings 84 -> 69, total line length 76098 -> 44748px,
@@ -62,6 +67,13 @@ const GL_POLISH_ROUNDS = 6;  // whole-canvas polish sweeps
 // pan sideways forever. Charge for straying from a screen-shaped canvas.
 const GL_ASPECT_TARGET = 1.6;
 const GL_ASPECT_COST = 9000;
+// Without groups (wrapWholeDiagram) the flat charge above is outweighed once a
+// big diagram's estimate runs into six figures: the wrap came out 3.2:1 at 60
+// tables. So there the canvas may take any shape from square to 2:1 for free,
+// and past that the score is multiplied by 1 + 2 ln(how far past).
+const GL_WHOLE_MIN_RATIO = 1;
+const GL_WHOLE_MAX_RATIO = 2;
+const GL_WHOLE_STRAY_COST = 2;
 const GL_INNER = { nodesep: 40, ranksep: 70, edgesep: 20 };
 const GL_OUTER = { nodesep: GL_GUTTER, ranksep: GL_GUTTER, edgesep: 40 };
 
@@ -75,9 +87,13 @@ function centreOf(b) {
   return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
 }
 
+/** Which side of the line p->q the point r falls on: -1, 0 or 1. */
+function side(p, q, r) {
+  return Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+}
+
 /** Do two centre-to-centre segments properly cross? */
 function segmentsCross(a1, a2, b1, b2) {
-  const side = (p, q, r) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
   const d1 = side(a1, a2, b1), d2 = side(a1, a2, b2);
   const d3 = side(b1, b2, a1), d4 = side(b1, b2, a2);
   return d1 !== d2 && d3 !== d4 && d1 !== 0 && d2 !== 0 && d3 !== 0 && d4 !== 0;
@@ -96,11 +112,15 @@ function estimateCost(boxes, links) {
     const ca = centreOf(A), cb = centreOf(B);
     cost += (Math.abs(ca.x - cb.x) + Math.abs(ca.y - cb.y)) * l.w;
     if (!sharesAxis(A, B)) cost += GL_BEND_COST * l.w;
-    segs.push([ca, cb]);
+    segs.push([ca, cb, Math.min(ca.x, cb.x), Math.max(ca.x, cb.x), Math.min(ca.y, cb.y), Math.max(ca.y, cb.y)]);
   }
+  // Segments whose bounding boxes are apart cannot cross: skip the exact test.
   for (let i = 0; i < segs.length; i++) {
+    const a = segs[i];
     for (let j = i + 1; j < segs.length; j++) {
-      if (segmentsCross(segs[i][0], segs[i][1], segs[j][0], segs[j][1])) cost += GL_CROSS_COST;
+      const b = segs[j];
+      if (a[3] < b[2] || b[3] < a[2] || a[5] < b[4] || b[5] < a[4]) continue;
+      if (segmentsCross(a[0], a[1], b[0], b[1])) cost += GL_CROSS_COST;
     }
   }
   return cost;
@@ -281,10 +301,213 @@ function buildLinks(diagram) {
 }
 
 /**
+ * No groups at all: the whole diagram is one invisible group. Plain dagre over
+ * every table is a strip, so here too dagre only orders and a wrap decides the
+ * shape. Each dagre rank becomes a column; a rank taller than the band splits
+ * into side-by-side columns; and columns that run too wide wrap into bands that
+ * snake back and forth, so the line joining two bands stays short. The band
+ * height and the band count are searched on the estimate times a screen-shape
+ * factor, with plain dagre kept as a candidate for diagrams small enough to
+ * need no wrapping at all. Last, tables swap places wherever that scores better,
+ * each trying the spots nearest to itself and to its partners.
+ * Moves the tables; returns the score of the layout kept.
+ */
+function wrapWholeDiagram(tables, links, sp) {
+  const idx = new Map(tables.map((t, i) => [t.key.toLowerCase(), i]));
+  const L = [];
+  for (const l of links) {
+    const a = idx.get(l.a), b = idx.get(l.b);
+    if (a !== undefined && b !== undefined && a !== b) L.push({ a, b, w: l.w });
+  }
+
+  const score = (boxes) => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const b of boxes) {
+      x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
+      x1 = Math.max(x1, b.x + b.w); y1 = Math.max(y1, b.y + b.h);
+    }
+    const ratio = (x1 - x0) / Math.max(1, y1 - y0);
+    const stray = Math.max(1, ratio / GL_WHOLE_MAX_RATIO, GL_WHOLE_MIN_RATIO / ratio);
+    return estimateCost(boxes, L) * (1 + GL_WHOLE_STRAY_COST * Math.log(stray));
+  };
+
+  const plain = dagreArrange(tables, L, 'LR', sp.preset);
+  let best = { boxes: plain.boxes, cost: score(plain.boxes), cols: null };
+
+  // Dagre's ranks, left to right, each in dagre's top-to-bottom order. Tables
+  // without a single relation go last: beside anything else they only push its
+  // lines apart.
+  const linked = new Set();
+  for (const l of L) { linked.add(l.a); linked.add(l.b); }
+  const byX = new Map();
+  tables.forEach((t, i) => {
+    if (!linked.has(i)) return;
+    const b = plain.boxes[i];
+    const cx = Math.round(b.x + b.w / 2);
+    if (!byX.has(cx)) byX.set(cx, []);
+    byX.get(cx).push(i);
+  });
+  const ranks = [...byX.keys()].sort((a, b) => a - b)
+    .map(cx => byX.get(cx).sort((i, j) => plain.boxes[i].y - plain.boxes[j].y));
+  const lonely = tables.map((_, i) => i).filter(i => !linked.has(i));
+  if (lonely.length) ranks.push(lonely);
+
+  const stackH = (list) => list.reduce((s, i) => s + tables[i].h, 0) + sp.rowGap * (list.length - 1);
+
+  // Cut every rank into as few columns as keep it within the band height H, in
+  // dagre's order, giving each column about the same height.
+  const columnsFor = (H) => {
+    const cols = [];
+    for (const rank of ranks) {
+      const whole = stackH(rank) + sp.rowGap;
+      const k = Math.max(1, Math.min(rank.length, Math.ceil(whole / (H + sp.rowGap))));
+      let col = [], acc = 0, made = 1;
+      for (const i of rank) {
+        const step = tables[i].h + sp.rowGap;
+        if (col.length && made < k && acc + step / 2 > whole / k * made) {
+          cols.push(col);
+          col = [];
+          made++;
+        }
+        col.push(i);
+        acc += step;
+      }
+      cols.push(col);
+    }
+    return cols;
+  };
+
+  // Split the columns, in order, into `nb` bands of about the same width.
+  const bandsFor = (colW, nb) => {
+    const span = colW.reduce((s, w) => s + w + sp.colGap, 0);
+    const bands = [];
+    let run = [], acc = 0;
+    colW.forEach((w, k) => {
+      const step = w + sp.colGap;
+      if (run.length && bands.length < nb - 1 && acc + step / 2 > span / nb * (bands.length + 1)) {
+        bands.push(run);
+        run = [];
+      }
+      run.push(k);
+      acc += step;
+    });
+    bands.push(run);
+    return bands;
+  };
+
+  // Odd bands run right to left, so each band starts right under where the
+  // previous one ended.
+  const place = (cols, colW, colH, bands) => {
+    const bandW = bands.map(band => band.reduce((s, k) => s + colW[k] + sp.colGap, 0) - sp.colGap);
+    const maxW = Math.max(...bandW);
+    const boxes = new Array(tables.length);
+    let top = 0;
+    bands.forEach((band, bi) => {
+      const bandH = Math.max(...band.map(k => colH[k]));
+      let x = bi % 2 ? maxW - bandW[bi] : 0;
+      for (const k of (bi % 2 ? band.slice().reverse() : band)) {
+        let y = top + (bandH - colH[k]) / 2;
+        for (const i of cols[k]) {
+          const t = tables[i];
+          boxes[i] = { x: x + (colW[k] - t.w) / 2, y, w: t.w, h: t.h };
+          y += t.h + sp.rowGap;
+        }
+        x += colW[k] + sp.colGap;
+      }
+      top += bandH + sp.bandGap;
+    });
+    return boxes;
+  };
+
+  // Band heights from a single table up to the tallest rank. For each, the band
+  // count that looks closest to screen-shaped is scored with its two neighbours.
+  const hMin = Math.max(...tables.map(t => t.h));
+  const hMax = Math.max(hMin, ...ranks.map(stackH));
+  const STEPS = 16;
+  for (let s = 0; s < STEPS; s++) {
+    const cols = columnsFor(hMin * Math.pow(hMax / hMin, s / (STEPS - 1)));
+    const colW = cols.map(c => Math.max(...c.map(i => tables[i].w)));
+    const colH = cols.map(stackH);
+    const span = colW.reduce((sum, w) => sum + w + sp.colGap, 0);
+    const tallest = Math.max(...colH);
+    let guess = 1, off = Infinity;
+    for (let nb = 1; nb <= cols.length; nb++) {
+      const o = Math.abs(Math.log(span / nb / (nb * (tallest + sp.bandGap)) / GL_ASPECT_TARGET));
+      if (o < off) { off = o; guess = nb; }
+    }
+    for (const nb of [guess - 1, guess, guess + 1]) {
+      if (nb < 1 || nb > cols.length) continue;
+      const bands = bandsFor(colW, nb);
+      const boxes = place(cols, colW, colH, bands);
+      const cost = score(boxes);
+      if (cost < best.cost - 0.5) best = { boxes, cost, cols, bands };
+    }
+  }
+
+  // Polish: swap two tables wherever the score improves. Each table tries the
+  // spots nearest to itself and to each table it is linked with, which is where
+  // a swap can shorten its lines. Trying every pair instead is what makes
+  // "1 Columna o 1 Fila" take seconds.
+  if (best.cols) {
+    const cols = best.cols.map(c => c.slice());
+    const colW = cols.map(c => Math.max(...c.map(i => tables[i].w)));
+    const colH = cols.map(stackH);
+    const at = [];
+    cols.forEach((c, k) => c.forEach((i, r) => { at[i] = [k, r]; }));
+    const partners = tables.map(() => []);
+    for (const l of L) { partners[l.a].push(l.b); partners[l.b].push(l.a); }
+
+    let { boxes, cost } = best;
+    const nearest = (i, count) => {
+      const cx = boxes[i].x + boxes[i].w / 2, cy = boxes[i].y + boxes[i].h / 2;
+      const far = (j) => Math.abs(boxes[j].x + boxes[j].w / 2 - cx) + Math.abs(boxes[j].y + boxes[j].h / 2 - cy);
+      return tables.map((_, j) => j).filter(j => j !== i).sort((a, b) => far(a) - far(b)).slice(0, count);
+    };
+    // Swapping the same pair again undoes it, widths and heights included.
+    const swap = (i, j) => {
+      const [ki, ri] = at[i], [kj, rj] = at[j];
+      cols[ki][ri] = j;
+      cols[kj][rj] = i;
+      at[i] = [kj, rj];
+      at[j] = [ki, ri];
+      for (const k of new Set([ki, kj])) {
+        colW[k] = Math.max(...cols[k].map(t => tables[t].w));
+        colH[k] = stackH(cols[k]);
+      }
+    };
+
+    for (let round = 0; round < GL_POLISH_ROUNDS; round++) {
+      let improved = false;
+      for (let i = 0; i < tables.length; i++) {
+        const tries = new Set(nearest(i, 8));
+        for (const p of partners[i]) for (const j of nearest(p, 3)) tries.add(j);
+        tries.delete(i);
+        for (const j of tries) {
+          swap(i, j);
+          const trial = place(cols, colW, colH, best.bands);
+          const c = score(trial);
+          if (c < cost - 0.5) { cost = c; boxes = trial; improved = true; }
+          else swap(i, j);
+        }
+      }
+      if (!improved) break;
+    }
+    best = { boxes, cost };
+  }
+
+  best.boxes.forEach((b, i) => {
+    tables[i].x = Math.round(80 + b.x);
+    tables[i].y = Math.round(80 + b.y);
+  });
+  return best.cost;
+}
+
+/**
  * Re-arrange the existing groups and the tables inside them so the connections
  * route short, straight and untangled. Clears every stored waypoint and anchor
- * first, so the lines start from a clean slate.
- * Returns { groups, tables, loose, annotations, cost }.
+ * first, so the lines start from a clean slate. With no groups at all, the
+ * whole diagram is laid out by wrapWholeDiagram instead.
+ * Returns { groups, implicit, tables, loose, annotations, cost }.
  */
 export function arrangeGroupsCompact(diagram, opts = {}) {
   // Spacing from the Arrange menu, relative to this algorithm's tuned values.
@@ -311,14 +534,7 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
     t.w = dims.w; t.h = dims.h; t.rowH = dims.rowH; t.headerH = dims.headerH;
   }
 
-  let { groups, loose } = collectGroupsCompact(model, diagram.annotations);
-  // No groups at all: the whole diagram becomes one invisible group, so the same
-  // machinery still lays it out. It never gets a box, and nothing is left loose.
-  const implicit = !groups.length;
-  if (implicit) {
-    groups = [{ keys: model.tables.map(t => t.key.toLowerCase()), tables: model.tables.slice(), implicit }];
-    loose = [];
-  }
+  const { groups, loose } = collectGroupsCompact(model, diagram.annotations);
 
   diagram.onHistorySnapshot?.(diagram.getSnapshot());
 
@@ -327,6 +543,19 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
   diagram.edgeAnchors.clear();
 
   const links = buildLinks(diagram);
+
+  // No groups at all: the whole diagram is one invisible group, which the group
+  // machinery below has nothing to do with. It gets its own wrap instead.
+  if (!groups.length) {
+    const cost = wrapWholeDiagram(model.tables, links, {
+      rowGap: INNER.nodesep, colGap: INNER.ranksep, bandGap: GUTTER, preset: INNER,
+    });
+    diagram.setAnnotations((diagram.annotations || []).filter(a => a.type !== 'group'));
+    diagram.markDirty();
+    diagram.onLayoutChange?.();
+    return { groups: 0, implicit: true, tables: model.tables.length, loose: 0, annotations: [], cost: Math.round(cost) };
+  }
+
   const groupOf = new Map();
   groups.forEach((g, i) => g.keys.forEach(k => groupOf.set(k, i)));
 
@@ -589,7 +818,7 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
   placeLoose();
   // --- Group boxes, measured from the tables actually inside them.
   const notes = (diagram.annotations || []).filter(a => a.type !== 'group');
-  const boxes = groups.filter(g => !g.implicit).map((g, i) => {
+  const boxes = groups.map((g, i) => {
     const x0 = Math.min(...g.tables.map(t => t.x));
     const y0 = Math.min(...g.tables.map(t => t.y));
     const x1 = Math.max(...g.tables.map(t => t.x + t.w));
@@ -612,8 +841,8 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
   diagram.onLayoutChange?.();
 
   return {
-    groups: implicit ? 0 : groups.length,
-    implicit,
+    groups: groups.length,
+    implicit: false,
     tables: model.tables.length,
     loose: loose.length,
     annotations: boxes,

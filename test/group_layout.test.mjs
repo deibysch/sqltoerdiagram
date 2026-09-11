@@ -231,6 +231,62 @@ test('Cuadrícula rápida lays out a diagram with no groups as one invisible gro
   assertNoOverlap(d.model.tables);
 });
 
+/** A schema-like diagram with no groups: a random tree, extra links, a few loners. */
+function buildSchemaWithoutGroups(n, seed = 7) {
+  let s = seed >>> 0;
+  const rand = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const tables = [];
+  for (let i = 0; i < n; i++) {
+    const columns = [{ name: 'id', type: 'bigint' }];
+    const k = 2 + Math.floor(rand() * 7);
+    for (let c = 0; c < k; c++) columns.push({ name: 'c' + c, type: 'varchar(80)' });
+    tables.push({ key: 't' + i, name: 'tabla_' + i, x: (i % 8) * 260, y: Math.floor(i / 8) * 240, columns });
+  }
+  const relations = [];
+  for (let i = 1; i < n; i++) {
+    if (rand() < 0.08) continue;
+    const p = Math.floor(rand() * i);
+    relations.push({ fromTable: 't' + i, toTable: 't' + p, fromCols: ['c0'], toCols: ['id'] });
+    if (rand() < 0.3) {
+      const q = Math.floor(rand() * n);
+      if (q !== i && q !== p) relations.push({ fromTable: 't' + i, toTable: 't' + q, fromCols: ['c1'], toCols: ['id'] });
+    }
+  }
+  const d = buildDiagram();
+  d.model = { tables, relations };
+  d.annotations = [];
+  return d;
+}
+
+test('Líneas cortas y compacto without groups stays screen-shaped with short lines', () => {
+  // Plain dagre over a whole diagram is a strip, and it is what Mínimos Cruces
+  // gives without groups; this option must neither look like that nor copy it.
+  const shapeAndLength = (d) => {
+    const T = d.model.tables;
+    const w = Math.max(...T.map(t => t.x + t.w)) - Math.min(...T.map(t => t.x));
+    const h = Math.max(...T.map(t => t.y + t.h)) - Math.min(...T.map(t => t.y));
+    const byKey = new Map(T.map(t => [t.key, t]));
+    let length = 0;
+    for (const r of d.model.relations) {
+      const a = byKey.get(r.fromTable), b = byKey.get(r.toTable);
+      length += Math.abs(a.x + a.w / 2 - b.x - b.w / 2) + Math.abs(a.y + a.h / 2 - b.y - b.h / 2);
+    }
+    return { ratio: Math.max(w / h, h / w), length };
+  };
+  const compact = buildSchemaWithoutGroups(60);
+  const res = arrangeGroupsCompact(compact);
+  const dagreOnly = buildSchemaWithoutGroups(60);
+  arrangeGroupsMinCrossings(dagreOnly);
+
+  const a = shapeAndLength(compact), b = shapeAndLength(dagreOnly);
+  // Measured: 1.07:1 and 32619px of line, against 3.72:1 and 93419px.
+  assert.strictEqual(res.implicit, true);
+  assert.ok(a.ratio < 2, `canvas should stay screen-shaped, got ${a.ratio.toFixed(2)}:1`);
+  assert.ok(a.length < b.length * 0.5,
+    `lines should be far shorter than plain dagre's (${Math.round(b.length)} -> ${Math.round(a.length)})`);
+  assertNoOverlap(compact.model.tables);
+});
+
 test('a diagram with groups is never treated as one invisible group', () => {
   const d = buildDiagram();
   const res = arrangeGroupsCompact(d);
