@@ -10,6 +10,7 @@
 
 import dagre from '@dagrejs/dagre';
 import { measureTable } from './renderer.js';
+import { rotateTables } from './rotate-diagram.js';
 
 const PRESETS = {
   comfortable: { nodesep: 36, ranksep: 130, edgesep: 24, gap: 20 },
@@ -360,6 +361,14 @@ export function radialLayout(model, opts = {}, hidden = null) {
  * opts.algo = 'dagre' (default) | 'force' | 'radial'
  */
 export function layout(model, opts = {}, hidden = null) {
+  // "Vertical" is the horizontal layout turned a quarter clockwise — the same
+  // turn the Direction menu applies to a finished diagram — so both directions
+  // always show the same arrangement, with every table kept upright.
+  if (opts.dir === 'TB') {
+    layout(model, { ...opts, dir: 'LR' }, hidden);
+    rotateTables(model.tables.filter(t => Number.isFinite(t.x) && !(hidden && hidden.has(t.key))), true);
+    return;
+  }
   const algo = opts.algo || 'dagre';
   if (algo === 'force') {
     forceLayout(model, opts, hidden);

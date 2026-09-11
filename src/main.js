@@ -17,6 +17,7 @@ import { reorderWithGemini, reorderWithLocalAI, reorderWithExistingGroups } from
 import { arrangeGroupsCompact } from './group-layout-compact.js';
 import { arrangeGroupsSingleAxis } from './group-layout-axis.js';
 import { arrangeGroupsMinCrossings } from './group-layout-crossings.js';
+import { rotateDiagram } from './rotate-diagram.js';
 import { organizeLinesClusterHighways, organizeLinesElkPorts, organizeLinesSmartFaces, organizeLinesPerimeterBus, organizeLinesAStar, organizeLinesShortestPath, resetLines } from './line-organizer.js';
 
 const $ = (id) => document.getElementById(id);
@@ -54,12 +55,23 @@ function updateUndoRedoButtons() {
 }
 history.onChange(updateUndoRedoButtons);
 
+// Direction is state of the canvas, not just a preference: keep the menu, the
+// stored preference and the diagram in agreement.
+function syncOrientation() {
+  const o = diagram.orientation === 'TB' ? 'TB' : 'LR';
+  if (layoutOpts.dir === o) return;
+  layoutOpts.dir = o;
+  localStorage.setItem('dbdiga-dir', o);
+  syncMenu();
+}
+
 function performUndo() {
   if (!history.canUndo()) return;
   const current = diagram.getSnapshot();
   const previous = history.undo(current);
   if (previous) {
     diagram.applySnapshot(previous);
+    syncOrientation();
     saveLayoutDebounced();
     if (editorMode === 'layout') updateLayoutTextarea();
     if (editorMode === 'visual') visualEditor?.render();
@@ -72,6 +84,7 @@ function performRedo() {
   const next = history.redo(current);
   if (next) {
     diagram.applySnapshot(next);
+    syncOrientation();
     saveLayoutDebounced();
     if (editorMode === 'layout') updateLayoutTextarea();
     if (editorMode === 'visual') visualEditor?.render();
@@ -224,6 +237,7 @@ function collectLayout() {
     diagramLevel: diagram.diagramLevel || 'physical',
     edgeColorMode: diagram.edgeColorMode || 'multi',
     edgeRouting: diagram.edgeRouting || 'curved',
+    orientation: diagram.orientation || 'LR',
     tables,
     positions: tables, // backwards compatibility
     groups,
@@ -273,6 +287,10 @@ function applyLayoutData(model, data) {
   if (data.edgeRouting) {
     diagram.setEdgeRouting(data.edgeRouting);
   }
+  if (data.orientation === 'LR' || data.orientation === 'TB') {
+    diagram.orientation = data.orientation;
+    syncOrientation();
+  }
   if (data.connections && typeof data.connections === 'object') {
     for (const [k, v] of Object.entries(data.connections)) {
       if (v.color) diagram.setEdgeColor(k, v.color);
@@ -289,7 +307,7 @@ function placeNewTables(model) {
   const missing = model.tables.filter(t => !Number.isFinite(t.x));
   if (!missing.length) return;
   const placed = model.tables.filter(t => Number.isFinite(t.x));
-  if (!placed.length) { layout(model, layoutOpts, diagram.hidden); return; }
+  if (!placed.length) { layout(model, layoutOpts, diagram.hidden); diagram.orientation = layoutOpts.dir === 'TB' ? 'TB' : 'LR'; return; }
   let x1 = -Infinity, y0 = Infinity;
   for (const t of placed) { x1 = Math.max(x1, t.x + t.w); y0 = Math.min(y0, t.y); }
   let x = x1 + 80, y = Number.isFinite(y0) ? y0 : 40;
@@ -627,6 +645,7 @@ function rebuild({ arrange = false, restore = null } = {}) {
   if (arrange) {
     diagram.onHistorySnapshot?.(diagram.getSnapshot());
     layout(result, layoutOpts, diagram.hidden);
+    diagram.orientation = layoutOpts.dir === 'TB' ? 'TB' : 'LR';
     if (result.groups?.length) {
       diagram.setAnnotations(syncModelGroups(result, diagram.annotations));
     }
@@ -644,6 +663,7 @@ function rebuild({ arrange = false, restore = null } = {}) {
     else diagram.fit();
   } else if (firstRender) {
     layout(result, layoutOpts, diagram.hidden);
+    diagram.orientation = layoutOpts.dir === 'TB' ? 'TB' : 'LR';
     if (result.groups?.length) {
       diagram.setAnnotations(syncModelGroups(result, diagram.annotations));
     }
@@ -814,8 +834,40 @@ arrangeMenu.addEventListener('click', (e) => {
     localStorage.setItem('dbdiga-algo', layoutOpts.algo);
   }
   if (item.dataset.dir) {
-    layoutOpts.dir = item.dataset.dir;
-    localStorage.setItem('dbdiga-dir', layoutOpts.dir);
+    // Direction turns what is on the canvas; it never re-arranges anything.
+    // Horizontal -> Vertical is a quarter turn clockwise, and going back is the
+    // exact inverse, so a round trip lands on the very same diagram.
+    const next = item.dataset.dir === 'TB' ? 'TB' : 'LR';
+    if (next !== (diagram.orientation || 'LR')) {
+      // Re-tracing the lines a turn breaks takes seconds on a big diagram, so
+      // park the Arrange button on a spinner and paint before blocking.
+      const btn = $('btn-arrange');
+      const original = btn.innerHTML;
+      btn.innerHTML = '<span class="spinner" style="width:14px;height:14px"></span>';
+      btn.disabled = true;
+      arrangeMenu.hidden = true;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        let res;
+        try {
+          res = rotateDiagram(diagram, next === 'TB');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = original;
+        }
+        layoutOpts.dir = next;
+        localStorage.setItem('dbdiga-dir', layoutOpts.dir);
+        syncMenu();
+        diagram.fit();
+        saveLayoutDebounced();
+        if (editorMode === 'layout') updateLayoutTextarea();
+        if (editorMode === 'visual') visualEditor?.render();
+        if (res.repaired) {
+          flashButton(btn, `${res.repaired} línea${res.repaired !== 1 ? 's' : ''} re-trazada${res.repaired !== 1 ? 's' : ''}`);
+        }
+      }));
+    }
+    syncMenu();
+    return;
   }
   if (item.dataset.spacing) {
     layoutOpts.spacing = item.dataset.spacing;
@@ -938,7 +990,11 @@ function runGroupArrange(arrange, label) {
   requestAnimationFrame(() => requestAnimationFrame(() => {
     let res;
     try {
-      res = arrange(diagram, { dir: layoutOpts.dir, spacing: layoutOpts.spacing });
+      // Every algorithm lays out horizontally; Vertical is that result turned a
+      // quarter clockwise, exactly as the Direction menu would turn it.
+      res = arrange(diagram, { spacing: layoutOpts.spacing });
+      diagram.orientation = 'LR';
+      if (layoutOpts.dir === 'TB') rotateDiagram(diagram, true, { recordHistory: false });
     } catch (err) {
       btn.disabled = false;
       btn.innerHTML = original;
@@ -970,7 +1026,6 @@ function executeExistingGroupsReorder() {
     const res = reorderWithExistingGroups(diagram.model, diagram.annotations, {
       createGroups: true,
       lineStyle: selectedLineStyle,
-      dir: layoutOpts.dir,
       spacing: layoutOpts.spacing,
     });
 
@@ -986,6 +1041,9 @@ function executeExistingGroupsReorder() {
       const notes = diagram.annotations.filter(a => a.type === 'note');
       diagram.setAnnotations([...notes, ...res.annotations]);
     }
+
+    diagram.orientation = 'LR';
+    if (layoutOpts.dir === 'TB') rotateDiagram(diagram, true, { recordHistory: false });
 
     if (selectedLineStyle) {
       diagram.setEdgeRouting(selectedLineStyle);

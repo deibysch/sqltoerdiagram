@@ -408,11 +408,10 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
   const globalLinks = links
     .map(l => ({ a: tableIdx.get(l.a), b: tableIdx.get(l.b), w: l.w }))
     .filter(l => l.a !== undefined && l.b !== undefined);
-  // Direction drives the shape the cols search aims for: 1.6:1 wide for
-  // "Horizontal", the reciprocal for "Vertical". Constraining the target rather
-  // than turning the finished picture keeps each algorithm's own character —
-  // reading a compacted layout back as rows degenerates into a single column.
-  const aspectTarget = (opts.dir === 'TB') ? 1 / GL_ASPECT_TARGET : GL_ASPECT_TARGET;
+  // Always laid out horizontally. "Vertical" is this result turned a quarter
+  // clockwise afterwards (rotate-diagram.js), exactly as the Direction menu turns
+  // a finished diagram, so both directions show the same arrangement.
+  const aspectTarget = GL_ASPECT_TARGET;
   const globalCost = () => {
     let cost = estimateCost(model.tables, globalLinks);
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;

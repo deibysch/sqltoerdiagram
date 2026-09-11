@@ -1,6 +1,7 @@
 // "Minimos Cruces" — group layout, snapshot of commit 6a25125.
 //
-// Takes Direction and Spacing from the Arrange menu (added later); otherwise
+// Takes Spacing from the Arrange menu (added later). Direction is applied
+// afterwards by turning the finished layout (rotate-diagram.js). Otherwise
 // FROZEN. One of four independent group-layout algorithms the user keeps side by
 // side to pick from. Do not refactor it towards the others and do not port fixes
 // into it: it is kept precisely because it lays a diagram out differently, and
@@ -300,10 +301,11 @@ export function arrangeGroupsMinCrossings(diagram, opts = {}) {
     });
   })();
 
-  // The groups flow in the direction the menu asks for. Only the OUTER level is
-  // constrained: dagre still picks each group's internal direction freely, which
-  // is where the crossing minimisation this algorithm is named for comes from.
-  let outerDir = opts.dir === 'TB' ? 'TB' : 'LR';
+  // The groups always flow left to right: "Vertical" is this result turned a
+  // quarter clockwise afterwards (rotate-diagram.js). Only the outer level is
+  // fixed — dagre still picks each group's internal direction freely, which is
+  // where the crossing minimisation this algorithm is named for comes from.
+  let outerDir = 'LR';
   const placeGroups = () => {
     const sol = dagreArrange(groups.map(g => ({ w: g.w, h: g.h })), groupLinks, outerDir, OUTER);
     groups.forEach((g, i) => {

@@ -277,8 +277,8 @@ export function applySemanticDomainLayout(model, domains, createGroups = true, o
   const gf = 1 + (sf - 1) * 0.5;
   const px = (v) => Math.round(v * sf);
   const gx = (v) => Math.round(v * gf);
-  // Direction: "TB" stacks the domains in a column, "LR" spreads them in rows.
-  const vertical = options.dir === 'TB';
+  // Direction is not handled here: "Vertical" is this result turned a quarter
+  // clockwise afterwards (rotate-diagram.js).
 
   const tableMap = new Map(model.tables.map(t => [t.key.toLowerCase(), t]));
 
@@ -291,7 +291,7 @@ export function applySemanticDomainLayout(model, domains, createGroups = true, o
   const n = domains.length;
   if (!n) return { domains: [], annotations: [] };
 
-  const cols = vertical ? 1 : Math.max(1, Math.min(3, Math.ceil(Math.sqrt(n))));
+  const cols = Math.max(1, Math.min(3, Math.ceil(Math.sqrt(n))));
   const gridPositions = optimizeDomainGridPositions(domains, model.relations || [], cols);
 
   // Measure each domain's internal layout size first

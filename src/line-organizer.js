@@ -5,7 +5,7 @@
 // 3. A* Grid Router (Computes shortest collision-free orthogonal path on a grid)
 // 4. Reset Lines (Reverts to direct automatic S-bends / L-bends)
 
-import { getTableAnchor, segmentIntersectsBox, cleanOrthogonalPoints, filterRedundantWaypoints } from './routing.js';
+import { getTableAnchor, segmentIntersectsBox, cleanOrthogonalPoints, filterRedundantWaypoints, buildOrthogonalPoints } from './routing.js';
 
 /**
  * Extract active edges from diagram model.
@@ -925,6 +925,7 @@ const SP_CROSS_COST = 150;        // px charged per crossing with another line
 const SP_CROSS_COST_SHARED = SP_CROSS_COST;
 const SP_MIN_SEPARATION = 12;     // two parallel lines must never run closer than this
 const SP_NEAR_MIN_SPAN = 8;       // ... unless they only brush past each other near a corner
+const SP_NEAR_SAME = 3;           // a track this close is the same line to the eye: no brushing at all
 const SP_OVERLAP_COST = 6;        // px charged per px run on top of another line, once
                                   // the corridors are so full that nothing else fits
 const SP_LANE_GAP = 12;           // spacing of the corridor lanes
@@ -998,7 +999,7 @@ function spNearBox(a, b, t, pad) {
  * limits, centres and the outer ring highways) are never dropped; docking
  * lanes come next, and corridor lanes are the first to go if the axis cap bites.
  */
-function spBuildGlobalGrid(tables) {
+function spBuildGlobalGrid(tables, fixed = []) {
   const baseX = new Set(), baseY = new Set();
   const portX = new Set(), portY = new Set();
   const laneX = new Set(), laneY = new Set();
@@ -1034,6 +1035,16 @@ function spBuildGlobalGrid(tables) {
       const d = 48 + k * SP_LANE_GAP;
       baseX.add(Math.round(gx0 - d)); baseX.add(Math.round(gx1 + d));
       baseY.add(Math.round(gy0 - d)); baseY.add(Math.round(gy1 + d));
+    }
+  }
+
+  // Lines held fixed must sit on grid lines, or their reservations cannot be
+  // indexed and the new routes would never see them.
+  for (const f of fixed) {
+    for (let i = 0; i < f.pts.length - 1; i++) {
+      const a = f.pts[i], b = f.pts[i + 1];
+      if (Math.abs(a.y - b.y) < 0.6) baseY.add(Math.round(a.y));
+      else baseX.add(Math.round(a.x));
     }
   }
 
@@ -1262,7 +1273,11 @@ class SpRouter {
     // Running on top of another line, plus running too close beside one.
     let v = this.res.overlapAmount(horiz, line, a, b);
     for (const other of (horiz ? this.nearY : this.nearX)[line]) {
-      v += this.res.overlapAmount(horiz, other, a, b, SP_NEAR_MIN_SPAN);
+      // Brushing past a neighbour is fine 10px away, not 1px away: that reads
+      // as one line drawn on top of another.
+      const axis = horiz ? this.ys : this.xs;
+      const floor = Math.abs(axis[other] - axis[line]) <= SP_NEAR_SAME ? 1 : SP_NEAR_MIN_SPAN;
+      v += this.res.overlapAmount(horiz, other, a, b, floor);
     }
     this.occStamp[key] = this.gen;
     this.occVal[key] = v;
@@ -1277,7 +1292,11 @@ class SpRouter {
     const b = horiz ? p.sx : p.sy;
     let v = this.res.overlapAmount(horiz, line, a, b);
     for (const other of (horiz ? this.nearY : this.nearX)[line]) {
-      v += this.res.overlapAmount(horiz, other, a, b, SP_NEAR_MIN_SPAN);
+      // Brushing past a neighbour is fine 10px away, not 1px away: that reads
+      // as one line drawn on top of another.
+      const axis = horiz ? this.ys : this.xs;
+      const floor = Math.abs(axis[other] - axis[line]) <= SP_NEAR_SAME ? 1 : SP_NEAR_MIN_SPAN;
+      v += this.res.overlapAmount(horiz, other, a, b, floor);
     }
     return v;
   }
@@ -1563,7 +1582,8 @@ class SpRouter {
         for (let n = -1; n < near.length; n++) {
           const arr = map.get(n < 0 ? own : near[n]);
           if (!arr) continue;
-          const floor = n < 0 ? 1 : SP_NEAR_MIN_SPAN;
+          const axisV = horiz ? this.ys : this.xs;
+          const floor = n < 0 || Math.abs(axisV[near[n]] - axisV[own]) <= SP_NEAR_SAME ? 1 : SP_NEAR_MIN_SPAN;
           for (const e of arr) {
             if (e.owner === owner) continue;
             const ov = Math.min(e.hi, hi) - Math.max(e.lo, lo);
@@ -1597,26 +1617,57 @@ function spOffset(t, pt, side) {
 }
 
 /**
+ * The drawn shape of every line that is NOT being re-routed, exactly as the
+ * renderer builds it, so a partial re-route can treat those lines as fixed.
+ */
+function spFixedRoutes(diagram, skip) {
+  const out = [];
+  const level = diagram.diagramLevel;
+  for (const e of getDiagramEdges(diagram)) {
+    if (skip.has(e.key)) continue;
+    const anchors = diagram.edgeAnchors.get(e.key);
+    const wps = diagram.edgeWaypoints.get(e.key) || [];
+    const towardsTo = wps.length ? wps[0] : { x: e.to.x + e.to.w / 2, y: e.to.y + e.to.h / 2 };
+    const towardsFrom = wps.length ? wps[wps.length - 1] : { x: e.from.x + e.from.w / 2, y: e.from.y + e.from.h / 2 };
+    const p1 = getTableAnchor(e.from, e.fc, towardsTo, anchors?.fromAnchor, 0, level);
+    const p2 = getTableAnchor(e.to, e.tc, towardsFrom, anchors?.toAnchor, 0, level);
+    out.push({ fk: e.fk, tk: e.tk, pts: buildOrthogonalPoints(p1, p2, wps.map(p => ({ ...p })), [], 0) });
+  }
+  return out;
+}
+
+/**
  * Public entry point: clear every vertex and anchor, then re-route each line as
  * the shortest obstacle-free 90 degree path that also avoids running along or
  * needlessly crossing the other lines.
  * Returns { routed, crossings, overlaps, passes }.
  */
-export function organizeLinesShortestPath(diagram, targetKeys = null) {
+export function organizeLinesShortestPath(diagram, targetKeys = null, options = {}) {
+  // keepOthers: when only some lines are re-routed, hold every other line as a
+  //   fixed obstacle — never run along it, pay for crossing it. Without it a
+  //   partial re-route ignores the rest of the diagram (the original behaviour).
+  // recordHistory / forceStyle: a caller that is itself one undoable step and
+  //   that must not change the line style can switch these off.
+  // quick: skip the pairwise lane-swap rounds and cap rip-up at two passes. For
+  //   repairing a handful of lines, where waiting half a minute defeats the point.
+  const { keepOthers = false, recordHistory = true, forceStyle = true, quick = false } = options;
+  const maxPasses = quick ? 2 : SP_MAX_PASSES;
+  const swapRounds = quick ? 0 : SP_SWAP_ROUNDS;
   const edges = getDiagramEdges(diagram, targetKeys);
   if (!edges.length) return { routed: 0, crossings: 0, overlaps: 0, passes: 0 };
 
-  diagram.onHistorySnapshot?.(diagram.getSnapshot());
+  if (recordHistory) diagram.onHistorySnapshot?.(diagram.getSnapshot());
 
   // Corners are always 90 degrees and rounded for this organizer.
-  diagram.edgeRouting = 'ortho-rounded';
+  if (forceStyle) diagram.edgeRouting = 'ortho-rounded';
 
   const tables = (diagram.model?.tables || []).filter(
     t => Number.isFinite(t.x) && !diagram.hidden?.has((t.key || '').toLowerCase())
   );
   if (!tables.length) return { routed: 0, crossings: 0, overlaps: 0, passes: 0 };
 
-  const grid = spBuildGlobalGrid(tables);
+  const fixed = keepOthers && targetKeys ? spFixedRoutes(diagram, new Set(edges.map(e => e.key))) : [];
+  const grid = spBuildGlobalGrid(tables, fixed);
   const router = new SpRouter(tables, grid.xs, grid.ys);
 
   const portCache = new Map();
@@ -1628,12 +1679,17 @@ export function organizeLinesShortestPath(diagram, targetKeys = null) {
 
   // Lines that touch the same table cross each other more forgivingly.
   const touches = edges.map(e => [e.fk, e.tk]);
+  for (const f of fixed) touches.push([f.fk, f.tk]);
   const shareFns = edges.map((_, i) => (j) => {
     if (i === j) return false;
     const a = touches[i], b = touches[j];
     return a[0] === b[0] || a[0] === b[1] || a[1] === b[0] || a[1] === b[1];
   });
   const sharesWith = (i) => shareFns[i];
+
+  // Fixed lines are reserved first, owned past the end of the routed ones, so
+  // rip-up and reroute can never touch them.
+  fixed.forEach((f, k) => router.reserve({ pts: f.pts }, edges.length + k));
 
   const items = [];
   for (let i = 0; i < edges.length; i++) {
@@ -1675,7 +1731,7 @@ export function organizeLinesShortestPath(diagram, targetKeys = null) {
   // Pass 2..N: rip up the worst offender first and reroute against the rest.
   let passes = 0;
   const ripUpUntilStable = () => {
-    for (let n = 0; n < SP_MAX_PASSES; n++) {
+    for (let n = 0; n < maxPasses; n++) {
       passes++;
       let improved = false;
       // Score once per edge, then sort — scoring inside the comparator would run
@@ -1720,7 +1776,7 @@ export function organizeLinesShortestPath(diagram, targetKeys = null) {
   // Pass N+1: pairwise swaps. Both crossing lines come out, and both orders of
   // reinstating them are tried; whichever scores best is kept.
   let swaps = 0;
-  for (let round = 0; round < SP_SWAP_ROUNDS; round++) {
+  for (let round = 0; round < swapRounds; round++) {
     const pairs = [];
     for (let a = 0; a < items.length; a++) {
       for (let b = a + 1; b < items.length; b++) {

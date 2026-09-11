@@ -37,6 +37,7 @@ export class Diagram {
     this.edgeColorMode = 'multi';  // 'multi' | 'single'
     this.edgeColors = new Map();   // relKey -> hex/color
     this.edgeRouting = 'curved';   // 'curved' | 'straight' | 'ortho-sharp' | 'ortho-rounded'
+    this.orientation = 'LR';       // 'LR' | 'TB' — which way the canvas is turned (rotate-diagram.js)
     this.edgeRoutings = new Map(); // relKey -> routing style override
     this.edgeWaypoints = new Map();// relKey -> [{ x, y }, ...]
     this.edgeAnchors = new Map();  // relKey -> { fromAnchor: { side, offset }, toAnchor: { side, offset } }
@@ -129,6 +130,7 @@ export class Diagram {
       edgeColorMode: this.edgeColorMode,
       edgeColors: Array.from(this.edgeColors.entries()),
       edgeRouting: this.edgeRouting,
+      orientation: this.orientation,
       edgeRoutings: Array.from(this.edgeRoutings.entries()),
       edgeWaypoints: Array.from(this.edgeWaypoints.entries()).map(([k, pts]) => [k, pts.map(p => ({ x: p.x, y: p.y }))]),
       edgeAnchors: Array.from(this.edgeAnchors.entries()).map(([k, a]) => [k, { ...a }]),
@@ -159,6 +161,11 @@ export class Diagram {
     }
     if (snapshot.edgeRouting) {
       this.edgeRouting = snapshot.edgeRouting;
+    }
+    // Undoing a turn has to un-turn the orientation too, or the Direction menu
+    // would claim "Vertical" over a diagram that is horizontal again.
+    if (snapshot.orientation) {
+      this.orientation = snapshot.orientation;
     }
     if (snapshot.edgeRoutings) {
       this.edgeRoutings = new Map(snapshot.edgeRoutings);

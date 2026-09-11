@@ -1,6 +1,7 @@
 // "1 Columna o 1 Fila" — group layout, snapshot of commit c00d210.
 //
-// Takes Direction and Spacing from the Arrange menu (added later); otherwise
+// Takes Spacing from the Arrange menu (added later). Direction is applied
+// afterwards by turning the finished layout (rotate-diagram.js). Otherwise
 // FROZEN. One of four independent group-layout algorithms the user keeps side by
 // side to pick from. Do not refactor it towards the others and do not port fixes
 // into it: it is kept precisely because it lays a diagram out differently, and
@@ -182,8 +183,8 @@ function solvePlacement(items, links, anchors, gap, wantWide = true) {
       if (!improved) break;
     }
 
-    // Prefer the cheaper route; break ties towards the orientation the menu asks
-    // for, which for this algorithm is the whole point of its name.
+    // Prefer the cheaper route; lean towards a horizontal arrangement at both
+    // levels. "Vertical" is this result turned afterwards (rotate-diagram.js).
     const bulk = Math.max(placed.w, placed.h) / Math.max(1, Math.min(placed.w, placed.h));
     // Multiplicative, not additive: this algorithm's costs run into tens of
     // thousands of px, so a flat penalty would never outweigh them. It is a
@@ -345,7 +346,7 @@ export function arrangeGroupsSingleAxis(diagram, opts = {}) {
           }
         }
       }
-      const sol = solvePlacement(g.tables, inner, anchors, CELL_GAP, opts.dir !== 'TB');
+      const sol = solvePlacement(g.tables, inner, anchors, CELL_GAP);
       g.inner = sol;
       g.w = sol.w + PAD_X * 2;
       g.h = sol.h + PAD_TOP + PAD_BOTTOM;
@@ -368,7 +369,7 @@ export function arrangeGroupsSingleAxis(diagram, opts = {}) {
       const [a, b] = k.split('|').map(Number);
       return { a, b, w };
     });
-    const sol = solvePlacement(items, arr, [], GUTTER, opts.dir !== 'TB');
+    const sol = solvePlacement(items, arr, [], GUTTER);
     groups.forEach((g, i) => {
       const b = sol.boxes[i];
       g.x0 = 80 + b.x;
