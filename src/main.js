@@ -17,7 +17,7 @@ import { reorderWithGemini, reorderWithLocalAI, reorderWithExistingGroups } from
 import { arrangeGroupsCompact } from './group-layout-compact.js';
 import { arrangeGroupsSingleAxis } from './group-layout-axis.js';
 import { arrangeGroupsMinCrossings } from './group-layout-crossings.js';
-import { rotateDiagram } from './rotate-diagram.js';
+import { orientDiagram, resetOrientation } from './rotate-diagram.js';
 import { organizeLinesClusterHighways, organizeLinesElkPorts, organizeLinesSmartFaces, organizeLinesPerimeterBus, organizeLinesAStar, organizeLinesShortestPath, resetLines } from './line-organizer.js';
 
 const $ = (id) => document.getElementById(id);
@@ -55,13 +55,9 @@ function updateUndoRedoButtons() {
 }
 history.onChange(updateUndoRedoButtons);
 
-// Direction is state of the canvas, not just a preference: keep the menu, the
-// stored preference and the diagram in agreement.
+// Direction is state of the canvas: the menu always shows which way the diagram
+// on screen actually flows, including after undo/redo or loading a layout.
 function syncOrientation() {
-  const o = diagram.orientation === 'TB' ? 'TB' : 'LR';
-  if (layoutOpts.dir === o) return;
-  layoutOpts.dir = o;
-  localStorage.setItem('dbdiga-dir', o);
   syncMenu();
 }
 
@@ -287,7 +283,7 @@ function applyLayoutData(model, data) {
   if (data.edgeRouting) {
     diagram.setEdgeRouting(data.edgeRouting);
   }
-  if (data.orientation === 'LR' || data.orientation === 'TB') {
+  if (['LR', 'TB', 'RL', 'BT'].includes(data.orientation)) {
     diagram.orientation = data.orientation;
     syncOrientation();
   }
@@ -307,7 +303,7 @@ function placeNewTables(model) {
   const missing = model.tables.filter(t => !Number.isFinite(t.x));
   if (!missing.length) return;
   const placed = model.tables.filter(t => Number.isFinite(t.x));
-  if (!placed.length) { layout(model, layoutOpts, diagram.hidden); diagram.orientation = layoutOpts.dir === 'TB' ? 'TB' : 'LR'; return; }
+  if (!placed.length) { layout(model, layoutOpts, diagram.hidden); resetOrientation(diagram); return; }
   let x1 = -Infinity, y0 = Infinity;
   for (const t of placed) { x1 = Math.max(x1, t.x + t.w); y0 = Math.min(y0, t.y); }
   let x = x1 + 80, y = Number.isFinite(y0) ? y0 : 40;
@@ -561,7 +557,7 @@ let firstRender = true;
 // layout options (persisted)
 const layoutOpts = {
   algo: localStorage.getItem('dbdiga-algo') || 'dagre',
-  dir: localStorage.getItem('dbdiga-dir') || 'LR',
+  dir: 'LR',   // every arrangement flows left to right; the Direction buttons turn it afterwards
   spacing: localStorage.getItem('dbdiga-spacing') || 'comfortable',
 };
 
@@ -645,7 +641,8 @@ function rebuild({ arrange = false, restore = null } = {}) {
   if (arrange) {
     diagram.onHistorySnapshot?.(diagram.getSnapshot());
     layout(result, layoutOpts, diagram.hidden);
-    diagram.orientation = layoutOpts.dir === 'TB' ? 'TB' : 'LR';
+    resetOrientation(diagram);
+    syncOrientation();
     if (result.groups?.length) {
       diagram.setAnnotations(syncModelGroups(result, diagram.annotations));
     }
@@ -663,7 +660,7 @@ function rebuild({ arrange = false, restore = null } = {}) {
     else diagram.fit();
   } else if (firstRender) {
     layout(result, layoutOpts, diagram.hidden);
-    diagram.orientation = layoutOpts.dir === 'TB' ? 'TB' : 'LR';
+    resetOrientation(diagram);
     if (result.groups?.length) {
       diagram.setAnnotations(syncModelGroups(result, diagram.annotations));
     }
@@ -793,8 +790,8 @@ const arrangeMenu = $('arrange-menu');
 function syncMenu() {
   for (const el of arrangeMenu.querySelectorAll('[data-algo]'))
     el.classList.toggle('active', el.dataset.algo === layoutOpts.algo);
-  for (const el of arrangeMenu.querySelectorAll('[data-dir]'))
-    el.classList.toggle('active', el.dataset.dir === layoutOpts.dir);
+  for (const el of arrangeMenu.querySelectorAll('[data-orient]'))
+    el.classList.toggle('active', el.dataset.orient === (diagram.orientation || 'LR'));
   for (const el of arrangeMenu.querySelectorAll('[data-spacing]'))
     el.classList.toggle('active', el.dataset.spacing === layoutOpts.spacing);
 }
@@ -833,15 +830,16 @@ arrangeMenu.addEventListener('click', (e) => {
     layoutOpts.algo = item.dataset.algo;
     localStorage.setItem('dbdiga-algo', layoutOpts.algo);
   }
-  if (item.dataset.dir) {
+  if (item.dataset.orient) {
     // Direction turns what is on the canvas; it never re-arranges anything.
-    // Horizontal -> Vertical is a quarter turn clockwise, and going back is the
-    // exact inverse, so a round trip lands on the very same diagram.
-    const next = item.dataset.dir === 'TB' ? 'TB' : 'LR';
-    if (next !== (diagram.orientation || 'LR')) {
-      // Re-tracing the lines a turn breaks takes seconds on a big diagram, so
-      // park the Arrange button on a spinner and paint before blocking.
+    // Every direction visited is remembered, so coming back to one with nothing
+    // touched in between restores it exactly.
+    const target = item.dataset.orient;
+    if (target !== (diagram.orientation || 'LR')) {
+      // A quarter turn re-traces the lines it breaks, which takes seconds on a
+      // big diagram, so park the Arrange button on a spinner and paint first.
       const btn = $('btn-arrange');
+      endFlash(btn);
       const original = btn.innerHTML;
       btn.innerHTML = '<span class="spinner" style="width:14px;height:14px"></span>';
       btn.disabled = true;
@@ -849,13 +847,11 @@ arrangeMenu.addEventListener('click', (e) => {
       requestAnimationFrame(() => requestAnimationFrame(() => {
         let res;
         try {
-          res = rotateDiagram(diagram, next === 'TB');
+          res = orientDiagram(diagram, target);
         } finally {
           btn.disabled = false;
           btn.innerHTML = original;
         }
-        layoutOpts.dir = next;
-        localStorage.setItem('dbdiga-dir', layoutOpts.dir);
         syncMenu();
         diagram.fit();
         saveLayoutDebounced();
@@ -866,7 +862,6 @@ arrangeMenu.addEventListener('click', (e) => {
         }
       }));
     }
-    syncMenu();
     return;
   }
   if (item.dataset.spacing) {
@@ -953,6 +948,8 @@ async function executeAIReorder(isGemini = false) {
       diagram.setEdgeRouting(selectedLineStyle);
     }
 
+    resetOrientation(diagram);
+    syncMenu();
     diagram.markDirty();
     diagram.fit();
     diagram.onLayoutChange?.();
@@ -984,17 +981,17 @@ async function executeAIReorder(isGemini = false) {
 function runGroupArrange(arrange, label) {
   // Even the fast one can take a moment on a big schema, so paint before blocking.
   const btn = $('btn-arrange');
+  endFlash(btn);
   const original = btn.innerHTML;
   btn.innerHTML = '<span class="spinner" style="width:14px;height:14px"></span>';
   btn.disabled = true;
   requestAnimationFrame(() => requestAnimationFrame(() => {
     let res;
     try {
-      // Every algorithm lays out horizontally; Vertical is that result turned a
-      // quarter clockwise, exactly as the Direction menu would turn it.
+      // Every arrangement flows left to right; pick another direction afterwards.
       res = arrange(diagram, { spacing: layoutOpts.spacing });
-      diagram.orientation = 'LR';
-      if (layoutOpts.dir === 'TB') rotateDiagram(diagram, true, { recordHistory: false });
+      resetOrientation(diagram);
+      syncMenu();
     } catch (err) {
       btn.disabled = false;
       btn.innerHTML = original;
@@ -1042,8 +1039,8 @@ function executeExistingGroupsReorder() {
       diagram.setAnnotations([...notes, ...res.annotations]);
     }
 
-    diagram.orientation = 'LR';
-    if (layoutOpts.dir === 'TB') rotateDiagram(diagram, true, { recordHistory: false });
+    resetOrientation(diagram);
+    syncMenu();
 
     if (selectedLineStyle) {
       diagram.setEdgeRouting(selectedLineStyle);
@@ -1319,6 +1316,7 @@ if (btnEdgeRouting && routingMenu) {
     if (item.id === 'btn-route-shortest-path') {
       // Rip-up and reroute is heavy on big diagrams, so park the button on a
       // spinner and let the browser paint before the search blocks the thread.
+      endFlash(btnEdgeRouting);
       const icon = btnEdgeRouting.innerHTML;
       const title = btnEdgeRouting.title;
       btnEdgeRouting.innerHTML = '<span class="spinner" style="width:14px;height:14px"></span>';
@@ -1599,16 +1597,34 @@ $('btn-save').addEventListener('click', () => {
 });
 
 // ---- Share link (project encoded in the URL hash; nothing stored server-side) ----
+// What each button really says while a flash message covers it. Remembered the
+// first time only: a flash that starts while another is still showing (clicking
+// through the Direction buttons does exactly that) must not mistake that message
+// for the button's own content, or the button keeps the message for good.
+const flashState = new WeakMap();
+
 function flashButton(btn, text) {
-  // innerHTML, not textContent: icon buttons carry an <svg> that must survive.
-  const orig = btn.innerHTML;
-  const wasIcon = btn.classList.contains('icon');
-  if (wasIcon) btn.classList.remove('icon');   // let the button size to the message
+  let st = flashState.get(btn);
+  if (!st) {
+    // innerHTML, not textContent: icon buttons carry an <svg> that must survive.
+    st = { html: btn.innerHTML, icon: btn.classList.contains('icon'), timer: null };
+    flashState.set(btn, st);
+  }
+  clearTimeout(st.timer);
+  if (st.icon) btn.classList.remove('icon');   // let the button size to the message
   btn.textContent = text;
-  setTimeout(() => {
-    btn.innerHTML = orig;
-    if (wasIcon) btn.classList.add('icon');
-  }, 1500);
+  st.timer = setTimeout(() => endFlash(btn), 1500);
+}
+
+// Put a button back to its own content now, cancelling any flash still showing.
+// Call it before capturing a button's innerHTML to swap in a spinner.
+function endFlash(btn) {
+  const st = flashState.get(btn);
+  if (!st) return;
+  clearTimeout(st.timer);
+  btn.innerHTML = st.html;
+  if (st.icon) btn.classList.add('icon');
+  flashState.delete(btn);
 }
 $('btn-share').addEventListener('click', async () => {
   const btn = $('btn-share');

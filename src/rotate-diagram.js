@@ -1,11 +1,18 @@
-// Direction as a quarter turn of the whole canvas.
+// Direction as a turn of the whole canvas.
 //
-// "Vertical" is not a separate layout: it is the horizontal one turned 90
-// degrees clockwise, the way the user turns a diagram by hand — the whole canvas
+// Four directions, one per quarter turn, in clockwise order:
+//   LR  left to right   (as laid out)
+//   TB  top to bottom   (a quarter turn clockwise)
+//   RL  right to left   (a half turn)
+//   BT  bottom to top   (a quarter turn counter-clockwise)
+// Every layout algorithm produces LR. Choosing another direction turns what is
+// on the canvas, the way the user turns a diagram by hand: the whole canvas
 // turns, then every table turns back on its own axis so its text stays upright,
 // and the group boxes simply re-fit around their tables.
 //
-// Three things make that harder than a pure rotation, and each has its own step:
+// A half turn (LR <-> RL, TB <-> BT) is exact: every table keeps its width on the
+// same axis, so nothing can collide and every line still fits its faces. A
+// quarter turn is not, which is why it has extra steps:
 //
 // 1. Tables are wider than tall. Dagre stacks tables in columns spaced by their
 //    height; turned, a column becomes a row spaced by that same height, and the
@@ -17,13 +24,18 @@
 //    face the turn points them at, and a line that no longer clears the tables,
 //    or now runs on top of another line, is re-routed — alone, with every other
 //    line held fixed, in the router's quick mode.
-// 3. The spacing-out is not reversible geometry. So the state before each turn
-//    is remembered: turning back with nothing touched in between restores it
-//    exactly, lines included, instead of computing an approximate inverse.
+// 3. The spacing-out is not reversible geometry. So every direction visited is
+//    remembered, and coming back to one with nothing touched in between restores
+//    it exactly, lines included. When the opposite direction is remembered, a new
+//    one is made from it by an exact half turn, so only one lossy quarter turn is
+//    ever made between the horizontal pair and the vertical pair.
 
 import { getTableAnchor, buildOrthogonalPoints, segmentIntersectsBox } from './routing.js';
 import { computeGroupBounds } from './annotations.js';
 import { organizeLinesShortestPath } from './line-organizer.js';
+
+export const DIRECTIONS = ['LR', 'TB', 'RL', 'BT'];   // clockwise order
+const STEP = { LR: 0, TB: 1, RL: 2, BT: 3 };
 
 const TABLE_GAP = 16;       // two tables closer than this after a turn get spaced out
 const GROUP_GAP = 40;       // ... two group boxes, or a group box and a loose table
@@ -36,29 +48,32 @@ const LINE_MIN_SPAN = 8;    // ... unless they only brush past each other
 // Which face a line docks on after the turn. Clockwise sends right to down.
 const SIDE_CW = { right: 'bottom', bottom: 'left', left: 'top', top: 'right' };
 const SIDE_CCW = { bottom: 'right', left: 'bottom', top: 'left', right: 'top' };
+const SIDE_HALF = { right: 'left', left: 'right', top: 'bottom', bottom: 'top' };
 
 const centreOf = (b) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
 // Turned lines land on whole pixels, like everything the router produces, so
 // when they are held fixed their reservations sit on exactly their own track.
 const snap = (p) => ({ x: Math.round(p.x), y: Math.round(p.y) });
+const liveTables = (diagram) => (diagram?.model?.tables || []).filter(t => Number.isFinite(t.x) && Number.isFinite(t.y));
 
 /**
- * The single transform every element goes through: rotate about the centroid of
- * the table centres, then translate so the tables' bounding box keeps its
- * top-left corner. The centroid does not move under the turn, so as long as
- * nothing had to be spaced out, clockwise and counter-clockwise are inverses.
+ * The single transform every element goes through for `quarters` clockwise
+ * quarter turns (1, 2 or 3): rotate about the centroid of the table centres,
+ * then translate so the tables' bounding box keeps its top-left corner.
  */
-function quarterTurn(tables, clockwise) {
+function turnTransform(tables, quarters) {
   if (!tables.length) return null;
   let cx = 0, cy = 0;
   for (const t of tables) { cx += t.x + t.w / 2; cy += t.y + t.h / 2; }
   cx /= tables.length;
   cy /= tables.length;
 
-  // Screen coordinates: y grows downwards.
+  // Screen coordinates: y grows downwards, so clockwise sends right to down.
   const turn = (p) => {
     const dx = p.x - cx, dy = p.y - cy;
-    return clockwise ? { x: cx - dy, y: cy + dx } : { x: cx + dy, y: cy - dx };
+    if (quarters === 1) return { x: cx - dy, y: cy + dx };
+    if (quarters === 3) return { x: cx + dy, y: cy - dx };
+    return { x: cx - dx, y: cy - dy };
   };
 
   const x0 = Math.min(...tables.map(t => t.x));
@@ -158,25 +173,6 @@ function spaceOut(annotations, tables, isHidden) {
   return moved;
 }
 
-/**
- * Turn a set of tables a quarter, keeping each one upright, and space out any
- * that collide. Used by the layout algorithms, which always lay out
- * horizontally and turn for "Vertical".
- */
-export function rotateTables(tables, clockwise = true) {
-  const live = tables.filter(t => Number.isFinite(t.x) && Number.isFinite(t.y));
-  const turn = quarterTurn(live, clockwise);
-  if (!turn) return 0;
-  for (const t of live) {
-    const c = turn(centreOf(t));
-    t.x = c.x - t.w / 2;
-    t.y = c.y - t.h / 2;
-  }
-  const moved = respace(live, TABLE_GAP);
-  for (const t of live) { t.x = Math.round(t.x); t.y = Math.round(t.y); }
-  return moved;
-}
-
 /** Every relation and manual link, keyed the way edgeAnchors / edgeWaypoints are. */
 function indexEdges(diagram, byKey) {
   const out = new Map();
@@ -244,7 +240,7 @@ function crowds(a, b) {
   return false;
 }
 
-// --- Memory of the state before a turn, for an exact way back ---------------
+// --- Memory of each direction visited, for exact ways back -------------------
 
 function fingerprint(diagram) {
   const r = (v) => Math.round(v * 100) / 100;
@@ -280,33 +276,16 @@ function restore(diagram, saved) {
 }
 
 /**
- * Turn the whole diagram a quarter: tables (kept upright), notes, group boxes
- * and routed lines. Clockwise goes from "Horizontal" to "Vertical".
- * Returns { tables, lines, repaired, nudged, restored }.
+ * Turn everything on the canvas by `quarters` clockwise quarter turns (1, 2 or
+ * 3): tables (kept upright), notes, group boxes and routed lines.
  */
-export function rotateDiagram(diagram, clockwise = true, { recordHistory = true } = {}) {
-  const model = diagram?.model;
-  const tables = (model?.tables || []).filter(t => Number.isFinite(t.x) && Number.isFinite(t.y));
-  if (!tables.length) return { tables: 0, lines: 0, repaired: 0, nudged: 0, restored: false };
-  if (recordHistory) diagram.onHistorySnapshot?.(diagram.getSnapshot());
-
-  // Turning straight back, with nothing touched since the last turn: the exact
-  // inverse is simply the state that turn started from.
-  const memory = diagram._turnMemory;
-  if (memory && memory.clockwise !== clockwise && memory.after === fingerprint(diagram)) {
-    restore(diagram, memory.before);
-    diagram._turnMemory = null;
-    diagram.orientation = clockwise ? 'TB' : 'LR';
-    diagram.fitAllGroups?.();
-    diagram.markDirty?.();
-    diagram.onLayoutChange?.();
-    return { tables: tables.length, lines: 0, repaired: 0, repairedKeys: [], nudged: 0, restored: true };
-  }
-  const before = capture(diagram);
-
+function turnDiagram(diagram, quarters) {
+  const model = diagram.model;
+  const tables = liveTables(diagram);
   const level = diagram.diagramLevel || 'physical';
   const byKey = new Map(tables.map(t => [t.key.toLowerCase(), t]));
   const isHidden = (t) => !!diagram.hidden?.has(t.key.toLowerCase());
+  const quarter = quarters % 2 === 1;
 
   // 1. Capture every routed line's ends while the tables are still in place.
   const lines = [];
@@ -326,34 +305,35 @@ export function rotateDiagram(diagram, clockwise = true, { recordHistory = true 
   }
 
   // 2. Turn the tables. Only their centres move — each keeps its own width and
-  //    height, which is the "turn every table back on its own axis" step — then
-  //    space out whatever the turn left colliding.
-  const turn = quarterTurn(tables, clockwise);
+  //    height, which is the "turn every table back on its own axis" step. A half
+  //    turn keeps every width on the same axis, so only a quarter turn can leave
+  //    tables colliding and needs spacing out.
+  const turn = turnTransform(tables, quarters);
   for (const t of tables) {
     const c = turn(centreOf(t));
     t.x = c.x - t.w / 2;
     t.y = c.y - t.h / 2;
   }
   const annotations = diagram.annotations || [];
-  const nudged = spaceOut(annotations, tables, isHidden);
+  const nudged = quarter ? spaceOut(annotations, tables, isHidden) : 0;
   for (const t of tables) { t.x = Math.round(t.x); t.y = Math.round(t.y); }
   const visible = tables.filter(t => !isHidden(t));
 
   // 3. Notes keep their shape like tables; a group frame drawn without members
-  //    is just a rectangle, so it turns with its sides swapped. Groups that list
+  //    is just a rectangle, so a quarter turn swaps its sides. Groups that list
   //    their tables are re-fitted around them at the end.
   for (const a of annotations) {
     if (!Number.isFinite(a.x) || !Number.isFinite(a.y)) continue;
     if (a.type === 'group' && Array.isArray(a.tables) && a.tables.length) continue;
     const c = turn(centreOf(a));
-    if (a.type === 'group') { const w = a.w; a.w = a.h; a.h = w; }
+    if (a.type === 'group' && quarter) { const w = a.w; a.w = a.h; a.h = w; }
     a.x = c.x - a.w / 2;
     a.y = c.y - a.h / 2;
   }
 
   // 4. Lines: turn every stored vertex and re-seat both ends on the face the
   //    turn points them at, at the same position along that face.
-  const sides = clockwise ? SIDE_CW : SIDE_CCW;
+  const sides = quarters === 1 ? SIDE_CW : quarters === 3 ? SIDE_CCW : SIDE_HALF;
   const broken = [];
   const accepted = [];
   for (const line of lines) {
@@ -393,9 +373,68 @@ export function rotateDiagram(diagram, clockwise = true, { recordHistory = true 
   }
   diagram.fitAllGroups?.();
 
-  diagram.orientation = clockwise ? 'TB' : 'LR';
-  diagram._turnMemory = { clockwise, before, after: fingerprint(diagram) };
+  return { tables: tables.length, lines: lines.length, repaired: broken.length, repairedKeys: broken, nudged };
+}
+
+/**
+ * Make the diagram flow in `target` direction ('LR', 'TB', 'RL' or 'BT') by
+ * turning what is on the canvas. One undoable step.
+ * Returns { changed, restored, tables, lines, repaired, repairedKeys, nudged }.
+ */
+export function orientDiagram(diagram, target, { recordHistory = true } = {}) {
+  const current = STEP[diagram?.orientation] !== undefined ? diagram.orientation : 'LR';
+  const none = { changed: false, restored: false, tables: 0, lines: 0, repaired: 0, repairedKeys: [], nudged: 0 };
+  if (STEP[target] === undefined || target === current) return none;
+  const tables = liveTables(diagram);
+  if (!tables.length) return none;
+  if (recordHistory) diagram.onHistorySnapshot?.(diagram.getSnapshot());
+
+  // The memory can only be trusted if the canvas is exactly as the last turn
+  // left it; the moment anything was edited it starts again from here.
+  const now = fingerprint(diagram);
+  let memory = diagram._orientMemory;
+  if (!memory || memory.prints.get(current) !== now) {
+    memory = { states: new Map([[current, capture(diagram)]]), prints: new Map([[current, now]]) };
+    diagram._orientMemory = memory;
+  }
+
+  let result;
+  if (memory.states.has(target)) {
+    restore(diagram, memory.states.get(target));
+    result = { ...none, tables: tables.length, restored: true };
+  } else {
+    // An exact half turn from the opposite direction beats a quarter turn.
+    const opposite = DIRECTIONS[(STEP[target] + 2) % 4];
+    if (memory.states.has(opposite)) {
+      if (opposite !== current) restore(diagram, memory.states.get(opposite));
+      result = turnDiagram(diagram, 2);
+    } else {
+      result = turnDiagram(diagram, (STEP[target] - STEP[current] + 4) % 4);
+    }
+    memory.states.set(target, capture(diagram));
+    memory.prints.set(target, fingerprint(diagram));
+    result = { ...result, restored: false };
+  }
+
+  diagram.orientation = target;
+  diagram.fitAllGroups?.();
   diagram.markDirty?.();
   diagram.onLayoutChange?.();
-  return { tables: tables.length, lines: lines.length, repaired: broken.length, repairedKeys: broken, nudged, restored: false };
+  return { ...result, changed: true };
+}
+
+/** A quarter turn from wherever the diagram points now. */
+export function rotateDiagram(diagram, clockwise = true, options = {}) {
+  const current = STEP[diagram?.orientation] !== undefined ? diagram.orientation : 'LR';
+  return orientDiagram(diagram, DIRECTIONS[(STEP[current] + (clockwise ? 1 : 3)) % 4], options);
+}
+
+/**
+ * A fresh arrangement always flows left to right, and whatever was remembered
+ * about other directions described a layout that no longer exists.
+ */
+export function resetOrientation(diagram) {
+  if (!diagram) return;
+  diagram.orientation = 'LR';
+  diagram._orientMemory = null;
 }

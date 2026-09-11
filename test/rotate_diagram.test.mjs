@@ -4,8 +4,7 @@ import { EXAMPLE_SQL } from '../src/examples.js';
 import { parseSchema } from '../src/parse.js';
 import { arrangeGroupsCompact } from '../src/group-layout-compact.js';
 import { organizeLinesShortestPath, spCountOverlap } from '../src/line-organizer.js';
-import { rotateDiagram } from '../src/rotate-diagram.js';
-import { layout } from '../src/layout.js';
+import { rotateDiagram, orientDiagram, resetOrientation } from '../src/rotate-diagram.js';
 import { getTableAnchor, buildOrthogonalPoints, segmentIntersectsBox } from '../src/routing.js';
 
 function mockDiagram(model, annotations) {
@@ -204,29 +203,6 @@ test('a turn is one undoable step, and a turn inside another action records none
   assert.strictEqual(d.snapshots, start + 1);
 });
 
-test('Hierarchical Vertical is its Horizontal layout turned clockwise', () => {
-  const lr = parseSchema(EXAMPLE_SQL, 'auto');
-  const tb = parseSchema(EXAMPLE_SQL, 'auto');
-  layout(lr, { algo: 'dagre', dir: 'LR', spacing: 'comfortable' });
-  layout(tb, { algo: 'dagre', dir: 'TB', spacing: 'comfortable' });
-
-  const at = (m, k) => { const t = m.tables.find(x => x.key === k); return { x: t.x + t.w / 2, y: t.y + t.h / 2 }; };
-  let checked = 0;
-  for (const a of lr.tables) {
-    for (const b of lr.tables) {
-      if (a === b) continue;
-      const A = at(lr, a.key), B = at(lr, b.key);
-      if (Math.abs(B.x - A.x) < 2 * Math.abs(B.y - A.y) + 1) continue;   // only clearly side-by-side pairs
-      // Clockwise sends "to the right" to "below".
-      const below = at(tb, b.key).y > at(tb, a.key).y;
-      assert.strictEqual(below, B.x > A.x, `${b.key} right of ${a.key} in LR must be below it in TB`);
-      checked++;
-    }
-  }
-  assert.ok(checked > 0, 'the example has side-by-side pairs to compare');
-  assertNoTableOverlap(tb.tables);
-});
-
 test('re-routing some lines with keepOthers never moves or rides on the rest', () => {
   const d = denseDiagram();
   arrangeGroupsCompact(d, { spacing: 'comfortable' });
@@ -244,4 +220,85 @@ test('re-routing some lines with keepOthers never moves or rides on the rest', (
     'the lines not being re-routed keep their exact shape');
   assert.strictEqual(d.snapshots, before, 'recordHistory: false records nothing');
   assert.strictEqual(Math.round(spCountOverlap(drawnLines(d).map(l => l.pts))), 0, 'the new routes never ride on a fixed line');
+});
+
+test('going all the way round returns exactly to the start, lines included', () => {
+  const d = exampleDiagram();
+  arrangeGroupsCompact(d, { spacing: 'comfortable' });
+  organizeLinesShortestPath(d);
+  const start = state(d);
+
+  for (const dir of ['TB', 'RL', 'BT', 'LR']) orientDiagram(d, dir);
+
+  assert.strictEqual(state(d), start);
+  assert.strictEqual(d.orientation, 'LR');
+});
+
+test('right to left is left to right turned half-way, so every side swaps', () => {
+  const d = exampleDiagram();
+  arrangeGroupsCompact(d, { spacing: 'comfortable' });
+  organizeLinesShortestPath(d);
+  const res = orientDiagram(d, 'RL');
+
+  // As laid out: orders below order_items, aaa left of bbb, reviews below products.
+  assert.strictEqual(side(d, 'orders', 'order_items'), 'above');
+  assert.strictEqual(side(d, 'order_items', 'addresses'), 'right', 'group aaa is now right of bbb');
+  assert.strictEqual(side(d, 'reviews', 'products'), 'above');
+  assert.strictEqual(res.nudged, 0, 'a half turn cannot make tables collide');
+  assertNoTableOverlap(d.model.tables);
+
+  const lines = drawnLines(d);
+  assert.strictEqual(lines.length, d.model.relations.length);
+  assert.strictEqual(Math.round(spCountOverlap(lines.map(l => l.pts))), 0);
+  for (const { from, to, pts } of lines) {
+    for (let i = 0; i < pts.length - 1; i++) {
+      for (const t of d.model.tables) {
+        if (t === from || t === to) continue;
+        assert.ok(!segmentIntersectsBox(pts[i], pts[i + 1], t, 15.5).hit, `a line keeps 16px clear of ${t.key}`);
+      }
+    }
+  }
+});
+
+test('bottom to top is top to bottom turned half-way', () => {
+  const d = exampleDiagram();
+  arrangeGroupsCompact(d, { spacing: 'comfortable' });
+  orientDiagram(d, 'TB');
+  const tb = new Map(d.model.tables.map(t => [t.key, centre(d, t.key)]));
+  orientDiagram(d, 'BT');
+
+  // Every pair keeps its distance and flips its direction.
+  for (const a of d.model.tables) {
+    for (const b of d.model.tables) {
+      if (a === b) continue;
+      const before = { x: tb.get(b.key).x - tb.get(a.key).x, y: tb.get(b.key).y - tb.get(a.key).y };
+      const after = { x: centre(d, b.key).x - centre(d, a.key).x, y: centre(d, b.key).y - centre(d, a.key).y };
+      assert.ok(Math.abs(after.x + before.x) < 1.5 && Math.abs(after.y + before.y) < 1.5,
+        `${a.key} -> ${b.key} is mirrored through the centre`);
+    }
+  }
+  assert.strictEqual(d.orientation, 'BT');
+});
+
+test('picking the direction the diagram already has changes nothing', () => {
+  const d = exampleDiagram();
+  arrangeGroupsCompact(d, { spacing: 'comfortable' });
+  const before = state(d);
+  const snaps = d.snapshots;
+  const res = orientDiagram(d, 'LR');
+  assert.strictEqual(res.changed, false);
+  assert.strictEqual(state(d), before);
+  assert.strictEqual(d.snapshots, snaps, 'no undo step for a no-op');
+});
+
+test('a fresh arrangement forgets the directions remembered for the old one', () => {
+  const d = exampleDiagram();
+  arrangeGroupsCompact(d, { spacing: 'comfortable' });
+  orientDiagram(d, 'TB');
+  arrangeGroupsCompact(d, { spacing: 'comfortable' });   // re-arranged: left to right again
+  resetOrientation(d);
+
+  const res = orientDiagram(d, 'TB');
+  assert.ok(!res.restored, 'the old vertical layout must not come back over the new arrangement');
+  assert.strictEqual(d.orientation, 'TB');
 });
