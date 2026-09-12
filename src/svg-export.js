@@ -4,6 +4,7 @@ import { NOTE_COLORS, GROUP_COLORS, resolveGroupColor } from './annotations.js';
 import { relationCardinality } from './cardinality.js';
 import { getTableAnchor, buildSVGPath } from './routing.js';
 import { cardTexts, cardAnchor, routePolyline, labelAnchor, DEFAULT_NAME_POS } from './edge-labels.js';
+import { computeLineHops } from './line-hops.js';
 
 // Crow's-foot cardinality marker at a line endpoint (world coords).
 //   (nx, ny) = outward normal vector from the table edge (pointing along the line).
@@ -135,6 +136,27 @@ export function exportSVG(
     }
   }
 
+  // Every line has to be known before any is drawn, to work out which of two
+  // crossing 90° lines hops over the other. Same rule as the canvas.
+  const hopMap = computeLineHops(model.relations.map(r => {
+    if (isHidden(r.fromTable) || isHidden(r.toTable)) return null;
+    const fromT = byKey.get(r.fromTable.toLowerCase());
+    const toT = byKey.get(r.toTable.toLowerCase());
+    if (!fromT || !toT) return null;
+    const key = `${r.fromTable}.${r.fromCols[0]}->${r.toTable}.${r.toCols[0]}`.toLowerCase();
+    const anchor = (edgeAnchors && (typeof edgeAnchors.get === 'function' ? edgeAnchors.get(key) : edgeAnchors[key])) || null;
+    const wps = (edgeWaypoints && (typeof edgeWaypoints.get === 'function' ? edgeWaypoints.get(key) : edgeWaypoints[key])) || [];
+    const style = (edgeRoutings && (typeof edgeRoutings.get === 'function' ? edgeRoutings.get(key) : edgeRoutings[key])) || edgeRouting;
+    return {
+      key,
+      routingStyle: style,
+      p1: getTableAnchor(fromT, r.fromCols[0], toT, anchor?.fromAnchor, 0, diagramLevel),
+      p2: getTableAnchor(toT, r.toCols[0], fromT, anchor?.toAnchor, 0, diagramLevel),
+      waypoints: wps,
+      obstacles: ts,
+    };
+  }).filter(Boolean));
+
   // edges
   for (const r of model.relations) {
     if (isHidden(r.fromTable) || isHidden(r.toTable)) continue;
@@ -160,7 +182,7 @@ export function exportSVG(
     const color = customCol || (isManual ? '#4ec9b0' : (edgeColorMode === 'single' ? theme.edge : EDGE_COLORS[Math.abs(hash(key)) % EDGE_COLORS.length]));
 
     const strokeDash = isManual ? 'stroke-dasharray="5 3"' : '';
-    const d = buildSVGPath(effectiveRouting, p1, p2, waypoints, 8, ts);
+    const d = buildSVGPath(effectiveRouting, p1, p2, waypoints, 8, ts, 0, hopMap.get(key));
     parts.push(`<path d="${d}" fill="none" stroke="${color}" stroke-width="1.5" ${strokeDash}/>`);
 
     // markers

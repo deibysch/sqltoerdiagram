@@ -6,6 +6,7 @@ import { NOTE_COLORS, GROUP_COLORS, NOTE_ORDER, GROUP_ORDER, makeAnnotation, res
 import { ROUTING_STYLES, getTableAnchor, drawRoutePath, distanceToRoute, pointToSegmentDistance, buildOrthogonalPoints, getOrthogonalSegments, moveOrthogonalSegment, moveOrthogonalCorner, cleanOrthogonalPoints, filterRedundantWaypoints, projectPointToPerimeter } from './routing.js';
 import { relationCardinality } from './cardinality.js';
 import { cardTexts, cardAnchor, routePolyline, labelAnchor, nearestPosition, DEFAULT_NAME_POS } from './edge-labels.js';
+import { computeLineHops } from './line-hops.js';
 import { inferLinks as inferLinksCore } from './infer-links.js';
 
 export class Diagram {
@@ -886,6 +887,7 @@ export class Diagram {
     const fadeAlpha = this.pinned ? 0.05 : 0.16;   // pinned fades harder than transient hover
     const highlighted = [];
     const lettered = [];   // every drawn edge, for the words that go on top of them
+    const queued = [];     // ... and for the crossings, which need every line first
 
     // FK relations + user-defined manual links (latter drawn dashed).
     // FK relations carry crow's-foot cardinality; manual links stay neutral.
@@ -1001,14 +1003,21 @@ export class Diagram {
 
       if (focusKey || this.selectedEdgeKey || this.hoverEdge) {
         if (connected) { highlighted.push(seg); continue; }
-        this._strokeRoute(seg, edgeColor, 1.2, fadeAlpha, e.manual, false, false);
+        queued.push({ seg, color: edgeColor, width: 1.2, alpha: fadeAlpha, dashed: e.manual });
         lettered.push({ seg, alpha: fadeAlpha, focused: false });
       } else {
         const baseAlpha = this.edgeColorMode === 'single' ? 0.6 : 0.85;
-        this._strokeRoute(seg, edgeColor, 1.6, baseAlpha, e.manual, false, false);
+        queued.push({ seg, color: edgeColor, width: 1.6, alpha: baseAlpha, dashed: e.manual });
         lettered.push({ seg, alpha: baseAlpha, focused: false });
       }
     }
+
+    // Where two 90° lines cross, one of them hops over the other. Which one is
+    // settled from the whole picture, so nothing is painted until every line is
+    // known — otherwise the answer would depend on drawing order.
+    this._hops = computeLineHops([...queued.map(q => q.seg), ...highlighted]);
+
+    for (const q of queued) this._strokeRoute(q.seg, q.color, q.width, q.alpha, q.dashed, false, false);
     for (const seg of highlighted) {
       const isSelectedEdge = this.selectedEdgeKey === seg.key;
       const isHoveredEdge = this.hoverEdge?.key === seg.key;
@@ -1031,7 +1040,7 @@ export class Diagram {
     ctx.lineWidth = width / cam.scale;
     if (dashed) ctx.setLineDash([6 / cam.scale, 5 / cam.scale]);
     ctx.beginPath();
-    drawRoutePath(ctx, routingStyle, p1, p2, waypoints, 8, seg.obstacles, seg.laneOffset || 0);
+    drawRoutePath(ctx, routingStyle, p1, p2, waypoints, 8, seg.obstacles, seg.laneOffset || 0, this._hops?.get(seg.key));
     ctx.stroke();
     if (dashed) ctx.setLineDash([]);
 

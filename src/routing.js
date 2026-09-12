@@ -1126,7 +1126,43 @@ export function moveOrthogonalCorner(p1, p2, basePointsOrWaypoints, cornerIndex,
 /**
  * Draw route onto Canvas 2D context based on routing style.
  */
-export function drawRoutePath(ctx, style, p1, p2, waypoints = [], radius = 8, obstacles = [], laneOffset = 0) {
+// --- line jumps ------------------------------------------------------------
+// Where two 90° lines cross, the horizontal one arcs over the vertical one.
+// line-hops.js works out where; these two painters draw the same bridge, one on
+// the canvas and one into an SVG path, so an export matches the screen.
+export const HOP_RADIUS = 6;
+
+/** The bridges that sit on one horizontal run, in the order it is travelled. */
+function hopsOnRun(hops, y, fromX, toX, clearance) {
+  if (!hops || !hops.length) return [];
+  const dir = toX >= fromX ? 1 : -1;
+  return hops
+    .filter(h => Math.abs(h.y - y) < 1 &&
+      (h.x - fromX) * dir > clearance && (toX - h.x) * dir > clearance)
+    .sort((a, b) => (a.x - b.x) * dir);
+}
+
+function canvasBridges(ctx, hops, y, fromX, toX, clearance) {
+  const dir = toX >= fromX ? 1 : -1;
+  for (const h of hopsOnRun(hops, y, fromX, toX, clearance)) {
+    ctx.lineTo(h.x - dir * HOP_RADIUS, y);
+    // always bulge upwards, whichever way the line is being travelled
+    if (dir > 0) ctx.arc(h.x, y, HOP_RADIUS, Math.PI, 2 * Math.PI, false);
+    else ctx.arc(h.x, y, HOP_RADIUS, 0, Math.PI, true);
+  }
+}
+
+function svgBridges(hops, y, fromX, toX, clearance) {
+  const dir = toX >= fromX ? 1 : -1;
+  let d = '';
+  for (const h of hopsOnRun(hops, y, fromX, toX, clearance)) {
+    d += ` L ${h.x - dir * HOP_RADIUS} ${y}` +
+      ` A ${HOP_RADIUS} ${HOP_RADIUS} 0 0 ${dir > 0 ? 1 : 0} ${h.x + dir * HOP_RADIUS} ${y}`;
+  }
+  return d;
+}
+
+export function drawRoutePath(ctx, style, p1, p2, waypoints = [], radius = 8, obstacles = [], laneOffset = 0, hops = null) {
   const pts = [p1, ...(waypoints || []), p2];
 
   if (style === 'straight') {
@@ -1179,25 +1215,32 @@ export function drawRoutePath(ctx, style, p1, p2, waypoints = [], radius = 8, ob
 
   if (style === 'ortho-sharp' || radius <= 0) {
     for (let i = 1; i < ortho.length; i++) {
-      ctx.lineTo(ortho[i].x, ortho[i].y);
+      const a = ortho[i - 1], b = ortho[i];
+      if (Math.abs(a.y - b.y) < 1) canvasBridges(ctx, hops, a.y, a.x, b.x, HOP_RADIUS);
+      ctx.lineTo(b.x, b.y);
     }
     return;
   }
 
-  // 'ortho-rounded' with arcTo rounded corners
+  // 'ortho-rounded' with arcTo rounded corners. A bridge keeps its distance from
+  // the corner rounding, so the two curves never eat into each other.
   const r = Math.max(2, Math.min(14, radius));
   for (let i = 1; i < ortho.length - 1; i++) {
+    const prev = ortho[i - 1];
     const cur = ortho[i];
     const next = ortho[i + 1];
+    if (Math.abs(prev.y - cur.y) < 1) canvasBridges(ctx, hops, prev.y, prev.x, cur.x, HOP_RADIUS + r);
     ctx.arcTo(cur.x, cur.y, next.x, next.y, r);
   }
-  ctx.lineTo(ortho[ortho.length - 1].x, ortho[ortho.length - 1].y);
+  const lastA = ortho[ortho.length - 2], lastB = ortho[ortho.length - 1];
+  if (Math.abs(lastA.y - lastB.y) < 1) canvasBridges(ctx, hops, lastA.y, lastA.x, lastB.x, HOP_RADIUS + r);
+  ctx.lineTo(lastB.x, lastB.y);
 }
 
 /**
  * Generate SVG path `d` attribute string for the given routing style.
  */
-export function buildSVGPath(style, p1, p2, waypoints = [], radius = 8, obstacles = [], laneOffset = 0) {
+export function buildSVGPath(style, p1, p2, waypoints = [], radius = 8, obstacles = [], laneOffset = 0, hops = null) {
   const pts = [p1, ...(waypoints || []), p2];
 
   if (style === 'straight') {
@@ -1241,7 +1284,13 @@ export function buildSVGPath(style, p1, p2, waypoints = [], radius = 8, obstacle
   if (!ortho.length) return `M ${p1.x} ${p1.y}`;
 
   if (style === 'ortho-sharp' || radius <= 0) {
-    return 'M ' + ortho.map(p => `${p.x} ${p.y}`).join(' L ');
+    let d = `M ${ortho[0].x} ${ortho[0].y}`;
+    for (let i = 1; i < ortho.length; i++) {
+      const a = ortho[i - 1], b = ortho[i];
+      if (Math.abs(a.y - b.y) < 1) d += svgBridges(hops, a.y, a.x, b.x, HOP_RADIUS);
+      d += ` L ${b.x} ${b.y}`;
+    }
+    return d;
   }
 
   // Orthogonal rounded SVG
@@ -1265,10 +1314,13 @@ export function buildSVGPath(style, p1, p2, waypoints = [], radius = 8, obstacle
     const pStart = { x: cur.x + v1x * cr, y: cur.y + v1y * cr };
     const pEnd = { x: cur.x + v2x * cr, y: cur.y + v2y * cr };
 
+    if (Math.abs(prev.y - cur.y) < 1) d += svgBridges(hops, prev.y, prev.x, pStart.x, HOP_RADIUS);
     d += ` L ${pStart.x} ${pStart.y} Q ${cur.x} ${cur.y}, ${pEnd.x} ${pEnd.y}`;
   }
 
-  d += ` L ${ortho[ortho.length - 1].x} ${ortho[ortho.length - 1].y}`;
+  const tailA = ortho[ortho.length - 2], tailB = ortho[ortho.length - 1];
+  if (Math.abs(tailA.y - tailB.y) < 1) d += svgBridges(hops, tailA.y, tailA.x, tailB.x, HOP_RADIUS + r);
+  d += ` L ${tailB.x} ${tailB.y}`;
   return d;
 }
 
