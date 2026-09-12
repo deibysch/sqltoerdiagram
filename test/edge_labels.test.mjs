@@ -105,18 +105,62 @@ test('the SVG export writes the same multiplicity and name as the canvas', () =>
   assert.ok(svg.includes('>wrote<'), 'the relation name');
 });
 
-test('the SVG export leaves out what only shows on hover', () => {
-  const svg = buildSVG({
+test('an export has no pointer, so what shows on hover is exported', () => {
+  const hover = buildSVG({
     edgeNames: new Map([[KEY, 'wrote']]),
     multiplicityMode: 'hover',
     relationNamesMode: 'hover',
   });
-  assert.ok(!svg.includes('>wrote<'), 'no name when names are hidden');
-  assert.ok(!svg.includes('0..1'), 'no multiplicity when it is hidden');
+  assert.ok(hover.includes('>wrote<'), 'the name is in the export');
+  assert.ok(hover.includes('>0..1<'), 'and so is the multiplicity');
+
+  const hidden = buildSVG({
+    edgeNames: new Map([[KEY, 'wrote']]),
+    multiplicityMode: 'hidden',
+    relationNamesMode: 'hidden',
+  });
+  assert.ok(!hidden.includes('>wrote<'), 'hidden names stay out');
+  assert.ok(!hidden.includes('0..1'), 'hidden multiplicity stays out');
 });
 
 test('turning the connector off drops the crow\'s foot from the SVG', () => {
   const withFoot = buildSVG({});
   const without = buildSVG({ connectorStyle: 'none' });
   assert.ok(without.length < withFoot.length, 'the markers were paths that are now gone');
+});
+
+// --- nothing on the lines may cover a table ------------------------------
+
+// A third table parked right where the name would land (measured: 324, 89).
+const BLOCKED_MODEL = {
+  tables: [
+    ...EXPORT_MODEL.tables,
+    { name: 'middle', key: 'middle', x: 280, y: 60, w: 120, h: 80, columns: [{ name: 'id', type: 'bigint' }] },
+  ],
+  relations: EXPORT_MODEL.relations,
+};
+
+const buildBlockedSVG = (opts) =>
+  exportSVG(BLOCKED_MODEL, 'dark', [], null, 'multi', null, 'curved', null, null, null, 'physical', opts);
+
+test('a name that lands on a table is still exported, on top of it', () => {
+  const svg = buildBlockedSVG({
+    edgeNames: new Map([[KEY, 'wrote']]),
+    relationNamesMode: 'always',
+  });
+  const name = svg.indexOf('>wrote<');
+  assert.ok(name > 0, 'nothing disappears because a table is in the way');
+  assert.ok(name > svg.lastIndexOf('<g transform="translate('), 'and it is written over the tables');
+});
+
+test('the words are written after the tables, so nothing paints over them', () => {
+  const svg = buildSVG({
+    edgeNames: new Map([[KEY, 'wrote']]),
+    relationNamesMode: 'always',
+    multiplicityMode: 'always',
+  });
+  const lastTable = svg.lastIndexOf('<g transform="translate(');
+  assert.ok(lastTable > 0, 'the tables are in there');
+  assert.ok(svg.indexOf('>wrote<') > lastTable, 'the name comes after the last table');
+  assert.ok(svg.indexOf('>0..1<') > lastTable, 'and so does the multiplicity');
 });

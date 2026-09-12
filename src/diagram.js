@@ -384,6 +384,9 @@ export class Diagram {
     // sticky notes on top of tables
     for (const a of this.annotations) if (a.type === 'note') this._drawNote(a, cull);
 
+    // the words on the connections, last of all so nothing paints over them
+    this._drawEdgeTextLayer();
+
     // selection chrome (handles, colour dots, delete) for the selected annotation
     if (this.selectedAnno) this._drawAnnoChrome(this.selectedAnno);
 
@@ -469,14 +472,16 @@ export class Diagram {
     ctx.strokeStyle = (this.selectedAnnos.has(a) || this.selectedAnno === a) ? theme.edgeHi : hexA(color, 0.7);
     ctx.lineWidth = ((this.selectedAnnos.has(a) || this.selectedAnno === a) ? 2.5 : 1.5) / cam.scale;
     ctx.stroke();
-    // label in the header strip
+    // Label in the header strip. Measured in diagram units, like the text inside
+    // the tables and on the lines: it grows and shrinks with the zoom as part of
+    // the drawing, instead of staying the same size on screen.
     if (a.text) {
       ctx.fillStyle = (this.selectedAnnos.has(a) || this.selectedAnno === a) ? theme.edgeHi : color;
-      ctx.font = `600 ${13 / cam.scale}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.font = '600 13px ui-sans-serif, system-ui, sans-serif';
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'left';
-      const pad = 10 / cam.scale;
-      ctx.fillText(clip(ctx, a.text, a.w - pad * 2), a.x + pad, a.y + 16 / cam.scale);
+      const pad = 10;
+      ctx.fillText(clip(ctx, a.text, a.w - pad * 2), a.x + pad, a.y + 16);
     }
     ctx.restore();
   }
@@ -1025,10 +1030,14 @@ export class Diagram {
       const width = isSelectedEdge ? 3.0 : 2.5;
       this._strokeRoute(seg, hiColor, width, 1.0, seg.manual, isSelectedEdge, isHoveredEdge);
     }
-    this._edgeLabelHits = [];
-    for (const { seg, alpha, focused } of lettered) this._drawEdgeTexts(seg, alpha, focused);
-    for (const seg of highlighted) this._drawEdgeTexts(seg, 1, true);
-    for (const seg of highlighted) this._drawEdgeLabel(seg);   // words, on top of the lines
+    // The words are not drawn here: a table painted later would cover them, and
+    // a line often runs behind one. _drawEdgeTextLayer picks them up once the
+    // tables are down.
+    this._pendingLabels = [
+      ...lettered,
+      ...highlighted.map(seg => ({ seg, alpha: 1, focused: true })),
+    ];
+    this._pendingPills = highlighted;
   }
 
   _strokeRoute(seg, color, width, alpha, dashed, isSelectedEdge = false, isHoveredEdge = false) {
@@ -1045,8 +1054,10 @@ export class Diagram {
     if (dashed) ctx.setLineDash([]);
 
     if (card && this.connectorStyle !== 'none') {
-      // markers sit just outside each table, pointing along the line
-      const s = 1 / cam.scale;
+      // Markers sit just outside each table, pointing along the line. Their shape
+      // is measured in diagram units, so it grows and shrinks with the tables as
+      // you zoom, like the rest of the drawing; only the stroke stays a hairline.
+      const s = 1;
       const mw = Math.max(width, 1.4) / cam.scale;
       let nx1 = p1.nx, ny1 = p1.ny;
       if ((nx1 === undefined || nx1 === null || (nx1 === 0 && ny1 === 0)) && (waypoints?.length || p2)) {
@@ -1191,50 +1202,59 @@ export class Diagram {
   // whichever way the line runs, and haloed so the lines underneath do not cut
   // through the letters.
   _drawEdgeTexts(seg, alpha, focused = false) {
-    const cardOn = this.multiplicityMode === 'always' || (this.multiplicityMode === 'hover' && focused);
-    const nameOn = this.relationNamesMode === 'always' || (this.relationNamesMode === 'hover' && focused);
-    const showCard = cardOn && seg.card && seg.cardText;
-    const name = nameOn ? (seg.name || '') : '';
+    // An export has no pointer, so what would show on hover is simply shown.
+    const shows = (mode) => mode === 'always' || (mode === 'hover' && (focused || this._exporting));
+    const showCard = shows(this.multiplicityMode) && seg.card && seg.cardText;
+    const name = shows(this.relationNamesMode) ? (seg.name || '') : '';
     // An unnamed line offers a spot to write one, but only the line you are
-    // pointing at: on every line at once it would be a field of plus signs.
-    const offerName = nameOn && focused && !name;
+    // pointing at — on every line at once it would be a field of plus signs —
+    // and never in an export.
+    const offerName = shows(this.relationNamesMode) && focused && !name && !this._exporting;
     if (!showCard && !name && !offerName) return;
-    const { ctx, cam } = this;
-    const s = 1 / cam.scale;
+    const { ctx } = this;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
+    // Sizes are in diagram units, like the text inside the tables: the words grow
+    // and shrink with the zoom, and an export comes out exactly as the screen.
     if (showCard) {
-      ctx.font = `${11 * s}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
       for (const which of ['from', 'to']) {
         const text = seg.cardText[which];
         if (!text) continue;
         const at = this._cardAnchor(seg, which);
-        this._haloText(text, at.x, at.y, seg.color || this.theme.edgeHi, s);
         const w = ctx.measureText(text).width;
-        this._edgeLabelHits.push({
-          key: seg.key, kind: 'card', which,
-          x: at.x - w / 2 - 6 * s, y: at.y - 9 * s,
-          w: w + 12 * s, h: 18 * s,
-        });
+        this._haloText(text, at.x, at.y, seg.color || this.theme.edgeHi);
+        this._edgeLabelHits.push({ key: seg.key, kind: 'card', which, x: at.x - w / 2 - 6, y: at.y - 9, w: w + 12, h: 18 });
       }
     }
 
     if (name || offerName) {
       const text = name || '+ name';
-      ctx.font = `600 ${12 * s}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
       const at = this._nameAnchor(seg);
-      this._haloText(text, at.x, at.y, name ? this.theme.headerText : this.theme.typeText, s);
       const w = ctx.measureText(text).width;
-      this._edgeLabelHits.push({
-        key: seg.key, kind: name ? 'name' : 'offer',
-        x: at.x - w / 2 - 5 * s, y: at.y - 10 * s,
-        w: w + 10 * s, h: 20 * s,
-      });
+      this._haloText(text, at.x, at.y, name ? this.theme.headerText : this.theme.typeText);
+      this._edgeLabelHits.push({ key: seg.key, kind: name ? 'name' : 'offer', x: at.x - w / 2 - 5, y: at.y - 10, w: w + 10, h: 20 });
     }
     ctx.restore();
+  }
+
+  /**
+   * The words that ride on the lines, drawn after the tables and notes so
+   * nothing can paint over them. Where one lands on a table it is drawn on top
+   * of it: hiding it would make words come and go as you zoom or move a table.
+   */
+  _drawEdgeTextLayer() {
+    this._edgeLabelHits = [];
+    for (const { seg, alpha, focused } of (this._pendingLabels || [])) {
+      this._drawEdgeTexts(seg, alpha, focused);
+    }
+    for (const seg of (this._pendingPills || [])) this._drawEdgeLabel(seg);
+    this._pendingLabels = null;
+    this._pendingPills = null;
   }
 
   _nameAnchor(seg) {
@@ -1252,9 +1272,9 @@ export class Diagram {
     return seg ? routePolyline(seg.routingStyle, seg.p1, seg.p2, seg.waypoints, seg.obstacles, seg.laneOffset || 0) : null;
   }
 
-  _haloText(text, x, y, color, s) {
+  _haloText(text, x, y, color) {
     const { ctx } = this;
-    ctx.lineWidth = 3.5 * s;
+    ctx.lineWidth = 3.5;
     ctx.lineJoin = 'round';
     ctx.strokeStyle = this.theme.bg;
     ctx.strokeText(text, x, y);
@@ -3059,6 +3079,14 @@ export class Diagram {
       ctx.drawImage(this._bitmap(t), t.x, t.y, t.w, t.h);
     }
     for (const a of this.annotations) if (a.type === 'note') this._drawNote(a, all);
+    // the words on the connections, on top of everything as on screen; this
+    // export has its own drawing sequence, so the pass has to be called here too
+    this._exporting = true;
+    try {
+      this._drawEdgeTextLayer();
+    } finally {
+      this._exporting = false;
+    }
     this.ctx = saved;
     this.cam = savedCam;
     return cv.toDataURL('image/png');

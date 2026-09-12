@@ -98,9 +98,9 @@ export function exportSVG(
     multiplicityMode = 'hidden',
     relationNamesMode = 'hidden',
   } = opts;
-  // An export is a still picture: what only shows on hover shows on nothing here.
-  const showMultiplicity = multiplicityMode === 'always';
-  const showRelationNames = relationNamesMode === 'always';
+  // An export has no pointer, so what would show on hover is simply shown.
+  const showMultiplicity = multiplicityMode === 'always' || multiplicityMode === 'hover';
+  const showRelationNames = relationNamesMode === 'always' || relationNamesMode === 'hover';
   const theme = THEMES[themeName] || THEMES.dark;
   const isHidden = (k) => !!(hidden && hidden.has(k));
   const ts = model.tables.filter(t => Number.isFinite(t.x) && !isHidden(t.key));
@@ -129,8 +129,9 @@ export function exportSVG(
     if (a.type !== 'group') continue;
     const color = resolveGroupColor(a.color);
     parts.push(`<rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" rx="12" fill="${hexA(color, 0.08)}" stroke="${hexA(color, 0.7)}" stroke-width="1.5"/>`);
-    const pad = 14;
-    parts.push(`<text x="${a.x + pad}" y="${a.y + 24}" font-size="14" font-weight="700" fill="${color}">${esc(a.text || 'Group')}</text>`);
+    // the same size and spot as the canvas draws it, so the export matches the screen
+    const pad = 10;
+    parts.push(`<text x="${a.x + pad}" y="${a.y + 16}" dominant-baseline="middle" font-size="13" font-weight="600" fill="${color}">${esc(a.text || 'Group')}</text>`);
     if (a.note) {
       parts.push(`<text x="${a.x + pad}" y="${a.y + 42}" font-size="12" fill="${hexA(color, 0.8)}">${esc(a.note)}</text>`);
     }
@@ -156,6 +157,10 @@ export function exportSVG(
       obstacles: ts,
     };
   }).filter(Boolean));
+
+  // The words on the lines are collected here and written after the tables, so
+  // no table can paint over them; where one lands on a table it sits on top.
+  const labelParts = [];
 
   // edges
   for (const r of model.relations) {
@@ -222,7 +227,7 @@ export function exportSVG(
       for (const end of ends) {
         if (!end.text) continue;
         const a = cardAnchor(end.at, end.toward, connectorStyle !== 'none');
-        parts.push(halo(a.x, a.y, end.text, color, 11, 400));
+        labelParts.push(halo(a.x, a.y, end.text, color, 11, 400));
       }
     }
 
@@ -231,7 +236,7 @@ export function exportSVG(
       if (name) {
         const pts = routePolyline(effectiveRouting, p1, p2, waypoints || []);
         const a = labelAnchor(pts, getVal(edgeNamePos, key, r.key) || DEFAULT_NAME_POS);
-        parts.push(halo(a.x, a.y, name, theme.headerText, 12, 600));
+        labelParts.push(halo(a.x, a.y, name, theme.headerText, 12, 600));
       }
     }
   }
@@ -277,6 +282,8 @@ export function exportSVG(
       parts.push(`<text font-size="13" fill="${c.text}">${tspans}</text>`);
     }
   }
+
+  parts.push(...labelParts);
 
   parts.push('</svg>');
   return parts.join('\n');
