@@ -205,6 +205,9 @@ function collectLayout() {
     ...diagram.edgeRoutings.keys(),
     ...diagram.edgeWaypoints.keys(),
     ...diagram.edgeAnchors.keys(),
+    ...diagram.edgeCards.keys(),
+    ...diagram.edgeNames.keys(),
+    ...diagram.edgeNamePos.keys(),
   ]);
   for (const k of allConnKeys) {
     const item = {};
@@ -219,6 +222,12 @@ function collectLayout() {
       if (anch.fromAnchor) item.fromAnchor = anch.fromAnchor;
       if (anch.toAnchor) item.toAnchor = anch.toAnchor;
     }
+    const card = diagram.edgeCards.get(k);
+    if (card && (card.from || card.to)) item.card = { ...card };
+    const name = diagram.edgeNames.get(k);
+    if (name) item.name = name;
+    const npos = diagram.edgeNamePos.get(k);
+    if (npos) item.namePos = { t: +npos.t.toFixed(3), off: Math.round(npos.off) };
     if (Object.keys(item).length) connections[k] = item;
   }
 
@@ -227,6 +236,9 @@ function collectLayout() {
     diagramLevel: diagram.diagramLevel || 'physical',
     edgeColorMode: diagram.edgeColorMode || 'multi',
     edgeRouting: diagram.edgeRouting || 'curved',
+    connectorStyle: diagram.connectorStyle || 'crowsfoot',
+    multiplicityMode: diagram.multiplicityMode || 'hidden',
+    relationNamesMode: diagram.relationNamesMode || 'hidden',
     orientation: diagram.orientation || 'LR',
     tables,
     positions: tables, // backwards compatibility
@@ -284,14 +296,27 @@ function applyLayoutData(model, data) {
   resetOrientation(diagram);
   if (['TB', 'RL', 'BT'].includes(data.orientation)) diagram.orientation = data.orientation;
   syncOrientation();
+  if (data.connectorStyle) diagram.connectorStyle = data.connectorStyle === 'none' ? 'none' : 'crowsfoot';
+  // Layouts written before these had three states carry a plain true/false.
+  const mode = (m, legacy) => m || (legacy === true ? 'always' : legacy === false ? 'hidden' : null);
+  const mult = mode(data.multiplicityMode, data.showMultiplicity);
+  const rels = mode(data.relationNamesMode, data.showRelationNames);
+  if (mult) diagram.multiplicityMode = mult;
+  if (rels) diagram.relationNamesMode = rels;
+  syncLineExtras();
   if (data.connections && typeof data.connections === 'object') {
+    const cards = {}, names = {}, positions = {};
     for (const [k, v] of Object.entries(data.connections)) {
       if (v.color) diagram.setEdgeColor(k, v.color);
       if (v.routing) diagram.setIndividualEdgeRouting(k, v.routing);
       if (Array.isArray(v.points)) diagram.setEdgeWaypoints(k, v.points);
       if (v.fromAnchor) diagram.setEdgeAnchor(k, v.fromAnchor.side, v.fromAnchor.offset, true);
       if (v.toAnchor) diagram.setEdgeAnchor(k, v.toAnchor.side, v.toAnchor.offset, false);
+      if (v.card && (v.card.from || v.card.to)) cards[k] = v.card;
+      if (v.name) names[k] = v.name;
+      if (v.namePos) positions[k] = v.namePos;
     }
+    diagram.setEdgeLabelData({ cards, names, positions });
   }
   return placed > 0;
 }
@@ -380,6 +405,27 @@ canvas.addEventListener('contextmenu', (e) => {
         if (editorMode === 'layout') updateLayoutTextarea();
       },
     });
+    items.push({
+      label: diagram.edgeNames.get(edge.key.toLowerCase()) ? 'Edit relation name...' : 'Add relation name...',
+      act: () => diagram.beginEditEdgeName(edge.key),
+    });
+    if (!edge.isManual) {
+      const shown = diagram.edgeCardTexts(edge.key);
+      items.push({
+        label: `Multiplicity at ${edge.fromTable}: ${shown.from}...`,
+        act: () => diagram.beginEditEdgeCard(edge.key, 'from'),
+      });
+      items.push({
+        label: `Multiplicity at ${edge.toTable}: ${shown.to}...`,
+        act: () => diagram.beginEditEdgeCard(edge.key, 'to'),
+      });
+      if (diagram.edgeCards.get(edge.key.toLowerCase())) {
+        items.push({
+          label: 'Reset multiplicity to the schema',
+          act: () => diagram.setEdgeCard(edge.key, null),
+        });
+      }
+    }
     items.push({
       label: 'Add vertex here',
       act: () => {
@@ -1295,6 +1341,9 @@ function generateLayoutJson() {
     diagramLevel: diagram.diagramLevel || 'physical',
     edgeColorMode: diagram.edgeColorMode || 'multi',
     edgeRouting: diagram.edgeRouting || 'curved',
+    connectorStyle: diagram.connectorStyle || 'crowsfoot',
+    multiplicityMode: diagram.multiplicityMode || 'hidden',
+    relationNamesMode: diagram.relationNamesMode || 'hidden',
     orientation: diagram.orientation || 'LR',
     connections: data.connections,
   });
@@ -1370,6 +1419,19 @@ function syncRoutingMenu() {
 }
 syncRoutingMenu();
 
+// Connector, multiplicity and relation names: all three are whole-diagram
+// settings, so the menu is where they live and the layout is where they persist.
+function syncLineExtras() {
+  const connector = diagram.connectorStyle === 'none' ? 'none' : 'crowsfoot';
+  for (const el of document.querySelectorAll('[data-connector]'))
+    el.classList.toggle('active', el.dataset.connector === connector);
+  for (const el of document.querySelectorAll('[data-multiplicity]'))
+    el.classList.toggle('active', el.dataset.multiplicity === (diagram.multiplicityMode || 'hidden'));
+  for (const el of document.querySelectorAll('[data-relnames]'))
+    el.classList.toggle('active', el.dataset.relnames === (diagram.relationNamesMode || 'hidden'));
+}
+syncLineExtras();
+
 // Line routing style selector button and menu
 const btnEdgeRouting = $('btn-edge-routing');
 const routingMenu = $('routing-menu');
@@ -1390,6 +1452,24 @@ if (btnEdgeRouting && routingMenu) {
       syncEdgeColorsBtn();
       saveLayoutDebounced();
       if (editorMode === 'layout') updateLayoutTextarea();
+      return;
+    }
+
+    if (item.dataset.connector) {
+      diagram.setConnectorStyle(item.dataset.connector);
+      syncLineExtras();
+      return;
+    }
+
+    if (item.dataset.multiplicity) {
+      diagram.setMultiplicityMode(item.dataset.multiplicity);
+      syncLineExtras();
+      return;
+    }
+
+    if (item.dataset.relnames) {
+      diagram.setRelationNamesMode(item.dataset.relnames);
+      syncLineExtras();
       return;
     }
 
@@ -1552,7 +1632,15 @@ function exportImage(kind) {
       diagram.edgeWaypoints,
       diagram.edgeAnchors,
       diagram.edgeRoutings,
-      diagram.diagramLevel
+      diagram.diagramLevel,
+      {
+        edgeCards: diagram.edgeCards,
+        edgeNames: diagram.edgeNames,
+        edgeNamePos: diagram.edgeNamePos,
+        connectorStyle: diagram.connectorStyle,
+        multiplicityMode: diagram.multiplicityMode,
+        relationNamesMode: diagram.relationNamesMode,
+      }
     );
     if (svg) downloadText('schema.svg', svg, 'image/svg+xml');
   }

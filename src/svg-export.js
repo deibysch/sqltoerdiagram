@@ -3,6 +3,7 @@ import { THEMES, columnY, getVisibleColumns, ROW_H, HEADER_H, EDGE_COLORS } from
 import { NOTE_COLORS, GROUP_COLORS, resolveGroupColor } from './annotations.js';
 import { relationCardinality } from './cardinality.js';
 import { getTableAnchor, buildSVGPath } from './routing.js';
+import { cardTexts, cardAnchor, routePolyline, labelAnchor, DEFAULT_NAME_POS } from './edge-labels.js';
 
 // Crow's-foot cardinality marker at a line endpoint (world coords).
 //   (nx, ny) = outward normal vector from the table edge (pointing along the line).
@@ -85,8 +86,20 @@ export function exportSVG(
   edgeWaypoints = null,
   edgeAnchors = null,
   edgeRoutings = null,
-  diagramLevel = 'physical'
+  diagramLevel = 'physical',
+  opts = {}
 ) {
+  const {
+    edgeCards = null,
+    edgeNames = null,
+    edgeNamePos = null,
+    connectorStyle = 'crowsfoot',
+    multiplicityMode = 'hidden',
+    relationNamesMode = 'hidden',
+  } = opts;
+  // An export is a still picture: what only shows on hover shows on nothing here.
+  const showMultiplicity = multiplicityMode === 'always';
+  const showRelationNames = relationNamesMode === 'always';
   const theme = THEMES[themeName] || THEMES.dark;
   const isHidden = (k) => !!(hidden && hidden.has(k));
   const ts = model.tables.filter(t => Number.isFinite(t.x) && !isHidden(t.key));
@@ -165,8 +178,40 @@ export function exportSVG(
       const d = Math.hypot(dx, dy) || 1;
       nx2 = dx / d; ny2 = dy / d;
     }
-    parts.push(svgMarker(p1.x, p1.y, nx1 ?? 1, ny1 ?? 0, card.from, color));
-    parts.push(svgMarker(p2.x, p2.y, nx2 ?? -1, ny2 ?? 0, card.to, color));
+    if (connectorStyle !== 'none') {
+      parts.push(svgMarker(p1.x, p1.y, nx1 ?? 1, ny1 ?? 0, card.from, color));
+      parts.push(svgMarker(p2.x, p2.y, nx2 ?? -1, ny2 ?? 0, card.to, color));
+    }
+
+    // the words that ride on the line: multiplicity at both ends, and its name
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const halo = (x, y, text, fill, size, weight) =>
+      `<text x="${round2(x)}" y="${round2(y)}" text-anchor="middle" dominant-baseline="middle" ` +
+      `font-family="ui-sans-serif, system-ui, sans-serif" font-size="${size}" font-weight="${weight}" ` +
+      `fill="${fill}" stroke="${theme.bg}" stroke-width="3.5" paint-order="stroke" ` +
+      `stroke-linejoin="round">${esc(text)}</text>`;
+
+    if (showMultiplicity) {
+      const texts = cardTexts(card, getVal(edgeCards, key, r.key));
+      const ends = [
+        { at: { ...p1, nx: nx1, ny: ny1 }, toward: waypoints?.length ? waypoints[0] : p2, text: texts.from },
+        { at: { ...p2, nx: nx2, ny: ny2 }, toward: waypoints?.length ? waypoints[waypoints.length - 1] : p1, text: texts.to },
+      ];
+      for (const end of ends) {
+        if (!end.text) continue;
+        const a = cardAnchor(end.at, end.toward, connectorStyle !== 'none');
+        parts.push(halo(a.x, a.y, end.text, color, 11, 400));
+      }
+    }
+
+    if (showRelationNames) {
+      const name = getVal(edgeNames, key, r.key);
+      if (name) {
+        const pts = routePolyline(effectiveRouting, p1, p2, waypoints || []);
+        const a = labelAnchor(pts, getVal(edgeNamePos, key, r.key) || DEFAULT_NAME_POS);
+        parts.push(halo(a.x, a.y, name, theme.headerText, 12, 600));
+      }
+    }
   }
 
   // tables

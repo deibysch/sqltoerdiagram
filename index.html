@@ -302,7 +302,24 @@
               <button class="menu-item" data-routing="ortho-sharp">90&deg; Step (Sharp)</button>
               <button class="menu-item" data-routing="ortho-rounded">90&deg; Step (Rounded)</button>
             </div>
-            <button class="menu-section" data-section="connection-colors" aria-expanded="false" title="Whether the connections are told apart by color">Connection Colors</button>
+            <button class="menu-section" data-section="connector" aria-expanded="false" title="What the two ends of a connection look like">Connector</button>
+            <div class="menu-body" data-section-body="connector" hidden>
+              <button class="menu-item" data-connector="crowsfoot" title="Crow's foot: a bar for one, three prongs for many, and a ring when the end is optional">Crow's foot</button>
+              <button class="menu-item" data-connector="none" title="Plain lines, with nothing drawn at the ends">None</button>
+            </div>
+            <button class="menu-section" data-section="multiplicity" aria-expanded="false" title="Writes 1, 1..*, 0..1 or 0..* at each end, read from the keys and the NOT NULL of each column. Right-click a connection to type your own instead.">Multiplicity</button>
+            <div class="menu-body" data-section-body="multiplicity" hidden>
+              <button class="menu-item" data-multiplicity="hidden">Hidden</button>
+              <button class="menu-item" data-multiplicity="hover" title="Only on the connection you point at or select">On hover</button>
+              <button class="menu-item" data-multiplicity="always" title="On every connection. Click a value on the diagram to type your own; blank goes back to what the schema says">Always</button>
+            </div>
+            <button class="menu-section" data-section="relnames" aria-expanded="false" title="A name on each connection. Right-click one to write it, double-click the name to change it, and drag it to move it along the line.">Relation names</button>
+            <div class="menu-body" data-section-body="relnames" hidden>
+              <button class="menu-item" data-relnames="hidden">Hidden</button>
+              <button class="menu-item" data-relnames="hover" title="Only on the connection you point at or select">On hover</button>
+              <button class="menu-item" data-relnames="always" title="On every named connection. Point at an unnamed one and click its + name to write one, then drag the name along the line">Always</button>
+            </div>
+            <button class="menu-section" data-section="connection-colors" aria-expanded="false" title="Whether the connections are told apart by color">Colors</button>
             <div class="menu-body" data-section-body="connection-colors" hidden>
               <button class="menu-item" data-edge-colors="multi" title="A color per source table, so each set of connections is easy to follow">Multicolor</button>
               <button class="menu-item" data-edge-colors="single" title="Every connection in the theme color">Single color</button>

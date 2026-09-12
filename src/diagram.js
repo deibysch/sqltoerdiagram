@@ -5,6 +5,7 @@ import { THEMES, rasterizeTable, columnY, measureTable, getVisibleColumns, ROW_H
 import { NOTE_COLORS, GROUP_COLORS, NOTE_ORDER, GROUP_ORDER, makeAnnotation, resolveGroupColor, computeGroupBounds } from './annotations.js';
 import { ROUTING_STYLES, getTableAnchor, drawRoutePath, distanceToRoute, pointToSegmentDistance, buildOrthogonalPoints, getOrthogonalSegments, moveOrthogonalSegment, moveOrthogonalCorner, cleanOrthogonalPoints, filterRedundantWaypoints, projectPointToPerimeter } from './routing.js';
 import { relationCardinality } from './cardinality.js';
+import { cardTexts, cardAnchor, routePolyline, labelAnchor, nearestPosition, DEFAULT_NAME_POS } from './edge-labels.js';
 import { inferLinks as inferLinksCore } from './infer-links.js';
 
 export class Diagram {
@@ -36,6 +37,16 @@ export class Diagram {
     this.manualLinks = [];         // user-drawn / inferred links {from:{table,col},to:{table,col}}
     this.edgeColorMode = 'multi';  // 'multi' | 'single'
     this.edgeColors = new Map();   // relKey -> hex/color
+    this.connectorStyle = 'crowsfoot'; // 'crowsfoot' | 'none' — how a line ends
+    this.multiplicityMode = 'hidden';  // 'hidden' | 'hover' (only the line you point at) | 'always'
+    this.relationNamesMode = 'hidden'; // the same three
+    this.hoverLabel = null;        // the word under the pointer, if any
+    this.edgeCards = new Map();    // relKey -> { from, to }: multiplicity the user typed
+    this.edgeNames = new Map();    // relKey -> the relation's name
+    this.edgeNamePos = new Map();  // relKey -> { t, off }: where that name rides on the line
+    this._edgeLabelHits = [];      // name boxes of the last frame, for hit testing
+    this._edgeRoutePts = new Map();// the polyline each named line was drawn as
+    this.labelDrag = null;         // active relation-name drag
     this.edgeRouting = 'curved';   // 'curved' | 'straight' | 'ortho-sharp' | 'ortho-rounded'
     this.orientation = 'LR';       // 'LR' | 'TB' — which way the canvas is turned (rotate-diagram.js)
     this.edgeRoutings = new Map(); // relKey -> routing style override
@@ -129,6 +140,12 @@ export class Diagram {
       annotations: this.annotations.map(a => ({ ...a, tables: a.tables ? [...a.tables] : [] })),
       edgeColorMode: this.edgeColorMode,
       edgeColors: Array.from(this.edgeColors.entries()),
+      connectorStyle: this.connectorStyle,
+      multiplicityMode: this.multiplicityMode,
+      relationNamesMode: this.relationNamesMode,
+      edgeCards: Array.from(this.edgeCards.entries()).map(([k, c]) => [k, { ...c }]),
+      edgeNames: Array.from(this.edgeNames.entries()),
+      edgeNamePos: Array.from(this.edgeNamePos.entries()).map(([k, p]) => [k, { ...p }]),
       edgeRouting: this.edgeRouting,
       orientation: this.orientation,
       edgeRoutings: Array.from(this.edgeRoutings.entries()),
@@ -159,6 +176,12 @@ export class Diagram {
     if (snapshot.edgeColors) {
       this.edgeColors = new Map(snapshot.edgeColors);
     }
+    if (snapshot.connectorStyle) this.connectorStyle = snapshot.connectorStyle;
+    if (snapshot.multiplicityMode) this.multiplicityMode = snapshot.multiplicityMode;
+    if (snapshot.relationNamesMode) this.relationNamesMode = snapshot.relationNamesMode;
+    if (snapshot.edgeCards) this.edgeCards = new Map(snapshot.edgeCards.map(([k, c]) => [k, { ...c }]));
+    if (snapshot.edgeNames) this.edgeNames = new Map(snapshot.edgeNames);
+    if (snapshot.edgeNamePos) this.edgeNamePos = new Map(snapshot.edgeNamePos.map(([k, p]) => [k, { ...p }]));
     if (snapshot.edgeRouting) {
       this.edgeRouting = snapshot.edgeRouting;
     }
@@ -862,6 +885,7 @@ export class Diagram {
     const focusKey = focus ? focus.key : null;
     const fadeAlpha = this.pinned ? 0.05 : 0.16;   // pinned fades harder than transient hover
     const highlighted = [];
+    const lettered = [];   // every drawn edge, for the words that go on top of them
 
     // FK relations + user-defined manual links (latter drawn dashed).
     // FK relations carry crow's-foot cardinality; manual links stay neutral.
@@ -955,6 +979,8 @@ export class Diagram {
       seg.manual = e.manual;
       seg.card = e.card;
       seg.key = e.key;
+      seg.cardText = cardTexts(e.card, this.edgeCards.get(e.key));
+      seg.name = this.edgeNames.get(e.key) || '';
 
       const customColor = this.edgeColors.get(e.key);
       let edgeColor;
@@ -976,9 +1002,11 @@ export class Diagram {
       if (focusKey || this.selectedEdgeKey || this.hoverEdge) {
         if (connected) { highlighted.push(seg); continue; }
         this._strokeRoute(seg, edgeColor, 1.2, fadeAlpha, e.manual, false, false);
+        lettered.push({ seg, alpha: fadeAlpha, focused: false });
       } else {
         const baseAlpha = this.edgeColorMode === 'single' ? 0.6 : 0.85;
         this._strokeRoute(seg, edgeColor, 1.6, baseAlpha, e.manual, false, false);
+        lettered.push({ seg, alpha: baseAlpha, focused: false });
       }
     }
     for (const seg of highlighted) {
@@ -988,6 +1016,9 @@ export class Diagram {
       const width = isSelectedEdge ? 3.0 : 2.5;
       this._strokeRoute(seg, hiColor, width, 1.0, seg.manual, isSelectedEdge, isHoveredEdge);
     }
+    this._edgeLabelHits = [];
+    for (const { seg, alpha, focused } of lettered) this._drawEdgeTexts(seg, alpha, focused);
+    for (const seg of highlighted) this._drawEdgeTexts(seg, 1, true);
     for (const seg of highlighted) this._drawEdgeLabel(seg);   // words, on top of the lines
   }
 
@@ -1004,7 +1035,7 @@ export class Diagram {
     ctx.stroke();
     if (dashed) ctx.setLineDash([]);
 
-    if (card) {
+    if (card && this.connectorStyle !== 'none') {
       // markers sit just outside each table, pointing along the line
       const s = 1 / cam.scale;
       const mw = Math.max(width, 1.4) / cam.scale;
@@ -1112,6 +1143,8 @@ export class Diagram {
 
   // A small "one-to-many" pill at a highlighted edge's midpoint.
   _drawEdgeLabel(seg) {
+    // With the multiplicity written at both ends, this pill would only repeat it.
+    if (this.multiplicityMode !== 'hidden') return;
     if (!seg.card || !seg.card.label) return;
     const { ctx, cam } = this;
     const s = 1 / cam.scale;
@@ -1135,6 +1168,160 @@ export class Diagram {
     ctx.fillStyle = edgeColor;
     ctx.fillText(text, mx, my);
     ctx.restore();
+  }
+
+  _cardAnchor(seg, which) {
+    const at = which === 'to' ? seg.p2 : seg.p1;
+    const toward = which === 'to'
+      ? (seg.waypoints?.length ? seg.waypoints[seg.waypoints.length - 1] : seg.p1)
+      : (seg.waypoints?.length ? seg.waypoints[0] : seg.p2);
+    return cardAnchor(at, toward, this.connectorStyle !== 'none');
+  }
+
+  // The multiplicity at both ends and the relation's name. Always upright,
+  // whichever way the line runs, and haloed so the lines underneath do not cut
+  // through the letters.
+  _drawEdgeTexts(seg, alpha, focused = false) {
+    const cardOn = this.multiplicityMode === 'always' || (this.multiplicityMode === 'hover' && focused);
+    const nameOn = this.relationNamesMode === 'always' || (this.relationNamesMode === 'hover' && focused);
+    const showCard = cardOn && seg.card && seg.cardText;
+    const name = nameOn ? (seg.name || '') : '';
+    // An unnamed line offers a spot to write one, but only the line you are
+    // pointing at: on every line at once it would be a field of plus signs.
+    const offerName = nameOn && focused && !name;
+    if (!showCard && !name && !offerName) return;
+    const { ctx, cam } = this;
+    const s = 1 / cam.scale;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    if (showCard) {
+      ctx.font = `${11 * s}px ui-sans-serif, system-ui, sans-serif`;
+      for (const which of ['from', 'to']) {
+        const text = seg.cardText[which];
+        if (!text) continue;
+        const at = this._cardAnchor(seg, which);
+        this._haloText(text, at.x, at.y, seg.color || this.theme.edgeHi, s);
+        const w = ctx.measureText(text).width;
+        this._edgeLabelHits.push({
+          key: seg.key, kind: 'card', which,
+          x: at.x - w / 2 - 6 * s, y: at.y - 9 * s,
+          w: w + 12 * s, h: 18 * s,
+        });
+      }
+    }
+
+    if (name || offerName) {
+      const text = name || '+ name';
+      ctx.font = `600 ${12 * s}px ui-sans-serif, system-ui, sans-serif`;
+      const at = this._nameAnchor(seg);
+      this._haloText(text, at.x, at.y, name ? this.theme.headerText : this.theme.typeText, s);
+      const w = ctx.measureText(text).width;
+      this._edgeLabelHits.push({
+        key: seg.key, kind: name ? 'name' : 'offer',
+        x: at.x - w / 2 - 5 * s, y: at.y - 10 * s,
+        w: w + 10 * s, h: 20 * s,
+      });
+    }
+    ctx.restore();
+  }
+
+  _nameAnchor(seg) {
+    const pts = routePolyline(seg.routingStyle, seg.p1, seg.p2, seg.waypoints, seg.obstacles, seg.laneOffset || 0);
+    this._edgeRoutePts.set((seg.key || '').toLowerCase(), pts);
+    return labelAnchor(pts, this.edgeNamePos.get((seg.key || '').toLowerCase()) || DEFAULT_NAME_POS);
+  }
+
+  /** The line as it was last drawn, lane offsets and all. */
+  _routePtsFor(key) {
+    const lk = (key || '').toLowerCase();
+    const drawn = this._edgeRoutePts.get(lk);
+    if (drawn) return drawn;
+    const seg = this._edgeSegForDrag(key);
+    return seg ? routePolyline(seg.routingStyle, seg.p1, seg.p2, seg.waypoints, seg.obstacles, seg.laneOffset || 0) : null;
+  }
+
+  _haloText(text, x, y, color, s) {
+    const { ctx } = this;
+    ctx.lineWidth = 3.5 * s;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = this.theme.bg;
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+  }
+
+  /** The relation behind a connection key, so its schema cardinality can be read. */
+  _relationByKey(key) {
+    const lk = (key || '').toLowerCase();
+    return this.model.relations.find(r =>
+      `${r.fromTable.toLowerCase()}.${(r.fromCols[0] || '').toLowerCase()}->${r.toTable.toLowerCase()}.${(r.toCols[0] || '').toLowerCase()}` === lk) || null;
+  }
+
+  /** What both ends of a connection read right now, the user's text included. */
+  edgeCardTexts(key) {
+    const rel = this._relationByKey(key);
+    const card = rel ? relationCardinality(rel, this._tableMap()) : null;
+    return cardTexts(card, this.edgeCards.get((key || '').toLowerCase()));
+  }
+
+  _inlineInput(key, value, placeholder, world, width, commit) {
+    this._cancelEdit();
+    const { cam } = this;
+    const el = document.createElement('input');
+    el.className = 'inline-edit';
+    el.value = value || '';
+    el.placeholder = placeholder;
+    el.style.left = (world.x * cam.scale + cam.x - width / 2) + 'px';
+    el.style.top = (world.y * cam.scale + cam.y - 13) + 'px';
+    el.style.width = width + 'px';
+    el.style.textAlign = 'center';
+    el.style.fontSize = Math.max(9, 12 * cam.scale) + 'px';
+    this.canvas.parentElement.appendChild(el);
+    this.editing = { edgeKey: key, input: el };
+    el.focus();
+    el.select();
+
+    const done = () => {
+      if (!this.editing || this.editing.input !== el) return;
+      const text = el.value;
+      this.editing = null;
+      el.remove();
+      commit(text);
+    };
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); this._cancelEdit(); }
+      else if (e.key === 'Enter') { e.preventDefault(); done(); }
+      e.stopPropagation();
+    });
+    el.addEventListener('blur', done);
+  }
+
+  /** Type a relation's name right where it will be drawn. */
+  beginEditEdgeName(key) {
+    const seg = this._edgeSegForDrag(key);
+    if (!seg) return;
+    this._inlineInput(key, this.edgeNames.get(key.toLowerCase()) || '', 'relation name',
+      this._nameAnchor(seg), 160, (text) => {
+        this.setEdgeName(key, text);
+        // Typing a name with names hidden would look like nothing happened.
+        if (text.trim() && this.relationNamesMode === 'hidden') this.setRelationNamesMode('always');
+      });
+  }
+
+  /** Type the multiplicity of one end; blank goes back to what the schema says. */
+  beginEditEdgeCard(key, which) {
+    const seg = this._edgeSegForDrag(key);
+    if (!seg) return;
+    const current = this.edgeCards.get(key.toLowerCase()) || {};
+    const shown = this.edgeCardTexts(key);
+    this._inlineInput(key, current[which] || '', shown[which] || '1..*',
+      this._cardAnchor(seg, which), 90, (text) => {
+        this.setEdgeCard(key, { ...current, [which]: text });
+        if (this.multiplicityMode === 'hidden') this.setMultiplicityMode('always');
+      });
   }
 
   _tableMap() {
@@ -1190,8 +1377,13 @@ export class Diagram {
       // 1) vertex or anchor handle under cursor
       const vHit = this.vertexAt(sx, sy);
 
+      // 1b) the words on a line count as part of it: pointing at one keeps its
+      //     line hovered, so a label shown on hover can be reached and clicked
+      const lHit = !vHit ? this.labelAt(sx, sy) : null;
+      this.hoverLabel = lHit;
+
       // 2) edge line under cursor
-      const eHit = !vHit ? this.edgeAt(sx, sy) : null;
+      const eHit = !vHit ? (this.edgeAt(sx, sy) || (lHit ? { key: lHit.key } : null)) : null;
 
       // 3) table under cursor
       const t = !vHit && !eHit ? this.tableAt(sx, sy) : null;
@@ -1249,7 +1441,8 @@ export class Diagram {
       this._pointerUp();
       c.style.cursor = this.toolMode === 'pan'
         ? 'grab'
-        : (this.hoverVertex ? 'move' : (this.hoverEdge ? (this.hoverEdge.isOrthogonal ? (this.hoverEdge.isVertical ? 'ew-resize' : 'ns-resize') : 'pointer') : (this.hover ? 'grab' : (this.toolMode === 'select' ? 'crosshair' : 'default'))));
+        : (this.hoverLabel ? (this.hoverLabel.kind === 'name' ? 'move' : 'text')
+          : (this.hoverVertex ? 'move' : (this.hoverEdge ? (this.hoverEdge.isOrthogonal ? (this.hoverEdge.isVertical ? 'ew-resize' : 'ns-resize') : 'pointer') : (this.hover ? 'grab' : (this.toolMode === 'select' ? 'crosshair' : 'default')))));
     });
 
     // ---- touch (mobile): 1 finger = drag/pan, 2 fingers = pinch-zoom + pan ----
@@ -1339,6 +1532,12 @@ export class Diagram {
       if (this.toolMode === 'pan') return;
       const r = c.getBoundingClientRect();
       const sx = e.clientX - r.left, sy = e.clientY - r.top;
+      const labelHit = this.labelAt(sx, sy);
+      if (labelHit) {
+        if (labelHit.kind === 'card') this.beginEditEdgeCard(labelHit.key, labelHit.which);
+        else this.beginEditEdgeName(labelHit.key);
+        return;
+      }
       const vHit = this.vertexAt(sx, sy);
       if (vHit && vHit.isWaypoint) {
         console.log('[Diagram dblclick Remove] ' + JSON.stringify({
@@ -1383,6 +1582,29 @@ export class Diagram {
     if (this.toolMode === 'pan') {
       // In Hand / Pan mode: strictly pan the canvas, cannot select or move elements
       this.pan = { sx, sy, camx: this.cam.x, camy: this.cam.y, moved: false };
+      return;
+    }
+
+    // The words on a line are small targets floating above it, so they get the
+    // first go at the pointer once the select tool is in hand.
+    const labelHit = this.labelAt(sx, sy);
+    if (labelHit) {
+      if (labelHit.kind === 'card') { this.beginEditEdgeCard(labelHit.key, labelHit.which); return; }
+      if (labelHit.kind === 'offer') { this.beginEditEdgeName(labelHit.key); return; }
+      // Keep hold of a name where it was grabbed, so it does not jump to centre
+      // itself under the pointer on the first move.
+      this._preDragSnapshot = this.getSnapshot();
+      const w = this.screenToWorld(sx, sy);
+      const pts = this._routePtsFor(labelHit.key);
+      const at = pts ? labelAnchor(pts, this.edgeNamePos.get(labelHit.key.toLowerCase()) || DEFAULT_NAME_POS) : null;
+      this.labelDrag = {
+        key: labelHit.key,
+        moved: false,
+        grabX: at ? at.x - w.x : 0,
+        grabY: at ? at.y - w.y : 0,
+      };
+      this.selectedEdgeKey = labelHit.key;
+      this.markDirty();
       return;
     }
 
@@ -1614,6 +1836,16 @@ export class Diagram {
 
   // returns true if an active drag/pan/resize consumed the move
   _pointerMove(sx, sy) {
+    if (this.labelDrag) {
+      const pts = this._routePtsFor(this.labelDrag.key);
+      if (pts) {
+        const w = this.screenToWorld(sx, sy);
+        const pos = nearestPosition(pts, w.x + this.labelDrag.grabX, w.y + this.labelDrag.grabY);
+        this.setEdgeNamePos(this.labelDrag.key, pos, { record: false });
+        this.labelDrag.moved = true;
+      }
+      return;
+    }
     if (this.segmentDrag) {
       const w = this.screenToWorld(sx, sy);
       const drag = this.segmentDrag;
@@ -1840,7 +2072,8 @@ export class Diagram {
   }
 
   _pointerUp() {
-    const didMove = (this.segmentDrag && this.segmentDrag.moved) ||
+    const didMove = (this.labelDrag && this.labelDrag.moved) ||
+      (this.segmentDrag && this.segmentDrag.moved) ||
       (this.vertexDrag && this.vertexDrag.moved) ||
       (this.anchorDrag && this.anchorDrag.moved) ||
       (this.dragGroup && this.dragGroup.moved) ||
@@ -1852,6 +2085,11 @@ export class Diagram {
       this.onHistorySnapshot?.(this._preDragSnapshot);
     }
     this._preDragSnapshot = null;
+
+    if (this.labelDrag) {
+      if (this.labelDrag.moved) this.onLayoutChange?.();
+      this.labelDrag = null;
+    }
 
     if (this.segmentDrag) {
       if (this.segmentDrag.moved) {
@@ -2199,6 +2437,84 @@ export class Diagram {
     this.markDirty();
   }
 
+  setConnectorStyle(style) {
+    this.onHistorySnapshot?.(this.getSnapshot());
+    this.connectorStyle = style === 'none' ? 'none' : 'crowsfoot';
+    this.markDirty();
+    this.onLayoutChange?.();
+  }
+
+  /** `mode` is 'hidden', 'hover' (only the line under the pointer) or 'always'. */
+  setMultiplicityMode(mode) {
+    this.onHistorySnapshot?.(this.getSnapshot());
+    this.multiplicityMode = ['hidden', 'hover', 'always'].includes(mode) ? mode : 'hidden';
+    this.markDirty();
+    this.onLayoutChange?.();
+  }
+
+  setRelationNamesMode(mode) {
+    this.onHistorySnapshot?.(this.getSnapshot());
+    this.relationNamesMode = ['hidden', 'hover', 'always'].includes(mode) ? mode : 'hidden';
+    this.markDirty();
+    this.onLayoutChange?.();
+  }
+
+  /** `card` is { from, to }; an end left blank falls back to the schema's answer. */
+  setEdgeCard(key, card) {
+    if (!key) return;
+    this.onHistorySnapshot?.(this.getSnapshot());
+    const lk = key.toLowerCase();
+    const from = (card?.from || '').trim();
+    const to = (card?.to || '').trim();
+    if (from || to) this.edgeCards.set(lk, { from, to });
+    else this.edgeCards.delete(lk);
+    this.markDirty();
+    this.onLayoutChange?.();
+  }
+
+  setEdgeName(key, name) {
+    if (!key) return;
+    this.onHistorySnapshot?.(this.getSnapshot());
+    const lk = key.toLowerCase();
+    const text = (name || '').trim();
+    if (text) {
+      this.edgeNames.set(lk, text);
+    } else {
+      this.edgeNames.delete(lk);
+      this.edgeNamePos.delete(lk);
+    }
+    this.markDirty();
+    this.onLayoutChange?.();
+  }
+
+  // A drag calls this on every pointer move, so it takes the history snapshot
+  // once when the drag starts instead of on each step (record: false).
+  setEdgeNamePos(key, pos, { record = true } = {}) {
+    if (!key || !pos || !Number.isFinite(pos.t)) return;
+    if (record) this.onHistorySnapshot?.(this.getSnapshot());
+    this.edgeNamePos.set(key.toLowerCase(), { t: pos.t, off: Number(pos.off) || 0 });
+    this.markDirty();
+    if (record) this.onLayoutChange?.();
+  }
+
+  /** Bulk restore from a saved layout: no history entry, no callbacks. */
+  setEdgeLabelData({ cards, names, positions } = {}) {
+    this.edgeCards.clear();
+    this.edgeNames.clear();
+    this.edgeNamePos.clear();
+    for (const [k, c] of Object.entries(cards || {})) {
+      const from = (c?.from || '').trim(), to = (c?.to || '').trim();
+      if (from || to) this.edgeCards.set(k.toLowerCase(), { from, to });
+    }
+    for (const [k, n] of Object.entries(names || {})) {
+      if (n) this.edgeNames.set(k.toLowerCase(), String(n));
+    }
+    for (const [k, p] of Object.entries(positions || {})) {
+      if (p && Number.isFinite(p.t)) this.edgeNamePos.set(k.toLowerCase(), { t: p.t, off: Number(p.off) || 0 });
+    }
+    this.markDirty();
+  }
+
   setEdgeRouting(style) {
     this.onHistorySnapshot?.(this.getSnapshot());
     this.edgeRouting = style || 'curved';
@@ -2414,6 +2730,17 @@ export class Diagram {
   }
 
   // Hit-test any edge (model relation or manual link) near the cursor
+  /** The relation name under the pointer. Boxes are the ones drawn last frame. */
+  labelAt(sx, sy) {
+    if (!this._edgeLabelHits.length) return null;
+    const w = this.screenToWorld(sx, sy);
+    for (let i = this._edgeLabelHits.length - 1; i >= 0; i--) {
+      const h = this._edgeLabelHits[i];
+      if (w.x >= h.x && w.x <= h.x + h.w && w.y >= h.y && w.y <= h.y + h.h) return h;
+    }
+    return null;
+  }
+
   edgeAt(sx, sy) {
     const w = this.screenToWorld(sx, sy);
     const tol = Math.max(9, 14 / this.cam.scale);
