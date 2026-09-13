@@ -3,7 +3,7 @@ import { THEMES, columnY, getVisibleColumns, ROW_H, HEADER_H, EDGE_COLORS } from
 import { NOTE_COLORS, GROUP_COLORS, resolveGroupColor } from './annotations.js';
 import { relationCardinality } from './cardinality.js';
 import { getTableAnchor, buildSVGPath } from './routing.js';
-import { cardTexts, cardAnchor, routePolyline, labelAnchor, DEFAULT_NAME_POS } from './edge-labels.js';
+import { cardTexts, cardAnchor, routePolyline, labelAnchor, multiplicityPaint, DEFAULT_NAME_POS } from './edge-labels.js';
 import { computeLineHops } from './line-hops.js';
 import { CARD, commentsOf, layoutCommentCard } from './comments.js';
 
@@ -231,8 +231,8 @@ export function exportSVG(
 
     // the words that ride on the line: multiplicity at both ends, and its name
     const round2 = (v) => Math.round(v * 100) / 100;
-    // the same thin border as the canvas: coloured text gets the theme's text
-    // colour around it, text already in that colour gets the background's
+    // the same thin border as the canvas: the background's colour unless the
+    // text needs one that contrasts with it (multiplicityPaint)
     const halo = (x, y, text, fill, size, weight, outline = theme.bg, width = 2, spacing = 0) =>
       `<text x="${round2(x)}" y="${round2(y)}" text-anchor="middle" dominant-baseline="middle" ` +
       `font-family="ui-sans-serif, system-ui, sans-serif" font-size="${size}" font-weight="${weight}" ` +
@@ -246,11 +246,12 @@ export function exportSVG(
         { at: { ...p1, nx: nx1, ny: ny1 }, toward: waypoints?.length ? waypoints[0] : p2, text: texts.from },
         { at: { ...p2, nx: nx2, ny: ny2 }, toward: waypoints?.length ? waypoints[waypoints.length - 1] : p1, text: texts.to },
       ];
+      // painted as on the canvas, spaced letters included: the dots of "1..*" stay apart
+      const paint = multiplicityPaint(color, theme);
       for (const end of ends) {
         if (!end.text) continue;
         const a = cardAnchor(end.at, end.toward, connectorStyle !== 'none');
-        // thinner border and spaced letters, as on the canvas: the dots of "1..*" stay apart
-        labelParts.push(halo(a.x, a.y, end.text, color, 11, 400, theme.headerText, 1.25, 1));
+        labelParts.push(halo(a.x, a.y, end.text, paint.fill, 11, paint.weight, paint.outline, paint.width, 1));
       }
     }
 

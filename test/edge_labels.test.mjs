@@ -7,6 +7,10 @@ import {
   pointAtFraction,
   labelAnchor,
   nearestPosition,
+  readableOn,
+  contrastRatio,
+  multiplicityPaint,
+  isDarkCanvas,
   DEFAULT_NAME_POS,
 } from '../src/edge-labels.js';
 import { exportSVG } from '../src/svg-export.js';
@@ -165,8 +169,60 @@ test('the words are written after the tables, so nothing paints over them', () =
   assert.ok(svg.indexOf('>0..1<') > lastTable, 'and so does the multiplicity');
 });
 
-test('multiplicity gets a thin border in the theme text colour, names one in the background', () => {
-  for (const [themeName, text, bg] of [['dark', '#e8edf4', '#0e1116'], ['light', '#1c2530', '#f4f6fa']]) {
+// --- multiplicity that can be read on either theme ------------------------
+
+const DARK = { bg: '#0e1116', headerText: '#e8edf4' };
+const LIGHT = { bg: '#f4f6fa', headerText: '#1c2530' };
+const rgb = (hex) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+
+test('a colour that already reads is left alone', () => {
+  assert.strictEqual(readableOn('#06d6a0', DARK.bg, 6), '#06d6a0');
+  assert.strictEqual(readableOn('#1c2530', LIGHT.bg, 6), '#1c2530');
+});
+
+test('a dim colour on a dark canvas is lightened just enough, not to white', () => {
+  const grey = readableOn('#5d6b7d', DARK.bg, 6);   // the single-colour grey
+  const ratio = contrastRatio(grey, DARK.bg);
+  assert.ok(ratio >= 6, `reads now (${ratio.toFixed(2)})`);
+  assert.ok(ratio < 6.5, `but no brighter than it has to be (${ratio.toFixed(2)})`);
+
+  const orchid = rgb(readableOn('#b5179e', DARK.bg, 6));
+  assert.ok(contrastRatio(readableOn('#b5179e', DARK.bg, 6), DARK.bg) >= 6);
+  assert.ok(orchid[0] > orchid[1] && orchid[2] > orchid[1], `still an orchid, not a grey (${orchid})`);
+});
+
+test('a pale colour on a light canvas is darkened instead', () => {
+  const amber = readableOn('#ffd166', LIGHT.bg, 4.5);
+  assert.ok(contrastRatio(amber, LIGHT.bg) >= 4.5);
+  assert.ok(rgb(amber).every((v, i) => v <= rgb('#ffd166')[i]), `darker on every channel (${amber})`);
+});
+
+test('what is not a hex colour comes back as it was', () => {
+  assert.strictEqual(readableOn('rebeccapurple', DARK.bg, 6), 'rebeccapurple');
+  assert.strictEqual(contrastRatio('rgb(0,0,0)', DARK.bg), null);
+});
+
+test('a canvas is dark when white stands out on it more than black', () => {
+  assert.strictEqual(isDarkCanvas(DARK), true);
+  assert.strictEqual(isDarkCanvas(LIGHT), false);
+  assert.strictEqual(isDarkCanvas({ bg: 'not a colour' }), false);
+});
+
+test('light canvas: the line colour with a thin dark border', () => {
+  assert.deepStrictEqual(multiplicityPaint('#ffd166', LIGHT), { fill: '#ffd166', outline: '#1c2530', width: 1.25, weight: 400 });
+});
+
+test('dark canvas: a readable shade of the line colour, bordered in the canvas colour', () => {
+  // a light border there made the letters read as white
+  const paint = multiplicityPaint('#5d6b7d', DARK);
+  assert.strictEqual(paint.outline, DARK.bg);
+  assert.strictEqual(paint.weight, 600, 'a touch bolder, since nothing outlines it');
+  assert.ok(contrastRatio(paint.fill, DARK.bg) >= 6);
+  assert.strictEqual(multiplicityPaint('#06d6a0', DARK).fill, '#06d6a0', 'a bright colour keeps its exact shade');
+});
+
+test('the export paints the multiplicity as the canvas does, names keep a background border', () => {
+  for (const [themeName, theme] of [['dark', DARK], ['light', LIGHT]]) {
     const svg = exportSVG(EXPORT_MODEL, themeName, [], null, 'multi', null, 'curved', null, null, null, 'physical', {
       edgeNames: new Map([[KEY, 'wrote']]),
       multiplicityMode: 'always',
@@ -176,10 +232,15 @@ test('multiplicity gets a thin border in the theme text colour, names one in the
       const at = svg.indexOf(`>${content}<`);
       return svg.slice(svg.lastIndexOf('<text', at), at);
     };
-    assert.ok(tagOf('0..1').includes(`stroke="${text}"`), `${themeName}: the coloured multiplicity is outlined in ${text}`);
-    assert.ok(tagOf('0..1').includes('stroke-width="1.25"'), `${themeName}: a border, not a glow`);
-    assert.ok(tagOf('0..1').includes('letter-spacing="1"'), `${themeName}: with room between the dots`);
+    const card = tagOf('0..1');
+    const fill = /fill="(#[0-9a-f]{6})"/i.exec(card)[1];
+    const paint = multiplicityPaint(fill, theme);
+    assert.ok(card.includes(`stroke="${paint.outline}"`), `${themeName}: bordered in ${paint.outline}`);
+    assert.ok(card.includes(`font-weight="${paint.weight}"`), `${themeName}: weight ${paint.weight}`);
+    assert.ok(card.includes('stroke-width="1.25"'), `${themeName}: a border, not a glow`);
+    assert.ok(card.includes('letter-spacing="1"'), `${themeName}: with room between the dots`);
+    if (themeName === 'dark') assert.ok(contrastRatio(fill, theme.bg) >= 6, `dark: the fill reads (${fill})`);
     assert.ok(!tagOf('wrote').includes('letter-spacing'), `${themeName}: names keep their normal spacing`);
-    assert.ok(tagOf('wrote').includes(`stroke="${bg}"`), `${themeName}: the name keeps a background-coloured border`);
+    assert.ok(tagOf('wrote').includes(`stroke="${theme.bg}"`), `${themeName}: the name keeps a background-coloured border`);
   }
 });

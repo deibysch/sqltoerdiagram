@@ -177,3 +177,97 @@ export function nearestPosition(pts, x, y) {
   }
   return { t: best.t, off: Math.round(best.off) };
 }
+
+// --- how a multiplicity is painted -----------------------------------------
+
+/** '#rgb' or '#rrggbb' as [r, g, b]; null for anything else. */
+function rgbOf(color) {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(color || '').trim());
+  if (!m) return null;
+  const h = m[1].length === 3 ? m[1].replace(/./g, c => c + c) : m[1];
+  const n = parseInt(h, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+const toHex = (rgb) => '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join('');
+
+// relative luminance, as WCAG defines it
+function luminance(rgb) {
+  const [r, g, b] = rgb.map(v => {
+    const c = v / 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+const ratioOf = (a, b) => {
+  const la = luminance(a), lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+};
+
+const WHITE = [255, 255, 255];
+const BLACK = [0, 0, 0];
+
+/** The WCAG contrast ratio between two hex colours, from 1 to 21; null if either is not one. */
+export function contrastRatio(a, b) {
+  const ca = rgbOf(a), cb = rgbOf(b);
+  return ca && cb ? ratioOf(ca, cb) : null;
+}
+
+const readableCache = new Map();
+
+/**
+ * The same colour, lightened on a dark background or darkened on a light one,
+ * just far enough to reach `ratio` contrast with it. A colour that already
+ * reads comes back untouched, and so does anything that is not a hex colour.
+ */
+export function readableOn(color, background, ratio) {
+  const id = `${color}|${background}|${ratio}`;
+  if (readableCache.has(id)) return readableCache.get(id);
+  const c = rgbOf(color), bg = rgbOf(background);
+  let out = color;
+  if (c && bg && ratioOf(c, bg) < ratio) {
+    const toward = ratioOf(WHITE, bg) > ratioOf(BLACK, bg) ? WHITE : BLACK;
+    const mix = (t) => c.map((v, i) => Math.round(v + (toward[i] - v) * t));
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 16; i++) {
+      const mid = (lo + hi) / 2;
+      if (ratioOf(mix(mid), bg) >= ratio) hi = mid; else lo = mid;
+    }
+    out = toHex(mix(hi));
+  }
+  readableCache.set(id, out);
+  return out;
+}
+
+/** Whether the theme's canvas is dark: white text would stand out on it more than black. */
+export function isDarkCanvas(theme) {
+  const bg = rgbOf(theme && theme.bg);
+  return !!bg && ratioOf(WHITE, bg) > ratioOf(BLACK, bg);
+}
+
+// Multiplicities are small, so they ask for more than the 4.5:1 of body text;
+// over a group box, whose tint lightens the canvas, 6:1 still reads.
+const DARK_CANVAS_CONTRAST = 6;
+
+/**
+ * How the multiplicity of a line in `color` is painted: its fill, the thin
+ * border around the letters and their weight.
+ *
+ * On a light canvas the palette's pale colours (amber, mint, cyan) cannot be
+ * read however they are drawn, so the text keeps the line's colour and a thin
+ * border in the theme's dark text colour gives it its shape.
+ *
+ * On a dark canvas that trick backfires: a light border swamps letters this
+ * small and they read as white. The colours are bright there to begin with, so
+ * the colour itself carries the text: lightened only where it is too dim (the
+ * single-colour grey, the deep purples), a touch bolder since nothing outlines
+ * it, and bordered in the canvas colour, which only shows where it cuts a line
+ * passing underneath.
+ */
+export function multiplicityPaint(color, theme) {
+  if (isDarkCanvas(theme)) {
+    return { fill: readableOn(color, theme.bg, DARK_CANVAS_CONTRAST), outline: theme.bg, width: 1.25, weight: 600 };
+  }
+  return { fill: color, outline: theme.headerText, width: 1.25, weight: 400 };
+}
