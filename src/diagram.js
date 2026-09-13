@@ -5,7 +5,7 @@ import { THEMES, rasterizeTable, columnY, measureTable, getVisibleColumns, ROW_H
 import { NOTE_COLORS, GROUP_COLORS, NOTE_ORDER, GROUP_ORDER, makeAnnotation, resolveGroupColor, computeGroupBounds } from './annotations.js';
 import { ROUTING_STYLES, getTableAnchor, drawRoutePath, distanceToRoute, pointToSegmentDistance, buildOrthogonalPoints, getOrthogonalSegments, moveOrthogonalSegment, moveOrthogonalCorner, cleanOrthogonalPoints, filterRedundantWaypoints, projectPointToPerimeter } from './routing.js';
 import { relationCardinality } from './cardinality.js';
-import { cardTexts, cardAnchor, routePolyline, labelAnchor, nearestPosition, multiplicityPaint, isDarkCanvas, DEFAULT_NAME_POS } from './edge-labels.js';
+import { cardTexts, cardAnchor, routePolyline, labelAnchor, nearestPosition, multiplicityPaint, DEFAULT_NAME_POS } from './edge-labels.js';
 import { computeLineHops } from './line-hops.js';
 import { COMMENT_MODES, CARD, commentsOf, commentFor, layoutCommentCard } from './comments.js';
 import { inferLinks as inferLinksCore } from './infer-links.js';
@@ -900,11 +900,6 @@ export class Diagram {
     const focus = this.focus;
     const focusKey = focus ? focus.key : null;
     const fadeAlpha = this.pinned ? 0.05 : 0.16;   // pinned fades harder than transient hover
-    // On a dark canvas the words are drawn opaque: their shades were picked to
-    // read at full strength (multiplicityPaint), and the lines' see-through calm
-    // would undo that — the single-colour grey all but vanished. On a light
-    // canvas they keep the lines' softness, which their dark border reads through.
-    const wordsAlpha = isDarkCanvas(theme) ? 1 : null;
     const highlighted = [];
     const lettered = [];   // every drawn edge, for the words that go on top of them
     const queued = [];     // ... and for the crossings, which need every line first
@@ -1028,7 +1023,10 @@ export class Diagram {
       } else {
         const baseAlpha = this.edgeColorMode === 'single' ? 0.6 : 0.85;
         queued.push({ seg, color: edgeColor, width: 1.6, alpha: baseAlpha, dashed: e.manual });
-        lettered.push({ seg, alpha: wordsAlpha ?? baseAlpha, focused: false });
+        // The words are drawn opaque: their shades were picked to read at full
+        // strength (multiplicityPaint), and the lines' see-through calm would undo
+        // that — the single-colour grey all but vanished. A faded line still fades them.
+        lettered.push({ seg, alpha: 1, focused: false });
       }
     }
 
@@ -1235,12 +1233,11 @@ export class Diagram {
     // Sizes are in diagram units, like the text inside the tables: the words grow
     // and shrink with the zoom, and an export comes out exactly as the screen.
     if (showCard) {
-      // The line's colour, made readable on this theme: a thin dark border on a
-      // light canvas, a lighter shade where needed on a dark one (edge-labels.js).
+      // The line's colour, shifted just enough to be read on this theme: darker on
+      // a light canvas, lighter on a dark one (multiplicityPaint).
       const paint = multiplicityPaint(seg.color || this.theme.edgeHi, this.theme);
       ctx.font = `${paint.weight} 11px ui-sans-serif, system-ui, sans-serif`;
-      // A little room between the letters, or the border closes the gap between
-      // the two dots of "1..*" and it reads "1.*" at 100% zoom.
+      // a little room between the letters keeps the two dots of "1..*" apart at 100% zoom
       ctx.letterSpacing = '1px';
       for (const which of ['from', 'to']) {
         const text = seg.cardText[which];
@@ -1294,10 +1291,8 @@ export class Diagram {
     return seg ? routePolyline(seg.routingStyle, seg.p1, seg.p2, seg.waypoints, seg.obstacles, seg.laneOffset || 0) : null;
   }
 
-  // A thin border around the letters, so they keep their shape over lines, the
-  // grid and group boxes. `outline` defaults to the canvas colour, which only
-  // shows where it cuts something underneath; multiplicityPaint picks a dark one
-  // on a light canvas, where the pale line colours need it to be read.
+  // A thin border around the letters, in the canvas colour by default: it only
+  // shows where it cuts a line or the grid passing underneath.
   // Stroke first and fill after: the fill covers the inner half of the stroke, so
   // only a hairline shows outside each glyph, a border rather than a glow.
   _haloText(text, x, y, color, outline = this.theme.bg, width = 2) {

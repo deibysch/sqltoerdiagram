@@ -191,10 +191,14 @@ test('a dim colour on a dark canvas is lightened just enough, not to white', () 
   assert.ok(orchid[0] > orchid[1] && orchid[2] > orchid[1], `still an orchid, not a grey (${orchid})`);
 });
 
-test('a pale colour on a light canvas is darkened instead', () => {
+test('a pale colour on a light canvas is darkened just enough, not to black', () => {
   const amber = readableOn('#ffd166', LIGHT.bg, 4.5);
-  assert.ok(contrastRatio(amber, LIGHT.bg) >= 4.5);
+  const ratio = contrastRatio(amber, LIGHT.bg);
+  assert.ok(ratio >= 4.5, `reads now (${ratio.toFixed(2)})`);
+  assert.ok(ratio < 5, `but no darker than it has to be (${ratio.toFixed(2)})`);
   assert.ok(rgb(amber).every((v, i) => v <= rgb('#ffd166')[i]), `darker on every channel (${amber})`);
+  const [r, g, b] = rgb(amber);
+  assert.ok(r > g && g > b, `still an amber, not a grey (${amber})`);
 });
 
 test('what is not a hex colour comes back as it was', () => {
@@ -208,8 +212,13 @@ test('a canvas is dark when white stands out on it more than black', () => {
   assert.strictEqual(isDarkCanvas({ bg: 'not a colour' }), false);
 });
 
-test('light canvas: the line colour with a thin dark border', () => {
-  assert.deepStrictEqual(multiplicityPaint('#ffd166', LIGHT), { fill: '#ffd166', outline: '#1c2530', width: 1.25, weight: 400 });
+test('light canvas: a darker shade where needed, bordered in the canvas colour', () => {
+  // a dark border there made the letters read as black
+  const paint = multiplicityPaint('#ffd166', LIGHT);   // amber, the palest of the palette
+  assert.strictEqual(paint.outline, LIGHT.bg);
+  assert.strictEqual(paint.weight, 600, 'a touch bolder, since nothing outlines it');
+  assert.ok(contrastRatio(paint.fill, LIGHT.bg) >= 4.5);
+  assert.strictEqual(multiplicityPaint('#b5179e', LIGHT).fill, '#b5179e', 'a deep colour keeps its exact shade');
 });
 
 test('dark canvas: a readable shade of the line colour, bordered in the canvas colour', () => {
@@ -222,7 +231,7 @@ test('dark canvas: a readable shade of the line colour, bordered in the canvas c
 });
 
 test('the export paints the multiplicity as the canvas does, names keep a background border', () => {
-  for (const [themeName, theme] of [['dark', DARK], ['light', LIGHT]]) {
+  for (const [themeName, theme, least] of [['dark', DARK, 6], ['light', LIGHT, 4.5]]) {
     const svg = exportSVG(EXPORT_MODEL, themeName, [], null, 'multi', null, 'curved', null, null, null, 'physical', {
       edgeNames: new Map([[KEY, 'wrote']]),
       multiplicityMode: 'always',
@@ -234,12 +243,11 @@ test('the export paints the multiplicity as the canvas does, names keep a backgr
     };
     const card = tagOf('0..1');
     const fill = /fill="(#[0-9a-f]{6})"/i.exec(card)[1];
-    const paint = multiplicityPaint(fill, theme);
-    assert.ok(card.includes(`stroke="${paint.outline}"`), `${themeName}: bordered in ${paint.outline}`);
-    assert.ok(card.includes(`font-weight="${paint.weight}"`), `${themeName}: weight ${paint.weight}`);
+    assert.ok(contrastRatio(fill, theme.bg) >= least, `${themeName}: the fill reads (${fill})`);
+    assert.ok(card.includes(`stroke="${theme.bg}"`), `${themeName}: bordered in the canvas colour`);
+    assert.ok(card.includes('font-weight="600"'), `${themeName}: semibold`);
     assert.ok(card.includes('stroke-width="1.25"'), `${themeName}: a border, not a glow`);
     assert.ok(card.includes('letter-spacing="1"'), `${themeName}: with room between the dots`);
-    if (themeName === 'dark') assert.ok(contrastRatio(fill, theme.bg) >= 6, `dark: the fill reads (${fill})`);
     assert.ok(!tagOf('wrote').includes('letter-spacing'), `${themeName}: names keep their normal spacing`);
     assert.ok(tagOf('wrote').includes(`stroke="${theme.bg}"`), `${themeName}: the name keeps a background-coloured border`);
   }

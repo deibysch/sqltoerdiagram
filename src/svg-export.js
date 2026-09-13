@@ -231,8 +231,8 @@ export function exportSVG(
 
     // the words that ride on the line: multiplicity at both ends, and its name
     const round2 = (v) => Math.round(v * 100) / 100;
-    // the same thin border as the canvas: the background's colour unless the
-    // text needs one that contrasts with it (multiplicityPaint)
+    // the same thin border as the canvas, in the background's colour: it only
+    // shows where it cuts a line passing underneath
     const halo = (x, y, text, fill, size, weight, outline = theme.bg, width = 2, spacing = 0) =>
       `<text x="${round2(x)}" y="${round2(y)}" text-anchor="middle" dominant-baseline="middle" ` +
       `font-family="ui-sans-serif, system-ui, sans-serif" font-size="${size}" font-weight="${weight}" ` +

@@ -246,28 +246,25 @@ export function isDarkCanvas(theme) {
   return !!bg && ratioOf(WHITE, bg) > ratioOf(BLACK, bg);
 }
 
-// Multiplicities are small, so they ask for more than the 4.5:1 of body text;
-// over a group box, whose tint lightens the canvas, 6:1 still reads.
-const DARK_CANVAS_CONTRAST = 6;
+// The contrast a multiplicity keeps with the canvas. A dark canvas asks for more:
+// the ratio flatters light-on-dark pairs, which read weaker than dark-on-light
+// ones at the same number. Both were checked by eye over a grey group box, whose
+// tint eats into the contrast.
+const CANVAS_CONTRAST = { dark: 6, light: 4.5 };
 
 /**
  * How the multiplicity of a line in `color` is painted: its fill, the thin
  * border around the letters and their weight.
  *
- * On a light canvas the palette's pale colours (amber, mint, cyan) cannot be
- * read however they are drawn, so the text keeps the line's colour and a thin
- * border in the theme's dark text colour gives it its shape.
- *
- * On a dark canvas that trick backfires: a light border swamps letters this
- * small and they read as white. The colours are bright there to begin with, so
- * the colour itself carries the text: lightened only where it is too dim (the
- * single-colour grey, the deep purples), a touch bolder since nothing outlines
- * it, and bordered in the canvas colour, which only shows where it cuts a line
- * passing underneath.
+ * The line's own colour carries the text, shifted only as far as it takes to be
+ * read: lightened on a dark canvas (the single-colour grey, the deep purples),
+ * darkened on a light one (amber, mint, cyan and most of the palette). A border
+ * in a contrasting colour was tried first and swamps letters this small: they
+ * read as white on dark and as black on light. So the border is the canvas's
+ * colour, which only shows where it cuts a line passing underneath, and the
+ * letters are a touch bolder since nothing outlines them.
  */
 export function multiplicityPaint(color, theme) {
-  if (isDarkCanvas(theme)) {
-    return { fill: readableOn(color, theme.bg, DARK_CANVAS_CONTRAST), outline: theme.bg, width: 1.25, weight: 600 };
-  }
-  return { fill: color, outline: theme.headerText, width: 1.25, weight: 400 };
+  const ratio = isDarkCanvas(theme) ? CANVAS_CONTRAST.dark : CANVAS_CONTRAST.light;
+  return { fill: readableOn(color, theme.bg, ratio), outline: theme.bg, width: 1.25, weight: 600 };
 }
