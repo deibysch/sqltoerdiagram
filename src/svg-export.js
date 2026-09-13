@@ -5,6 +5,7 @@ import { relationCardinality } from './cardinality.js';
 import { getTableAnchor, buildSVGPath } from './routing.js';
 import { cardTexts, cardAnchor, routePolyline, labelAnchor, DEFAULT_NAME_POS } from './edge-labels.js';
 import { computeLineHops } from './line-hops.js';
+import { CARD, commentsOf, layoutCommentCard } from './comments.js';
 
 // Crow's-foot cardinality marker at a line endpoint (world coords).
 //   (nx, ny) = outward normal vector from the table edge (pointing along the line).
@@ -97,7 +98,10 @@ export function exportSVG(
     connectorStyle = 'crowsfoot',
     multiplicityMode = 'hidden',
     relationNamesMode = 'hidden',
+    commentsMode = 'hover',
   } = opts;
+  // No measureText out here: a character is taken as 0.56 of its font size.
+  const estimateText = (text, font) => String(text).length * +((/(\d+(?:\.\d+)?)px/.exec(font) || [])[1] || 11) * 0.56;
   // An export has no pointer, so what would show on hover is simply shown.
   const showMultiplicity = multiplicityMode === 'always' || multiplicityMode === 'hover';
   const showRelationNames = relationNamesMode === 'always' || relationNamesMode === 'hover';
@@ -115,6 +119,21 @@ export function exportSVG(
   for (const a of annotations) {
     x0 = Math.min(x0, a.x); y0 = Math.min(y0, a.y);
     x1 = Math.max(x1, a.x + a.w); y1 = Math.max(y1, a.y + a.h);
+  }
+  // Comment cards stick out beside their tables, so the picture has to hold them.
+  // Only when they are always shown: 'hover' shows a card for what is pointed at,
+  // and nothing is pointed at in an export.
+  const commentCards = [];
+  if (commentsMode === 'always') {
+    for (const t of ts) {
+      const comments = commentsOf(t, getVisibleColumns(t, diagramLevel));
+      if (!comments) continue;
+      const card = layoutCommentCard(comments, estimateText);
+      const cx = t.x + t.w + CARD.gap;
+      commentCards.push({ x: cx, y: t.y, card });
+      x1 = Math.max(x1, cx + card.width);
+      y1 = Math.max(y1, t.y + card.height);
+    }
   }
   x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
   const W = x1 - x0, H = y1 - y0;
@@ -263,6 +282,7 @@ export function exportSVG(
       if (c.pk) g.push(`<text x="10" y="${cy}" dominant-baseline="middle" font-size="9" font-weight="700" fill="${theme.pk}">PK</text>`);
       else if (c.fk && !isConceptual) g.push(`<text x="10" y="${cy}" dominant-baseline="middle" font-size="9" font-weight="700" fill="${theme.fk}">FK</text>`);
       g.push(`<text x="38" y="${cy}" dominant-baseline="middle" font-size="13" font-family="ui-monospace, Menlo, monospace" fill="${theme.rowText}">${esc(c.name)}</text>`);
+
       if (c.type && !isConceptual) g.push(`<text x="${t.w - 12}" y="${cy}" dominant-baseline="middle" text-anchor="end" font-size="12" font-family="ui-monospace, Menlo, monospace" fill="${theme.typeText}">${esc(c.type)}</text>`);
     }
     g.push('</g>');
@@ -284,6 +304,16 @@ export function exportSVG(
   }
 
   parts.push(...labelParts);
+
+  // comment cards, beside their tables and over everything else
+  for (const { x, y, card } of commentCards) {
+    parts.push(`<rect x="${x}" y="${y}" width="${card.width}" height="${card.height}" rx="6" fill="${theme.tableBg}" stroke="${theme.tableBorder}"/>`);
+    parts.push(`<rect x="${x}" y="${y + 6}" width="2.5" height="${card.height - 12}" fill="${hexA(theme.edgeHi, 0.55)}"/>`);
+    for (const line of card.lines) {
+      const column = line.role === 'column';
+      parts.push(`<text x="${x + CARD.pad}" y="${y + line.y}" dominant-baseline="middle" font-size="11" font-weight="${column ? 600 : 400}" fill="${column ? theme.headerText : theme.rowText}">${esc(line.text)}</text>`);
+    }
+  }
 
   parts.push('</svg>');
   return parts.join('\n');

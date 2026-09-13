@@ -28,6 +28,88 @@ function splitRef(ref) {
   return parts.map((p) => p.trim());
 }
 
+// Blank out // and /* */ comments with spaces, keeping every character offset
+// and every line break where it was. Never inside a string: a note such as
+// 'see https://example.com' used to lose its tail, and the quote left open made
+// the whole table disappear.
+function blankComments(src) {
+  let out = '';
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (src.startsWith("'''", i)) {
+      const end = src.indexOf("'''", i + 3);
+      const stop = end < 0 ? src.length : end + 3;
+      out += src.slice(i, stop);
+      i = stop;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') {
+      let j = i + 1;
+      while (j < src.length && src[j] !== c && src[j] !== '\n') j += src[j] === '\\' ? 2 : 1;
+      const stop = Math.min(src.length, j + 1);
+      out += src.slice(i, stop);
+      i = stop;
+      continue;
+    }
+    if (c === '/' && src[i + 1] === '/') {
+      let j = src.indexOf('\n', i);
+      if (j < 0) j = src.length;
+      out += ' '.repeat(j - i);
+      i = j;
+      continue;
+    }
+    if (c === '/' && src[i + 1] === '*') {
+      let j = src.indexOf('*/', i + 2);
+      j = j < 0 ? src.length : j + 2;
+      out += src.slice(i, j).replace(/[^\n]/g, ' ');
+      i = j;
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+// A multi-line ''' string drops the line breaks that open and close it and the
+// indentation its lines share, as dbdiagram.io does.
+function dedent(raw) {
+  const lines = raw.split('\n');
+  if (lines.length && !lines[0].trim()) lines.shift();
+  if (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  const indent = Math.min(...lines.filter(l => l.trim()).map(l => l.match(/^[ \t]*/)[0].length), Infinity);
+  return lines.map(l => (Number.isFinite(indent) ? l.slice(indent) : l)).join('\n').trimEnd();
+}
+
+/** The string literal starting at `i` (spaces allowed before it), or null. */
+function readString(src, i) {
+  while (i < src.length && (src[i] === ' ' || src[i] === '\t')) i++;
+  if (src.startsWith("'''", i)) {
+    const end = src.indexOf("'''", i + 3);
+    if (end < 0) return null;
+    return { value: dedent(src.slice(i + 3, end)), end: end + 3 };
+  }
+  const q = src[i];
+  if (q !== "'" && q !== '"') return null;
+  let j = i + 1, value = '';
+  while (j < src.length && src[j] !== q && src[j] !== '\n') {
+    if (src[j] === '\\' && j + 1 < src.length) { value += src[j + 1]; j += 2; continue; }
+    value += src[j];
+    j++;
+  }
+  if (src[j] !== q) return null;
+  return { value, end: j + 1 };
+}
+
+/** `note: '...'` out of a settings list such as `pk, note: 'the id'`. */
+function noteFromSettings(settings) {
+  const m = /\bnote\s*:/i.exec(settings || '');
+  if (!m) return '';
+  const s = readString(settings, m.index + m[0].length);
+  return s ? s.value : '';
+}
+
 function findIdentifierSpan(str, ident, baseOffset) {
   if (!str || !ident) return [baseOffset, baseOffset + (str ? str.length : 0)];
   const idx = str.lastIndexOf(ident);
@@ -37,14 +119,13 @@ function findIdentifierSpan(str, ident, baseOffset) {
 
 export function parseDBML(text) {
   // replace comments with spaces of equal length so character offsets are 100% preserved
-  let t = (text || '')
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => ' '.repeat(m.length))
-    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
+  let t = blankComments(text || '');
   const tables = [];
   const rels = [];
 
   // --- Table blocks ---
-  const tableRe = /\bTable\b\s+([^\s{]+(?:\s+as\s+\S+)?)\s*\{/gi;
+  // Settings may sit between the name and the brace: Table users [note: '...'] {
+  const tableRe = /\bTable\b\s+([^\s{[]+(?:\s+as\s+[^\s{[]+)?)\s*(\[[^\]]*\])?\s*\{/gi;
   let m;
   while ((m = tableRe.exec(t))) {
     const rawHead = m[1];
@@ -55,6 +136,39 @@ export function parseDBML(text) {
     const body = t.slice(b[0], b[1]);
     const table = makeTable(name);
 
+    // The table's comment can come in three spellings: a setting on the header,
+    // `Note: '...'` (or a ''' multi-line string) and a `Note { '...' }` block.
+    // Notes and index blocks are blanked out of the copy the columns are read
+    // from, so none of their lines turns into a bogus column.
+    table.note = noteFromSettings(m[2] ? m[2].slice(1, -1) : '');
+    let scan = body;
+    const blankOut = (from, to) => {
+      scan = scan.slice(0, from) + scan.slice(from, to).replace(/[^\n]/g, ' ') + scan.slice(to);
+    };
+    const nestedRe = /(^|\n)([ \t]*)(note|indexes)\b\s*(:|\{)/gi;
+    let nm;
+    while ((nm = nestedRe.exec(body))) {
+      const keywordAt = nm.index + nm[1].length + nm[2].length;
+      const after = nm.index + nm[0].length;
+      const isNote = nm[3].toLowerCase() === 'note';
+      if (nm[4] === ':') {
+        if (!isNote) continue;
+        const str = readString(body, after);
+        if (str) { table.note = str.value; blankOut(keywordAt, str.end); }
+        continue;
+      }
+      const blk = balanced(body, after - 1, '{', '}');
+      if (!blk) continue;
+      if (isNote) {
+        let k = blk[0];
+        while (k < blk[1] && /\s/.test(body[k])) k++;
+        const str = readString(body, k);
+        if (str) table.note = str.value;
+      }
+      blankOut(keywordAt, blk[2]);
+      nestedRe.lastIndex = blk[2];
+    }
+
     // Spans for table
     const headOffset = m[0].indexOf(rawHead);
     const headStart = m.index + headOffset;
@@ -64,10 +178,10 @@ export function parseDBML(text) {
 
     // Scan lines in body preserving offsets
     let lineStart = 0;
-    while (lineStart < body.length) {
-      let lineEnd = body.indexOf('\n', lineStart);
-      if (lineEnd < 0) lineEnd = body.length;
-      const rawLine = body.slice(lineStart, lineEnd);
+    while (lineStart < scan.length) {
+      let lineEnd = scan.indexOf('\n', lineStart);
+      if (lineEnd < 0) lineEnd = scan.length;
+      const rawLine = scan.slice(lineStart, lineEnd);
       const absLineStart = b[0] + lineStart;
       const absLineEnd = b[0] + lineEnd;
 
@@ -78,7 +192,9 @@ export function parseDBML(text) {
         const contentEnd = contentStart + trimmed.length;
 
         // skip nested blocks/notes or closing brace
-        if (!/^(Note|indexes|note)\b/i.test(trimmed) && trimmed !== '}' && !trimmed.startsWith('}')) {
+        // Notes and index blocks were blanked above. This only catches one too
+        // broken to read, and no longer swallows a column simply called `note`.
+        if (!/^(note|indexes)\b\s*(:|\{)/i.test(trimmed) && trimmed !== '}' && !trimmed.startsWith('}')) {
           let settings = '';
           let settingsSpan = null;
           const br = trimmed.indexOf('[');
@@ -116,6 +232,7 @@ export function parseDBML(text) {
                 typeSpan,
                 defSpan: [absLineStart, absLineEnd],
                 settingsSpan,
+                note: noteFromSettings(settings),
               };
               addColumn(table, col);
 

@@ -7,6 +7,7 @@ import { ROUTING_STYLES, getTableAnchor, drawRoutePath, distanceToRoute, pointTo
 import { relationCardinality } from './cardinality.js';
 import { cardTexts, cardAnchor, routePolyline, labelAnchor, nearestPosition, DEFAULT_NAME_POS } from './edge-labels.js';
 import { computeLineHops } from './line-hops.js';
+import { COMMENT_MODES, CARD, commentsOf, commentFor, layoutCommentCard } from './comments.js';
 import { inferLinks as inferLinksCore } from './infer-links.js';
 
 export class Diagram {
@@ -41,6 +42,8 @@ export class Diagram {
     this.connectorStyle = 'crowsfoot'; // 'crowsfoot' | 'none' — how a line ends
     this.multiplicityMode = 'hidden';  // 'hidden' | 'hover' (only the line you point at) | 'always'
     this.relationNamesMode = 'hidden'; // the same three
+    this.commentsMode = 'hover';   // table and column comments: the same three again
+    this.hoverComment = null;      // { key, col, row } of the comment under the pointer
     this.hoverLabel = null;        // the word under the pointer, if any
     this.edgeCards = new Map();    // relKey -> { from, to }: multiplicity the user typed
     this.edgeNames = new Map();    // relKey -> the relation's name
@@ -144,6 +147,7 @@ export class Diagram {
       connectorStyle: this.connectorStyle,
       multiplicityMode: this.multiplicityMode,
       relationNamesMode: this.relationNamesMode,
+      commentsMode: this.commentsMode,
       edgeCards: Array.from(this.edgeCards.entries()).map(([k, c]) => [k, { ...c }]),
       edgeNames: Array.from(this.edgeNames.entries()),
       edgeNamePos: Array.from(this.edgeNamePos.entries()).map(([k, p]) => [k, { ...p }]),
@@ -180,6 +184,10 @@ export class Diagram {
     if (snapshot.connectorStyle) this.connectorStyle = snapshot.connectorStyle;
     if (snapshot.multiplicityMode) this.multiplicityMode = snapshot.multiplicityMode;
     if (snapshot.relationNamesMode) this.relationNamesMode = snapshot.relationNamesMode;
+    if (snapshot.commentsMode && snapshot.commentsMode !== this.commentsMode) {
+      this.commentsMode = snapshot.commentsMode;
+      this.bitmaps.clear();   // the comment marks live inside the table bitmaps
+    }
     if (snapshot.edgeCards) this.edgeCards = new Map(snapshot.edgeCards.map(([k, c]) => [k, { ...c }]));
     if (snapshot.edgeNames) this.edgeNames = new Map(snapshot.edgeNames);
     if (snapshot.edgeNamePos) this.edgeNamePos = new Map(snapshot.edgeNamePos.map(([k, p]) => [k, { ...p }]));
@@ -311,7 +319,7 @@ export class Diagram {
   _bitmap(t) {
     let bm = this.bitmaps.get(t.key);
     if (!bm) {
-      bm = rasterizeTable(t, this.theme, this.dpr, this.diagramLevel);
+      bm = rasterizeTable(t, this.theme, this.dpr, this.diagramLevel, { marks: this.commentsMode !== 'hidden' });
       this.bitmaps.set(t.key, bm);
     }
     return bm;
@@ -386,6 +394,8 @@ export class Diagram {
 
     // the words on the connections, last of all so nothing paints over them
     this._drawEdgeTextLayer();
+    // and the table and column comments
+    this._drawCommentLayer({ x0: vx0, y0: vy0, x1: vx1, y1: vy1 });
 
     // selection chrome (handles, colour dots, delete) for the selected annotation
     if (this.selectedAnno) this._drawAnnoChrome(this.selectedAnno);
@@ -1282,6 +1292,74 @@ export class Diagram {
     ctx.fillText(text, x, y);
   }
 
+  /** In hover mode, the table title or column row under the pointer, if it has a comment. */
+  _commentAt(t, sx, sy) {
+    if (!t || this.commentsMode !== 'hover') return null;
+    const localY = this.screenToWorld(sx, sy).y - t.y;
+    if (localY < HEADER_H) return commentFor(t, null) ? { key: t.key, col: null, row: -1 } : null;
+    const row = Math.floor((localY - HEADER_H) / ROW_H);
+    const column = getVisibleColumns(t, this.diagramLevel)[row];
+    return column && commentFor(t, column) ? { key: t.key, col: column.name, row } : null;
+  }
+
+  /**
+   * Comment cards, drawn last with the other words so no table covers them. In
+   * 'always' every table with comments gets one; in 'hover', only the comment
+   * under the pointer — which an export never has, so it gets cards only in
+   * 'always'. `cull` is the visible world rectangle, or null to draw every table.
+   */
+  _drawCommentLayer(cull) {
+    if (this.commentsMode === 'hidden') return;
+    const { ctx } = this;
+    const measure = (text, font) => { ctx.font = font; return ctx.measureText(text).width; };
+    const level = this.diagramLevel;
+
+    if (this.commentsMode === 'always') {
+      for (const t of this.model.tables) {
+        if (!Number.isFinite(t.x) || this.hidden.has(t.key)) continue;
+        const comments = commentsOf(t, getVisibleColumns(t, level));
+        if (!comments) continue;
+        const card = layoutCommentCard(comments, measure);
+        const x = t.x + t.w + CARD.gap;
+        if (cull && (x > cull.x1 || x + card.width < cull.x0 || t.y > cull.y1 || t.y + card.height < cull.y0)) continue;
+        this._drawCommentCard(x, t.y, card);
+      }
+      return;
+    }
+
+    if (this._exporting) return;   // an export is a picture of the diagram, not of the pointer
+    const on = this.hoverComment;
+    const t = on && this._tableMap().get(on.key);
+    if (!t || this.hidden.has(t.key)) return;
+    const column = on.col ? getVisibleColumns(t, level).find(c => c.name === on.col) : null;
+    const comments = commentFor(t, column);
+    if (!comments) return;
+    const y = column ? t.y + HEADER_H + on.row * ROW_H : t.y;
+    this._drawCommentCard(t.x + t.w + CARD.gap, y, layoutCommentCard(comments, measure));
+  }
+
+  _drawCommentCard(x, y, card) {
+    const { ctx, theme, cam } = this;
+    ctx.save();
+    roundRectPath(ctx, x, y, card.width, card.height, 6);
+    ctx.fillStyle = theme.tableBg;
+    ctx.fill();
+    ctx.strokeStyle = theme.tableBorder;
+    ctx.lineWidth = 1 / cam.scale;
+    ctx.stroke();
+    // an accent down the left edge, so a card never reads as another table
+    ctx.fillStyle = hexA(theme.edgeHi, 0.55);
+    ctx.fillRect(x, y + 6, 2.5, card.height - 12);
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    for (const line of card.lines) {
+      ctx.font = line.font;
+      ctx.fillStyle = line.role === 'column' ? theme.headerText : theme.rowText;
+      ctx.fillText(line.text, x + CARD.pad, y + line.y);
+    }
+    ctx.restore();
+  }
+
   /** The relation behind a connection key, so its schema cardinality can be read. */
   _relationByKey(key) {
     const lk = (key || '').toLowerCase();
@@ -1392,7 +1470,12 @@ export class Diagram {
       if (this._pointerMove(sx, sy)) return;   // active drag/pan handled it
 
       if (this.toolMode === 'pan') {
-        if (this.hover || this.hoverEdge || this.hoverVertex || this.hoverConn) {
+        // The hand only pans, but reading is not editing: the comment under the
+        // pointer still shows, so a schema can be read without changing tools.
+        const onComment = this._commentAt(this.tableAt(sx, sy), sx, sy);
+        const commentMoved = this.hoverComment?.key !== onComment?.key || this.hoverComment?.col !== onComment?.col;
+        this.hoverComment = onComment;
+        if (this.hover || this.hoverEdge || this.hoverVertex || this.hoverConn || commentMoved) {
           this.hover = null;
           this.hoverEdge = null;
           this.hoverVertex = null;
@@ -1428,6 +1511,12 @@ export class Diagram {
       }
       if (this.hover !== t) {
         this.hover = t;
+        changed = true;
+      }
+
+      const onComment = this._commentAt(t, sx, sy);
+      if (this.hoverComment?.key !== onComment?.key || this.hoverComment?.col !== onComment?.col) {
+        this.hoverComment = onComment;
         changed = true;
       }
 
@@ -2481,6 +2570,16 @@ export class Diagram {
     this.onLayoutChange?.();
   }
 
+  /** 'hidden', 'hover' (a mark, and the comment under the pointer) or 'always'. */
+  setCommentsMode(mode) {
+    this.onHistorySnapshot?.(this.getSnapshot());
+    this.commentsMode = COMMENT_MODES.includes(mode) ? mode : 'hover';
+    this.hoverComment = null;
+    this.bitmaps.clear();   // the marks are painted into the table bitmaps
+    this.markDirty();
+    this.onLayoutChange?.();
+  }
+
   setRelationNamesMode(mode) {
     this.onHistorySnapshot?.(this.getSnapshot());
     this.relationNamesMode = ['hidden', 'hover', 'always'].includes(mode) ? mode : 'hidden';
@@ -3036,12 +3135,23 @@ export class Diagram {
   }
 
   // ---- export ----
-  bounds(padding = 40) {
+  // `withComments` counts the comment cards that stick out beside their tables:
+  // on by default only while they are always shown, so Fit leaves room for them.
+  bounds(padding = 40, withComments = this.commentsMode === 'always') {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const measure = withComments && this.ctx
+      ? (text, font) => { this.ctx.font = font; return this.ctx.measureText(text).width; }
+      : null;
     for (const t of this.model.tables) {
       if (!Number.isFinite(t.x) || this.hidden.has(t.key)) continue;
       x0 = Math.min(x0, t.x); y0 = Math.min(y0, t.y);
       x1 = Math.max(x1, t.x + t.w); y1 = Math.max(y1, t.y + t.h);
+      const comments = measure && commentsOf(t, getVisibleColumns(t, this.diagramLevel));
+      if (comments) {
+        const card = layoutCommentCard(comments, measure);
+        x1 = Math.max(x1, t.x + t.w + CARD.gap + card.width);
+        y1 = Math.max(y1, t.y + card.height);
+      }
     }
     for (const a of this.annotations) {
       x0 = Math.min(x0, a.x); y0 = Math.min(y0, a.y);
@@ -3056,7 +3166,8 @@ export class Diagram {
   }
 
   exportPNG(scale = 2) {
-    const b = this.bounds();
+    // the comment cards take room only when they are always shown, as on screen
+    const b = this.bounds(40, this.commentsMode === 'always');
     if (b.w === 0) return null;
     const cv = document.createElement('canvas');
     cv.width = Math.ceil(b.w * scale);
@@ -3074,9 +3185,14 @@ export class Diagram {
     const all = { x0: -1e9, y0: -1e9, x1: 1e9, y1: 1e9 };
     for (const a of this.annotations) if (a.type === 'group') this._drawGroup(a, all);
     this._drawEdges(-1e9, -1e9, 1e9, 1e9);
+    // Each table is painted afresh rather than taken from the screen's cache: the
+    // cached bitmaps carry the comment marks, which are there to be pointed at and
+    // have no business in a picture. Painting at the export's own scale also keeps
+    // the text sharp instead of stretching the screen-sized bitmap.
+    const exportDpr = Math.max(this.dpr || 1, scale);
     for (const t of this.model.tables) {
       if (!Number.isFinite(t.x) || this.hidden.has(t.key)) continue;
-      ctx.drawImage(this._bitmap(t), t.x, t.y, t.w, t.h);
+      ctx.drawImage(rasterizeTable(t, this.theme, exportDpr, this.diagramLevel, { marks: false }), t.x, t.y, t.w, t.h);
     }
     for (const a of this.annotations) if (a.type === 'note') this._drawNote(a, all);
     // the words on the connections, on top of everything as on screen; this
@@ -3084,6 +3200,7 @@ export class Diagram {
     this._exporting = true;
     try {
       this._drawEdgeTextLayer();
+      this._drawCommentLayer(null);
     } finally {
       this._exporting = false;
     }

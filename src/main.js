@@ -239,6 +239,7 @@ function collectLayout() {
     connectorStyle: diagram.connectorStyle || 'crowsfoot',
     multiplicityMode: diagram.multiplicityMode || 'hidden',
     relationNamesMode: diagram.relationNamesMode || 'hidden',
+    commentsMode: diagram.commentsMode || 'hover',
     orientation: diagram.orientation || 'LR',
     tables,
     positions: tables, // backwards compatibility
@@ -303,6 +304,10 @@ function applyLayoutData(model, data) {
   const rels = mode(data.relationNamesMode, data.showRelationNames);
   if (mult) diagram.multiplicityMode = mult;
   if (rels) diagram.relationNamesMode = rels;
+  if (['hidden', 'hover', 'always'].includes(data.commentsMode) && data.commentsMode !== diagram.commentsMode) {
+    diagram.commentsMode = data.commentsMode;
+    diagram.bitmaps.clear();   // the comment marks live inside the table bitmaps
+  }
   syncLineExtras();
   if (data.connections && typeof data.connections === 'object') {
     const cards = {}, names = {}, positions = {};
@@ -937,6 +942,13 @@ arrangeMenu.addEventListener('click', (e) => {
     rearrangePick = `algo:${layoutOpts.algo}`;
     localStorage.setItem('dbdiga-rearrange', rearrangePick);
   }
+  if (item.dataset.comments) {
+    // Only how comments are shown: nothing on the canvas moves.
+    arrangeMenu.hidden = true;
+    diagram.setCommentsMode(item.dataset.comments);
+    syncLineExtras();
+    return;
+  }
   if (item.dataset.orient) {
     // Direction turns what is on the canvas; it never re-arranges anything.
     // Every direction visited is remembered, so coming back to one with nothing
@@ -1344,6 +1356,7 @@ function generateLayoutJson() {
     connectorStyle: diagram.connectorStyle || 'crowsfoot',
     multiplicityMode: diagram.multiplicityMode || 'hidden',
     relationNamesMode: diagram.relationNamesMode || 'hidden',
+    commentsMode: diagram.commentsMode || 'hover',
     orientation: diagram.orientation || 'LR',
     connections: data.connections,
   });
@@ -1429,6 +1442,9 @@ function syncLineExtras() {
     el.classList.toggle('active', el.dataset.multiplicity === (diagram.multiplicityMode || 'hidden'));
   for (const el of document.querySelectorAll('[data-relnames]'))
     el.classList.toggle('active', el.dataset.relnames === (diagram.relationNamesMode || 'hidden'));
+  // table and column comments live in the Tables menu, but persist the same way
+  for (const el of document.querySelectorAll('[data-comments]'))
+    el.classList.toggle('active', el.dataset.comments === (diagram.commentsMode || 'hover'));
 }
 syncLineExtras();
 
@@ -1640,6 +1656,7 @@ function exportImage(kind) {
         connectorStyle: diagram.connectorStyle,
         multiplicityMode: diagram.multiplicityMode,
         relationNamesMode: diagram.relationNamesMode,
+        commentsMode: diagram.commentsMode,
       }
     );
     if (svg) downloadText('schema.svg', svg, 'image/svg+xml');

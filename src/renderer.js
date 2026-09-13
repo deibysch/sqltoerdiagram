@@ -3,6 +3,8 @@
 // + line drawing rather than per-glyph text layout. Off-screen tables/edges
 // are culled. This keeps hundreds of tables smooth.
 
+import { MARK } from './comments.js';
+
 const FONT_STACK = "13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 const HEADER_FONT = "600 14px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
 const TYPE_FONT = "12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -125,7 +127,7 @@ export function measureTable(t, level = 'physical') {
     let w = nameW;
     for (const c of visibleCols) {
       const typeW = isConceptual || !c.type ? 0 : (c.type.length * 7.2 + GAP);
-      const total = BADGE_W + c.name.length * 7.8 + typeW + PAD_X * 2;
+      const total = BADGE_W + c.name.length * 7.8 + markRoom(c) + typeW + PAD_X * 2;
       if (total > w) w = total;
     }
     w = Math.max(MIN_W, Math.min(MAX_W, Math.ceil(w)));
@@ -144,7 +146,7 @@ export function measureTable(t, level = 'physical') {
       typeW = ctx.measureText(c.type).width + GAP;
       ctx.font = FONT_STACK;
     }
-    const total = BADGE_W + nameW + typeW + PAD_X * 2;
+    const total = BADGE_W + nameW + markRoom(c) + typeW + PAD_X * 2;
     if (total > w) w = total;
   }
   w = Math.max(MIN_W, Math.min(MAX_W, Math.ceil(w)));
@@ -152,8 +154,15 @@ export function measureTable(t, level = 'physical') {
   return { w, h, rowH: ROW_H, headerH: HEADER_H, visibleCols };
 }
 
-// Rasterise one table to a bitmap at the given pixel ratio.
-export function rasterizeTable(t, theme, dpr, level = 'physical') {
+// Room for a column's comment mark. Reserved whatever the comments mode, so a
+// table does not change width, and shove its lines around, when the mode does.
+function markRoom(c) {
+  return String(c.note || '').trim() ? MARK.w + 6 : 0;
+}
+
+// Rasterise one table to a bitmap at the given pixel ratio. With `marks`, every
+// title and column that carries a comment gets a small speech bubble.
+export function rasterizeTable(t, theme, dpr, level = 'physical', opts = {}) {
   const visibleCols = getVisibleColumns(t, level);
   const w = t.w, h = t.h;
   const isConceptual = level === 'conceptual';
@@ -189,6 +198,10 @@ export function rasterizeTable(t, theme, dpr, level = 'physical') {
   ctx.font = HEADER_FONT;
   ctx.textBaseline = 'middle';
   ctx.fillText(truncate(ctx, t.name, w - PAD_X * 2 - 18), PAD_X, HEADER_H / 2 + 1);
+  // the table's own comment: a bubble in the room the title already leaves free
+  if (opts.marks && String(t.note || '').trim()) {
+    drawCommentMark(ctx, w - PAD_X - MARK.w, HEADER_H / 2 + 1, theme.typeText);
+  }
 
   // header divider (only when columns are present)
   if (visibleCols.length > 0) {
@@ -221,7 +234,11 @@ export function rasterizeTable(t, theme, dpr, level = 'physical') {
     }
     ctx.font = FONT_STACK;
     ctx.fillStyle = theme.rowText;
-    ctx.fillText(truncate(ctx, c.name, w - nx - PAD_X - typeReserve), nx, y);
+    const marked = opts.marks && String(c.note || '').trim();
+    const shownName = truncate(ctx, c.name, w - nx - PAD_X - typeReserve - (marked ? MARK.w + 6 : 0));
+    ctx.fillText(shownName, nx, y);
+    // a column's comment: the same bubble, right after its name
+    if (marked) drawCommentMark(ctx, nx + ctx.measureText(shownName).width + 5, y, theme.typeText);
 
     // type, right-aligned
     if (!isConceptual && c.type) {
@@ -240,6 +257,24 @@ export function rasterizeTable(t, theme, dpr, level = 'physical') {
   ctx.stroke();
 
   return cv;
+}
+
+// A small speech bubble: "there is a comment to read here". (x, cy) is its left
+// edge and the middle of the row it sits in.
+function drawCommentMark(ctx, x, cy, color) {
+  const top = cy - MARK.h / 2 - 1;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.1;
+  ctx.lineJoin = 'round';
+  roundRect(ctx, x, top, MARK.w, MARK.h, 1.6);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + 2, top + MARK.h);
+  ctx.lineTo(x + 1.6, top + MARK.h + 2.8);
+  ctx.lineTo(x + 4.4, top + MARK.h);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawBadge(ctx, x, y, text, color) {

@@ -21,6 +21,7 @@ export function addColumn(table, col) {
     typeSpan: col.typeSpan || null,
     defSpan: col.defSpan || null,
     settingsSpan: col.settingsSpan || null,
+    note: col.note || '',
   };
   table.columns.push(c);
   table.colIndex.set(col.name.toLowerCase(), c);

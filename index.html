@@ -364,6 +364,12 @@
               <button class="menu-item active" data-spacing="comfortable">Comfortable</button>
               <button class="menu-item" data-spacing="spacious">Spacious</button>
             </div>
+            <button class="menu-section" data-section="comments" aria-expanded="false" title="The comments written on tables and columns in the code (DBML notes). Read-only: change them in the code.">Comments</button>
+            <div class="menu-body" data-section-body="comments" hidden>
+              <button class="menu-item" data-comments="hidden">Hidden</button>
+              <button class="menu-item active" data-comments="hover" title="A small bubble marks every title and column that has a comment; point at one to read it">On hover</button>
+              <button class="menu-item" data-comments="always" title="A card beside every table with comments, listing the table's own and its columns'">Always</button>
+            </div>
           </div>
         </div>
         <button id="btn-fit" class="btn ghost" title="Fit diagram to screen" data-umami-event="fit">Fit</button>
