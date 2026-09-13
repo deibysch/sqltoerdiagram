@@ -164,3 +164,22 @@ test('the words are written after the tables, so nothing paints over them', () =
   assert.ok(svg.indexOf('>wrote<') > lastTable, 'the name comes after the last table');
   assert.ok(svg.indexOf('>0..1<') > lastTable, 'and so does the multiplicity');
 });
+
+test('multiplicity gets a thin border in the theme text colour, names one in the background', () => {
+  for (const [themeName, text, bg] of [['dark', '#e8edf4', '#0e1116'], ['light', '#1c2530', '#f4f6fa']]) {
+    const svg = exportSVG(EXPORT_MODEL, themeName, [], null, 'multi', null, 'curved', null, null, null, 'physical', {
+      edgeNames: new Map([[KEY, 'wrote']]),
+      multiplicityMode: 'always',
+      relationNamesMode: 'always',
+    });
+    const tagOf = (content) => {
+      const at = svg.indexOf(`>${content}<`);
+      return svg.slice(svg.lastIndexOf('<text', at), at);
+    };
+    assert.ok(tagOf('0..1').includes(`stroke="${text}"`), `${themeName}: the coloured multiplicity is outlined in ${text}`);
+    assert.ok(tagOf('0..1').includes('stroke-width="1.25"'), `${themeName}: a border, not a glow`);
+    assert.ok(tagOf('0..1').includes('letter-spacing="1"'), `${themeName}: with room between the dots`);
+    assert.ok(!tagOf('wrote').includes('letter-spacing'), `${themeName}: names keep their normal spacing`);
+    assert.ok(tagOf('wrote').includes(`stroke="${bg}"`), `${themeName}: the name keeps a background-coloured border`);
+  }
+});

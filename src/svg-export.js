@@ -231,10 +231,13 @@ export function exportSVG(
 
     // the words that ride on the line: multiplicity at both ends, and its name
     const round2 = (v) => Math.round(v * 100) / 100;
-    const halo = (x, y, text, fill, size, weight) =>
+    // the same thin border as the canvas: coloured text gets the theme's text
+    // colour around it, text already in that colour gets the background's
+    const halo = (x, y, text, fill, size, weight, outline = theme.bg, width = 2, spacing = 0) =>
       `<text x="${round2(x)}" y="${round2(y)}" text-anchor="middle" dominant-baseline="middle" ` +
       `font-family="ui-sans-serif, system-ui, sans-serif" font-size="${size}" font-weight="${weight}" ` +
-      `fill="${fill}" stroke="${theme.bg}" stroke-width="3.5" paint-order="stroke" ` +
+      (spacing ? `letter-spacing="${spacing}" ` : '') +
+      `fill="${fill}" stroke="${outline}" stroke-width="${width}" paint-order="stroke" ` +
       `stroke-linejoin="round">${esc(text)}</text>`;
 
     if (showMultiplicity) {
@@ -246,7 +249,8 @@ export function exportSVG(
       for (const end of ends) {
         if (!end.text) continue;
         const a = cardAnchor(end.at, end.toward, connectorStyle !== 'none');
-        labelParts.push(halo(a.x, a.y, end.text, color, 11, 400));
+        // thinner border and spaced letters, as on the canvas: the dots of "1..*" stay apart
+        labelParts.push(halo(a.x, a.y, end.text, color, 11, 400, theme.headerText, 1.25, 1));
       }
     }
 

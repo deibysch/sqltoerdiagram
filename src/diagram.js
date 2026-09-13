@@ -1231,14 +1231,22 @@ export class Diagram {
     // and shrink with the zoom, and an export comes out exactly as the screen.
     if (showCard) {
       ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
+      // A little room between the letters, or the border closes the gap between
+      // the two dots of "1..*" and it reads "1.*" at 100% zoom.
+      ctx.letterSpacing = '1px';
       for (const which of ['from', 'to']) {
         const text = seg.cardText[which];
         if (!text) continue;
         const at = this._cardAnchor(seg, which);
         const w = ctx.measureText(text).width;
-        this._haloText(text, at.x, at.y, seg.color || this.theme.edgeHi);
+        // The line's colour carries the text, and a thin border in the theme's own
+        // text colour (near black on light, near white on dark) carries its shape:
+        // pale colours like amber or mint vanish on a light canvas otherwise, and
+        // the single-colour grey does the same on a dark one.
+        this._haloText(text, at.x, at.y, seg.color || this.theme.edgeHi, this.theme.headerText, 1.25);
         this._edgeLabelHits.push({ key: seg.key, kind: 'card', which, x: at.x - w / 2 - 6, y: at.y - 9, w: w + 12, h: 18 });
       }
+      ctx.letterSpacing = '0px';
     }
 
     if (name || offerName) {
@@ -1282,11 +1290,16 @@ export class Diagram {
     return seg ? routePolyline(seg.routingStyle, seg.p1, seg.p2, seg.waypoints, seg.obstacles, seg.laneOffset || 0) : null;
   }
 
-  _haloText(text, x, y, color) {
+  // A thin border around the letters, so they keep their shape over lines, the
+  // grid and group boxes. `outline` defaults to the canvas colour; a coloured
+  // text asks for the theme's text colour instead, which contrasts with it.
+  // Stroke first and fill after: the fill covers the inner half of the stroke, so
+  // only a hairline shows outside each glyph, a border rather than a glow.
+  _haloText(text, x, y, color, outline = this.theme.bg, width = 2) {
     const { ctx } = this;
-    ctx.lineWidth = 3.5;
+    ctx.lineWidth = width;
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = this.theme.bg;
+    ctx.strokeStyle = outline;
     ctx.strokeText(text, x, y);
     ctx.fillStyle = color;
     ctx.fillText(text, x, y);
