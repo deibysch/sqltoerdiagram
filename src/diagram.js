@@ -1215,8 +1215,9 @@ export class Diagram {
   // whichever way the line runs, and haloed so the lines underneath do not cut
   // through the letters.
   _drawEdgeTexts(seg, alpha, focused = false) {
-    // An export has no pointer, so what would show on hover is simply shown.
-    const shows = (mode) => mode === 'always' || (mode === 'hover' && (focused || this._exporting));
+    // An export is a picture of the diagram, not of the pointer: it carries only
+    // what is always shown, as with the comment cards.
+    const shows = (mode) => mode === 'always' || (mode === 'hover' && focused && !this._exporting);
     const showCard = shows(this.multiplicityMode) && seg.card && seg.cardText;
     const name = shows(this.relationNamesMode) ? (seg.name || '') : '';
     // An unnamed line offers a spot to write one, but only the line you are

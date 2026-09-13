@@ -109,14 +109,23 @@ test('the SVG export writes the same multiplicity and name as the canvas', () =>
   assert.ok(svg.includes('>wrote<'), 'the relation name');
 });
 
-test('an export has no pointer, so what shows on hover is exported', () => {
+test('an export carries the words only when they are always shown', () => {
+  const always = buildSVG({
+    edgeNames: new Map([[KEY, 'wrote']]),
+    multiplicityMode: 'always',
+    relationNamesMode: 'always',
+  });
+  assert.ok(always.includes('>wrote<'), 'always: the name is in the export');
+  assert.ok(always.includes('>0..1<'), 'always: and so is the multiplicity');
+
+  // on hover is for the line under the pointer, and an export has no pointer
   const hover = buildSVG({
     edgeNames: new Map([[KEY, 'wrote']]),
     multiplicityMode: 'hover',
     relationNamesMode: 'hover',
   });
-  assert.ok(hover.includes('>wrote<'), 'the name is in the export');
-  assert.ok(hover.includes('>0..1<'), 'and so is the multiplicity');
+  assert.ok(!hover.includes('>wrote<'), 'hover: the name stays out');
+  assert.ok(!hover.includes('0..1'), 'hover: and so does the multiplicity');
 
   const hidden = buildSVG({
     edgeNames: new Map([[KEY, 'wrote']]),

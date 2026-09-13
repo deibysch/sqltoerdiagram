@@ -102,9 +102,10 @@ export function exportSVG(
   } = opts;
   // No measureText out here: a character is taken as 0.56 of its font size.
   const estimateText = (text, font) => String(text).length * +((/(\d+(?:\.\d+)?)px/.exec(font) || [])[1] || 11) * 0.56;
-  // An export has no pointer, so what would show on hover is simply shown.
-  const showMultiplicity = multiplicityMode === 'always' || multiplicityMode === 'hover';
-  const showRelationNames = relationNamesMode === 'always' || relationNamesMode === 'hover';
+  // An export is a picture of the diagram, not of the pointer: 'hover' shows the
+  // words of the line being pointed at, so only 'always' puts them in the picture.
+  const showMultiplicity = multiplicityMode === 'always';
+  const showRelationNames = relationNamesMode === 'always';
   const theme = THEMES[themeName] || THEMES.dark;
   const isHidden = (k) => !!(hidden && hidden.has(k));
   const ts = model.tables.filter(t => Number.isFinite(t.x) && !isHidden(t.key));
