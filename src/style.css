@@ -293,7 +293,7 @@ a.btn { text-decoration: none; color: var(--text); }
 .mi-hint { width: 13px; height: 13px; flex: none; margin-left: auto; opacity: .5; }
 .menu-item:hover .mi-hint, .menu-item.active .mi-hint { opacity: .85; }
 
-/* ---------- search panel of "Short lines, compact" ---------- */
+/* ---------- search panel of the "Optimize for" goals ---------- */
 .search-panel {
   position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%);
   z-index: 7;
@@ -319,6 +319,17 @@ a.btn { text-decoration: none; color: var(--text); }
 .sp-actions .btn { padding: 5px 10px; font-size: 12.5px; }
 .sp-actions .btn.ghost { border-color: var(--border); }
 .sp-actions .btn[hidden] { display: none; }
+/* the one question the panel asks: measure with the real lines? */
+.sp-ask {
+  display: flex; flex-direction: column; gap: 8px; max-width: 560px;
+  padding: 9px 10px; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--border);
+  color: var(--text); font-size: 12px; line-height: 1.45;
+}
+.sp-ask[hidden] { display: none; }
+.sp-ask-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.sp-ask-actions .btn { padding: 4px 10px; font-size: 12px; }
+.sp-ask-actions .btn.ghost { border-color: var(--border); }
 .sp-progress { height: 3px; background: var(--panel-2); border-radius: 2px; overflow: hidden; }
 .sp-progress[hidden] { display: none; }
 /* no end to show: a search runs until it is stopped */

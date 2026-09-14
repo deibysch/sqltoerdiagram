@@ -1,8 +1,8 @@
-// "Lineas cortas y compacto" — group layout, the current pick of four.
-//
-// One of four independent group-layout algorithms the user keeps side by side.
-// Unlike its two frozen siblings (group-layout-axis.js, group-layout-crossings.js)
-// this is the one that stays under development, so improvements land here.
+// The layout behind "Optimize for" in the Tables menu: Shortest lines, Fewest
+// crossings and Balanced, each in the shape picked under Shape. The goal and the
+// shape are the objective it polishes for (layout-goals.js); Balanced with the
+// Auto shape is this layout as it was first tuned, under the name "Short lines,
+// compact", beside three other group layouts that have since been removed.
 //
 // Routing-aware layout for the groups that already exist on the canvas.
 //
@@ -28,14 +28,15 @@
 //
 // With no groups at all, the whole diagram is one invisible group (no box drawn)
 // and gets its own wrap, wrapWholeDiagram. Steps 2 and 3 would have a single
-// node to work with, leaving plain dagre over every table: a strip and a
-// duplicate of "Minimos Cruces". Measured on generated schemas without groups,
-// line length centre to centre, plain dagre -> the wrap:
+// node to work with, leaving plain dagre over every table: a strip. Measured on
+// generated schemas without groups, line length centre to centre, plain dagre ->
+// the wrap:
 //    35 tables    862x4365 (5.06:1)  32433px  ->  1561x1470 (1.06:1)  16136px   87ms
 //    60 tables   6799x1828 (3.72:1)  93419px  ->  2260x2104 (1.07:1)  32619px  308ms
 //   100 tables   8173x2244 (3.64:1) 168589px  ->  3192x2594 (1.23:1)  63138px  795ms
 //   150 tables  14716x2244 (6.56:1) 524330px  ->  3192x3162 (1.01:1) 126982px  3.4s
-// "1 Columna o 1 Fila" reaches 14957 / 36916 / 69040 / 131472px, in up to 50s.
+// A grid search that tried every pair of tables (the removed "Optimized grid")
+// reached 14957 / 36916 / 69040 / 131472px, in up to 50s.
 //
 // Measured on a 35-table / 8-group / 59-relation schema, against filling the
 // groups by list order: crossings 84 -> 69, total line length 76098 -> 44748px,
@@ -45,14 +46,17 @@
 // Letting dagre pick the shape instead scored better on crossings (44) but blew
 // the canvas out to 5686x1997 — the version that reads best is this one.
 //
-// The score is a cheap geometric estimate, never the real router: the user
-// inspects the arrangement and then applies "Ruta Optima" themselves.
+// The score is a cheap geometric estimate, never the real router. The search panel
+// can measure the best layouts with Optimal Route when the user asks for it
+// (compact-search-core.js).
 
 import dagre from '@dagrejs/dagre';
 import { measureTable } from './renderer.js';
+import { AUTO_SHAPE, goalOf, linkCost, layoutScore } from './layout-goals.js';
 
-const GL_CROSS_COST = 200;   // estimated px charged per crossing between two connections
-const GL_BEND_COST = 40;     // ... per bend, i.e. per connection whose boxes share no axis
+// What a line, a bend and a crossing cost, and what shape the canvas should take,
+// come from the objective (layout-goals.js): "Optimize for" picks the goal and the
+// shape. Balanced with the Auto shape is this algorithm as it was first tuned.
 const GL_PAD_X = 32;         // group box padding
 const GL_PAD_TOP = 56;       // ... leaving room for the group label
 const GL_PAD_BOTTOM = 28;
@@ -64,16 +68,11 @@ const GL_LOOSE_GAP = 72;     // space between a loose table and the group it han
 const GL_POLISH_ROUNDS = 6;  // whole-canvas polish sweeps
 // A layout can be shorter on every line and still be miserable to read if it
 // stretches into a long strip: "Fit" then shrinks everything to nothing and you
-// pan sideways forever. Charge for straying from a screen-shaped canvas.
-const GL_ASPECT_TARGET = 1.6;
-const GL_ASPECT_COST = 9000;
-// Without groups (wrapWholeDiagram) the flat charge above is outweighed once a
-// big diagram's estimate runs into six figures: the wrap came out 3.2:1 at 60
-// tables. So there the canvas may take any shape from square to 2:1 for free,
-// and past that the score is multiplied by 1 + 2 ln(how far past).
-const GL_WHOLE_MIN_RATIO = 1;
-const GL_WHOLE_MAX_RATIO = 2;
-const GL_WHOLE_STRAY_COST = 2;
+// pan sideways forever. So the shape is charged for too (layout-goals.js). The
+// Auto shape pulls a canvas with groups towards 1.6:1 at 9000 px per unit off;
+// without groups that flat charge was outweighed once a big diagram's estimate
+// ran into six figures (the wrap came out 3.2:1 at 60 tables), so there any shape
+// from square to 2:1 is free and past that the score is multiplied instead.
 const GL_INNER = { nodesep: 40, ranksep: 70, edgesep: 20 };
 const GL_OUTER = { nodesep: GL_GUTTER, ranksep: GL_GUTTER, edgesep: 40 };
 
@@ -100,18 +99,19 @@ function segmentsCross(a1, a2, b1, b2) {
 }
 
 /**
- * Cheap quality estimate: Manhattan length centre to centre, a bend whenever
- * two boxes share no axis, and a charge per pair of connections that cross.
+ * Cheap quality estimate: Manhattan length centre to centre, a bend whenever two
+ * boxes share no axis, and every pair of those straight connections that cross.
+ * Length and bends count each connection as often as it is repeated.
  */
-function estimateCost(boxes, links) {
-  let cost = 0;
+function measureLinks(boxes, links) {
+  let length = 0, bends = 0, crossings = 0;
   const segs = [];
   for (const l of links) {
     const A = boxes[l.a], B = boxes[l.b];
     if (!A || !B) continue;
     const ca = centreOf(A), cb = centreOf(B);
-    cost += (Math.abs(ca.x - cb.x) + Math.abs(ca.y - cb.y)) * l.w;
-    if (!sharesAxis(A, B)) cost += GL_BEND_COST * l.w;
+    length += (Math.abs(ca.x - cb.x) + Math.abs(ca.y - cb.y)) * l.w;
+    if (!sharesAxis(A, B)) bends += l.w;
     segs.push([ca, cb, Math.min(ca.x, cb.x), Math.max(ca.x, cb.x), Math.min(ca.y, cb.y), Math.max(ca.y, cb.y)]);
   }
   // Segments whose bounding boxes are apart cannot cross: skip the exact test.
@@ -120,10 +120,29 @@ function estimateCost(boxes, links) {
     for (let j = i + 1; j < segs.length; j++) {
       const b = segs[j];
       if (a[3] < b[2] || b[3] < a[2] || a[5] < b[4] || b[5] < a[4]) continue;
-      if (segmentsCross(a[0], a[1], b[0], b[1])) cost += GL_CROSS_COST;
+      if (segmentsCross(a[0], a[1], b[0], b[1])) crossings++;
     }
   }
-  return cost;
+  return { length, bends, crossings };
+}
+
+/** The line part of the score for these boxes, as the goal weighs bends and crossings. */
+function estimateCost(boxes, links, goal) {
+  return linkCost(measureLinks(boxes, links), goal);
+}
+
+/** measureLinks plus the size of the canvas taken by the boxes that are placed. */
+function measureLayout(boxes, links) {
+  const m = measureLinks(boxes, links);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const b of boxes) {
+    if (!b || !Number.isFinite(b.x)) continue;
+    x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
+    x1 = Math.max(x1, b.x + b.w); y1 = Math.max(y1, b.y + b.h);
+  }
+  m.width = x1 > x0 ? x1 - x0 : 0;
+  m.height = y1 > y0 ? y1 - y0 : 0;
+  return m;
 }
 
 /**
@@ -333,7 +352,7 @@ function buildLinks(diagram) {
  * each trying the spots nearest to itself and to its partners.
  * Moves the tables; returns the score of the layout kept.
  */
-function wrapWholeDiagram(tables, links, sp) {
+function wrapWholeDiagram(tables, links, sp, objective) {
   const idx = new Map(tables.map((t, i) => [t.key.toLowerCase(), i]));
   const L = [];
   for (const l of links) {
@@ -341,16 +360,9 @@ function wrapWholeDiagram(tables, links, sp) {
     if (a !== undefined && b !== undefined && a !== b) L.push({ a, b, w: l.w });
   }
 
-  const score = (boxes) => {
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const b of boxes) {
-      x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
-      x1 = Math.max(x1, b.x + b.w); y1 = Math.max(y1, b.y + b.h);
-    }
-    const ratio = (x1 - x0) / Math.max(1, y1 - y0);
-    const stray = Math.max(1, ratio / GL_WHOLE_MAX_RATIO, GL_WHOLE_MIN_RATIO / ratio);
-    return estimateCost(boxes, L) * (1 + GL_WHOLE_STRAY_COST * Math.log(stray));
-  };
+  const score = (boxes) => layoutScore(measureLayout(boxes, L), objective, false);
+  // the proportion the band count is first guessed for
+  const targetRatio = typeof objective.shape?.ratio === 'number' ? objective.shape.ratio : AUTO_SHAPE.groupTarget;
 
   const plain = dagreArrange(tables, L, 'LR', sp.preset);
   let best = { boxes: plain.boxes, cost: score(plain.boxes), cols: null };
@@ -453,7 +465,7 @@ function wrapWholeDiagram(tables, links, sp) {
     const tallest = Math.max(...colH);
     let guess = 1, off = Infinity;
     for (let nb = 1; nb <= cols.length; nb++) {
-      const o = Math.abs(Math.log(span / nb / (nb * (tallest + sp.bandGap)) / GL_ASPECT_TARGET));
+      const o = Math.abs(Math.log(span / nb / (nb * (tallest + sp.bandGap)) / targetRatio));
       if (o < off) { off = o; guess = nb; }
     }
     for (const nb of [guess - 1, guess, guess + 1]) {
@@ -467,8 +479,8 @@ function wrapWholeDiagram(tables, links, sp) {
 
   // Polish: swap two tables wherever the score improves. Each table tries the
   // spots nearest to itself and to each table it is linked with, which is where
-  // a swap can shorten its lines. Trying every pair instead is what makes
-  // "1 Columna o 1 Fila" take seconds.
+  // a swap can shorten its lines. Trying every pair instead is what made the
+  // removed "Optimized grid" take seconds.
   if (best.cols) {
     const cols = best.cols.map(c => c.slice());
     const colW = cols.map(c => Math.max(...c.map(i => tables[i].w)));
@@ -529,12 +541,15 @@ function wrapWholeDiagram(tables, links, sp) {
  * first, so the lines start from a clean slate. With no groups at all, the
  * whole diagram is laid out by wrapWholeDiagram instead.
  *
- * `opts.seed` starts from another order of the schema (see orderShuffler), and
- * `opts.keepSizes` trusts the sizes already on the tables instead of measuring
- * them: a worker has no canvas to measure text with.
+ * `opts.goal` and `opts.shape` are the objective (layout-goals.js): Balanced and
+ * the Auto shape when left out. `opts.seed` starts from another order of the
+ * schema (see orderShuffler), and `opts.keepSizes` trusts the sizes already on
+ * the tables instead of measuring them: a worker has no canvas to measure text.
  * Returns { groups, implicit, tables, loose, annotations, cost }.
  */
 export function arrangeGroupsCompact(diagram, opts = {}) {
+  const objective = { goal: opts.goal, shape: opts.shape || null };
+  const goal = goalOf(opts.goal).id;
   // Spacing from the Arrange menu, relative to this algorithm's tuned values.
   const S = spacingScale(opts.spacing);
   const PAD_X = Math.round(GL_PAD_X * S.pad);
@@ -586,7 +601,7 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
   if (!groups.length) {
     const cost = wrapWholeDiagram(vary(model.tables), links, {
       rowGap: INNER.nodesep, colGap: INNER.ranksep, bandGap: GUTTER, preset: INNER,
-    });
+    }, objective);
     diagram.setAnnotations((diagram.annotations || []).filter(a => a.type !== 'group'));
     diagram.markDirty();
     diagram.onLayoutChange?.();
@@ -607,7 +622,7 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
     let best = null;
     for (const dir of ['LR', 'TB']) {
       const sol = dagreArrange(g.tables, inner, dir, INNER);
-      const cost = estimateCost(sol.boxes, inner)
+      const cost = estimateCost(sol.boxes, inner, goal)
         + Math.max(sol.w, sol.h) / Math.max(1, Math.min(sol.w, sol.h)) * 40;  // prefer squarish
       if (!best || cost < best.cost) best = { ...sol, dir, cost };
     }
@@ -642,7 +657,7 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
     let best = null;
     for (const dir of ['LR', 'TB']) {
       const sol = dagreArrange(groups.map(g => ({ w: g.w, h: g.h })), groupLinks, dir, OUTER);
-      const cost = estimateCost(sol.boxes, groupLinks);
+      const cost = estimateCost(sol.boxes, groupLinks, goal);
       if (!best || cost < best.cost) {
         best = {
           cost,
@@ -687,23 +702,7 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
   // Always laid out horizontally. "Vertical" is this result turned a quarter
   // clockwise afterwards (rotate-diagram.js), exactly as the Direction menu turns
   // a finished diagram, so both directions show the same arrangement.
-  const aspectTarget = GL_ASPECT_TARGET;
-  const globalCost = () => {
-    let cost = estimateCost(model.tables, globalLinks);
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const t of model.tables) {
-      if (!Number.isFinite(t.x)) continue;
-      x0 = Math.min(x0, t.x); y0 = Math.min(y0, t.y);
-      x1 = Math.max(x1, t.x + t.w); y1 = Math.max(y1, t.y + t.h);
-    }
-    const w = x1 - x0, h = y1 - y0;
-    if (w > 0 && h > 0) {
-      const ratio = w / h;
-      const off = ratio > aspectTarget ? ratio / aspectTarget : aspectTarget / ratio;
-      cost += (off - 1) * GL_ASPECT_COST;
-    }
-    return cost;
-  };
+  const globalCost = () => layoutScore(measureLayout(model.tables, globalLinks), objective, true);
 
   // Two group boxes are clear of each other when they are apart by the gutter
   // on at least one axis; side by side needs no vertical gap and vice versa.
@@ -900,57 +899,31 @@ function placedLinks(diagram) {
   return { tables, links };
 }
 
-function extentOf(boxes) {
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const b of boxes) {
-    x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
-    x1 = Math.max(x1, b.x + b.w); y1 = Math.max(y1, b.y + b.h);
-  }
-  return boxes.length ? { w: x1 - x0, h: y1 - y0 } : { w: 0, h: 0 };
-}
-
 /**
- * How good an arrangement is by the estimate this layout optimises, lower being
- * better, taken from where every table stands now, loose ones included. That
- * makes the result of one starting point comparable with another's, and with a
- * layout the user has touched since. The shape charge is the one the layout
- * itself uses: bands from square to 2:1 without groups, a screen-shaped target
- * with them.
+ * How good an arrangement is for `objective` by the estimate this layout
+ * optimises, lower being better, taken from where every table stands now, loose
+ * ones included. That makes the result of one starting point comparable with
+ * another's, and with a layout the user has touched since.
  */
-export function scoreCompactLayout(diagram) {
+export function scoreCompactLayout(diagram, objective = {}) {
   const { tables, links } = placedLinks(diagram);
   if (!tables.length) return 0;
-  const cost = estimateCost(tables, links);
-  const { w, h } = extentOf(tables);
-  if (!(w > 0 && h > 0)) return cost;
-  const ratio = w / h;
-  if (!collectGroupsCompact(diagram.model, diagram.annotations).groups.length) {
-    const stray = Math.max(1, ratio / GL_WHOLE_MAX_RATIO, GL_WHOLE_MIN_RATIO / ratio);
-    return cost * (1 + GL_WHOLE_STRAY_COST * Math.log(stray));
-  }
-  const off = ratio > GL_ASPECT_TARGET ? ratio / GL_ASPECT_TARGET : GL_ASPECT_TARGET / ratio;
-  return cost + (off - 1) * GL_ASPECT_COST;
+  const grouped = collectGroupsCompact(diagram.model, diagram.annotations).groups.length > 0;
+  return layoutScore(measureLayout(tables, links), objective, grouped);
 }
 
 /**
  * What a person can read off an arrangement, by the same estimate: the length of
- * every line centre to centre, how many of them cross, and the canvas size.
+ * every line centre to centre, the bends, how many lines cross, and the canvas size.
  */
 export function compactLayoutMetrics(diagram) {
   const { tables, links } = placedLinks(diagram);
-  let length = 0;
-  const segs = [];
-  for (const l of links) {
-    const ca = centreOf(tables[l.a]), cb = centreOf(tables[l.b]);
-    length += (Math.abs(ca.x - cb.x) + Math.abs(ca.y - cb.y)) * l.w;
-    segs.push([ca, cb]);
-  }
-  let crossings = 0;
-  for (let i = 0; i < segs.length; i++) {
-    for (let j = i + 1; j < segs.length; j++) {
-      if (segmentsCross(segs[i][0], segs[i][1], segs[j][0], segs[j][1])) crossings++;
-    }
-  }
-  const { w, h } = extentOf(tables);
-  return { length: Math.round(length), crossings, width: Math.round(w), height: Math.round(h) };
+  const m = measureLayout(tables, links);
+  return {
+    length: Math.round(m.length),
+    bends: m.bends,
+    crossings: m.crossings,
+    width: Math.round(m.width),
+    height: Math.round(m.height),
+  };
 }

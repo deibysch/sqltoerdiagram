@@ -15,8 +15,6 @@ import { EXAMPLE_SQL } from './examples.js';
 import { HistoryManager } from './history.js';
 import { reorderWithGemini, reorderWithLocalAI, reorderWithExistingGroups } from './ai-layout.js';
 import { createCompactSearch } from './compact-search-ui.js';
-import { arrangeGroupsSingleAxis } from './group-layout-axis.js';
-import { arrangeGroupsMinCrossings } from './group-layout-crossings.js';
 import { orientDiagram, resetOrientation } from './rotate-diagram.js';
 import { organizeLinesElkPorts, organizeLinesAStar, organizeLinesShortestPath, resetLines } from './line-organizer.js';
 
@@ -34,7 +32,7 @@ diagram.onZoom = (s) => { zoomLabel.textContent = Math.round(s * 100) + '%'; };
 window.__dbdiga = diagram;   // debug handle
 let visualEditor = null;     // created after setup; refreshed on every model change
 
-// The search panel of "Short lines, compact", created with the Tables menu.
+// The search panel of the "Optimize for" goals, created with the Tables menu.
 let compactSearch = null;
 
 // History manager (Undo / Redo) with 50 steps
@@ -617,11 +615,16 @@ const layoutOpts = {
   algo: localStorage.getItem('dbdiga-algo') || 'dagre',
   dir: 'LR',   // every arrangement flows left to right; the Direction buttons turn it afterwards
   spacing: localStorage.getItem('dbdiga-spacing') || 'comfortable',
+  shape: localStorage.getItem('dbdiga-shape') || 'auto',   // the whole canvas, for "Optimize for"
 };
 
-// Which rearrange method is picked in the Arrange menu. One pick across both of
-// its sections, so 'algo:dagre' and 'group:btn-groups-compact' rule each other out.
+// Which rearrange method is picked in the Tables menu. One pick across its
+// sections, so 'algo:dagre' and 'goal:balanced' rule each other out. The four
+// group layouts that came before the goals map onto the goal they were closest to.
 let rearrangePick = localStorage.getItem('dbdiga-rearrange') || `algo:${layoutOpts.algo}`;
+if (rearrangePick.startsWith('group:')) {
+  rearrangePick = rearrangePick === 'group:btn-groups-min-crossings' ? 'goal:crossings' : 'goal:balanced';
+}
 
 // input format: 'auto' detects SQL / Prisma / SQLAlchemy / Sequelize / DBML
 let formatChoice = localStorage.getItem('dbdiga-format') || 'auto';
@@ -883,16 +886,18 @@ $('btn-example2')?.addEventListener('click', loadExample);
 // Arrange button: re-arrange with current opts; the ▾ part toggles the menu.
 const arrangeMenu = $('arrange-menu');
 function syncMenu() {
-  // Both rearrange sections share one pick: choosing a with-groups option
-  // unchecks the without-groups one, and the other way round.
+  // The rearrange sections share one pick: choosing a goal unchecks the
+  // without-groups option, and the other way round.
   for (const el of arrangeMenu.querySelectorAll('[data-algo]'))
     el.classList.toggle('active', rearrangePick === `algo:${el.dataset.algo}`);
-  for (const el of arrangeMenu.querySelectorAll('[id^="btn-groups-"]'))
-    el.classList.toggle('active', rearrangePick === `group:${el.id}`);
+  for (const el of arrangeMenu.querySelectorAll('[data-goal]'))
+    el.classList.toggle('active', rearrangePick === `goal:${el.dataset.goal}`);
   for (const el of arrangeMenu.querySelectorAll('[data-orient]'))
     el.classList.toggle('active', el.dataset.orient === (diagram.orientation || 'LR'));
   for (const el of arrangeMenu.querySelectorAll('[data-spacing]'))
     el.classList.toggle('active', el.dataset.spacing === layoutOpts.spacing);
+  for (const el of arrangeMenu.querySelectorAll('[data-shape]'))
+    el.classList.toggle('active', el.dataset.shape === layoutOpts.shape);
 }
 
 function setRearrangePick(pick) {
@@ -917,12 +922,13 @@ function wireMenuSections(menu) {
   });
 }
 
-// "Short lines, compact" runs in a worker, and once it has run a panel offers to
-// search for better arrangements and pick one.
+// The "Optimize for" goals run in a worker, and once one has run a panel offers
+// to search for better arrangements and pick one.
 compactSearch = createCompactSearch({
   diagram,
   host: canvas.parentElement,
   getSpacing: () => layoutOpts.spacing,
+  getShape: () => layoutOpts.shape,
   // what every rearrange does once the tables have moved
   afterApply: () => {
     resetOrientation(diagram);
@@ -957,18 +963,23 @@ arrangeMenu.addEventListener('click', (e) => {
   const item = e.target.closest('.menu-item');
   if (!item) return;
 
-  const groupArrangers = {
-    'btn-groups-fast-grid': executeExistingGroupsReorder,
-    'btn-groups-single-axis': () => runGroupArrange(arrangeGroupsSingleAxis, 'Optimized grid'),
-    'btn-groups-min-crossings': () => runGroupArrange(arrangeGroupsMinCrossings, 'Fewest crossings'),
-    'btn-groups-compact': () => compactSearch.arrange(),
-  };
-  if (groupArrangers[item.id]) {
+  if (item.dataset.goal) {
     arrangeMenu.hidden = true;
-    // the search panel belongs to "Short lines, compact" alone
-    if (item.id !== 'btn-groups-compact') compactSearch.cancel({ hide: true });
-    setRearrangePick(`group:${item.id}`);
-    groupArrangers[item.id]();
+    setRearrangePick(`goal:${item.dataset.goal}`);
+    compactSearch.arrange(item.dataset.goal);
+    return;
+  }
+
+  if (item.dataset.shape) {
+    layoutOpts.shape = item.dataset.shape;
+    localStorage.setItem('dbdiga-shape', layoutOpts.shape);
+    syncMenu();
+    // The shape belongs to the goals: re-run the one picked so it takes the new
+    // shape. With another method picked it is only remembered for next time.
+    if (rearrangePick.startsWith('goal:')) {
+      arrangeMenu.hidden = true;
+      compactSearch.arrange(rearrangePick.slice(5));
+    }
     return;
   }
 
@@ -1031,10 +1042,10 @@ arrangeMenu.addEventListener('click', (e) => {
     localStorage.setItem('dbdiga-spacing', layoutOpts.spacing);
     // Re-run whatever is picked, so the new spacing lands on the arrangement you
     // chose instead of throwing you back to the hierarchical one.
-    if (rearrangePick.startsWith('group:')) {
+    if (rearrangePick.startsWith('goal:')) {
       syncMenu();
       arrangeMenu.hidden = true;
-      groupArrangers[rearrangePick.slice(6)]?.();
+      compactSearch.arrange(rearrangePick.slice(5));
       return;
     }
   }
@@ -1139,50 +1150,6 @@ async function executeAIReorder(isGemini = false) {
       aiStatusText.textContent = 'Error: ' + (err.message || 'Rearrange failed');
     }
   }
-}
-
-// Re-arranges the existing groups (and the tables inside them) for short,
-// untangled connections. Only the cheap estimate runs here; the user applies
-// "Ruta Optima" afterwards once they are happy with the arrangement.
-// The three group-layout algorithms are independent, deliberately frozen
-// alternatives that trade crossings against canvas shape differently; the tooltip
-// on each menu entry carries the measured numbers. They all run the cheap
-// estimate only — the user applies "Ruta Óptima" afterwards for the real routing.
-function runGroupArrange(arrange, label) {
-  // Even the fast one can take a moment on a big schema, so paint before blocking.
-  const btn = $('btn-arrange');
-  endFlash(btn);
-  const original = btn.innerHTML;
-  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px"></span>';
-  btn.disabled = true;
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    let res;
-    try {
-      // Every arrangement flows left to right; pick another direction afterwards.
-      res = arrange(diagram, { spacing: layoutOpts.spacing });
-      resetOrientation(diagram);
-      syncMenu();
-    } catch (err) {
-      btn.disabled = false;
-      btn.innerHTML = original;
-      console.warn(`${label} warning:`, err);
-      alert(err.message || 'Could not arrange the groups.');
-      return;
-    }
-    btn.disabled = false;
-    btn.innerHTML = original;
-    diagram.fit();
-    saveLayoutDebounced();
-    if (editorMode === 'layout') updateLayoutTextarea();
-    if (editorMode === 'visual') visualEditor?.render();
-    const loose = res?.loose ? ` + ${res.loose} loose` : '';
-    const groups = res?.groups ?? 0;
-    // With no groups the whole diagram was one invisible group: say so, rather
-    // than a baffling "0 grupos".
-    flashButton(btn, res?.implicit
-      ? `No groups · ${res.tables} tables`
-      : `${groups} group${groups !== 1 ? 's' : ''}${loose}`);
-  }));
 }
 
 function executeExistingGroupsReorder() {

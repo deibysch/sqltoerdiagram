@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { arrangeGroupsCompact, collectGroupsCompact } from '../src/group-layout-compact.js';
-import { arrangeGroupsSingleAxis } from '../src/group-layout-axis.js';
-import { arrangeGroupsMinCrossings } from '../src/group-layout-crossings.js';
+import { layout } from '../src/layout.js';
+import { measureTable } from '../src/renderer.js';
 import { reorderWithExistingGroups } from '../src/ai-layout.js';
 import { organizeLinesShortestPath, spCountCrossings } from '../src/line-organizer.js';
 import { getTableAnchor, buildOrthogonalPoints } from '../src/routing.js';
@@ -195,29 +195,23 @@ function buildUngroupedDiagram() {
   return d;
 }
 
-for (const [name, arrange] of [
-  ['Líneas cortas y compacto', arrangeGroupsCompact],
-  ['Optimized grid', arrangeGroupsSingleAxis],
-  ['Mínimos Cruces', arrangeGroupsMinCrossings],
-]) {
-  test(`${name} lays out a diagram with no groups as one invisible group`, () => {
-    const d = buildUngroupedDiagram();
-    d.edgeWaypoints.set('pedido.ref_id->usuario.id', [{ x: -500, y: -500 }]);
+test('Optimize for lays out a diagram with no groups as one invisible group', () => {
+  const d = buildUngroupedDiagram();
+  d.edgeWaypoints.set('pedido.ref_id->usuario.id', [{ x: -500, y: -500 }]);
 
-    const res = arrange(d);
+  const res = arrangeGroupsCompact(d);
 
-    assert.strictEqual(res.implicit, true, 'reports the invisible group');
-    assert.strictEqual(res.groups, 0, 'no real group is claimed');
-    assert.strictEqual(res.loose, 0, 'no table is left loose');
-    assert.strictEqual(d.annotations.filter(a => a.type === 'group').length, 0, 'no box is drawn');
-    assert.ok(d.annotations.some(a => a.id === 'n1'), 'notes survive');
-    assert.strictEqual(d.edgeWaypoints.size, 0, 'wipes every stored vertex');
-    for (const t of d.model.tables) {
-      assert.ok(Number.isFinite(t.x) && Number.isFinite(t.y), `${t.key} got a real position`);
-    }
-    assertNoOverlap(d.model.tables);
-  });
-}
+  assert.strictEqual(res.implicit, true, 'reports the invisible group');
+  assert.strictEqual(res.groups, 0, 'no real group is claimed');
+  assert.strictEqual(res.loose, 0, 'no table is left loose');
+  assert.strictEqual(d.annotations.filter(a => a.type === 'group').length, 0, 'no box is drawn');
+  assert.ok(d.annotations.some(a => a.id === 'n1'), 'notes survive');
+  assert.strictEqual(d.edgeWaypoints.size, 0, 'wipes every stored vertex');
+  for (const t of d.model.tables) {
+    assert.ok(Number.isFinite(t.x) && Number.isFinite(t.y), `${t.key} got a real position`);
+  }
+  assertNoOverlap(d.model.tables);
+});
 
 test('Cuadrícula rápida lays out a diagram with no groups as one invisible group', () => {
   const d = buildUngroupedDiagram();
@@ -258,9 +252,9 @@ function buildSchemaWithoutGroups(n, seed = 7) {
   return d;
 }
 
-test('Líneas cortas y compacto without groups stays screen-shaped with short lines', () => {
-  // Plain dagre over a whole diagram is a strip, and it is what Mínimos Cruces
-  // gives without groups; this option must neither look like that nor copy it.
+test('Optimize for without groups stays screen-shaped with short lines', () => {
+  // Plain dagre over a whole diagram is what Hierarchical (Dagre) gives; the goals
+  // wrap its order into screen-shaped bands and must not simply copy it.
   const shapeAndLength = (d) => {
     const T = d.model.tables;
     const w = Math.max(...T.map(t => t.x + t.w)) - Math.min(...T.map(t => t.x));
@@ -276,10 +270,14 @@ test('Líneas cortas y compacto without groups stays screen-shaped with short li
   const compact = buildSchemaWithoutGroups(60);
   const res = arrangeGroupsCompact(compact);
   const dagreOnly = buildSchemaWithoutGroups(60);
-  arrangeGroupsMinCrossings(dagreOnly);
+  for (const t of dagreOnly.model.tables) {
+    const m = measureTable(t, 'physical');
+    t.w = m.w; t.h = m.h;
+  }
+  layout(dagreOnly.model, { algo: 'dagre', dir: 'LR', spacing: 'comfortable' }, null);
 
   const a = shapeAndLength(compact), b = shapeAndLength(dagreOnly);
-  // Measured: 1.07:1 and 32619px of line, against 3.72:1 and 93419px.
+  // Measured: 1.07:1 and 32619px of line, against 1.7:1 and 75164px.
   assert.strictEqual(res.implicit, true);
   assert.ok(a.ratio < 2, `canvas should stay screen-shaped, got ${a.ratio.toFixed(2)}:1`);
   assert.ok(a.length < b.length * 0.5,
@@ -353,57 +351,3 @@ test('arrangeGroupsCompact shortens lines rather than merely untangling them', (
     `the longest line must not grow (${Math.round(before.longest)} -> ${Math.round(after.longest)})`);
 });
 
-// --- The two frozen alternatives -----------------------------------------
-// They exist to lay a diagram out DIFFERENTLY, so these tests pin the contract
-// they share with the compact one rather than any quality threshold: quality is
-// the whole point of keeping three, and each one's numbers live in its header.
-
-for (const [name, arrange] of [
-  ['Optimized grid (group-layout-axis)', arrangeGroupsSingleAxis],
-  ['Minimos Cruces (group-layout-crossings)', arrangeGroupsMinCrossings],
-]) {
-  test(`${name} honours the shared group-layout contract`, () => {
-    const d = buildDiagram();
-    d.edgeWaypoints.set('pedido.ref_id->usuario.id', [{ x: -500, y: -500 }]);
-    d.edgeAnchors.set('pedido.ref_id->usuario.id', { fromAnchor: { side: 'top', offset: 0.1 }, toAnchor: { side: 'top', offset: 0.1 } });
-
-    const res = arrange(d);
-
-    assert.strictEqual(d.edgeWaypoints.size, 0, 'wipes every stored vertex');
-    assert.strictEqual(d.edgeAnchors.size, 0, 'wipes every stored anchor');
-    assert.ok(d.snapshots > 0, 'takes a history snapshot so it can be undone');
-    assert.strictEqual(res.groups, 4, 'keeps all four groups');
-    assert.strictEqual(res.loose, 2, 'reports the ungrouped tables');
-
-    const boxes = d.annotations.filter(a => a.type === 'group');
-    assert.strictEqual(boxes.length, 4, 'one box per group, none invented or dropped');
-
-    const byKey = new Map(d.model.tables.map(t => [t.key.toLowerCase(), t]));
-    for (const b of boxes) {
-      for (const k of b.tables) {
-        const t = byKey.get(k);
-        assert.ok(t.x >= b.x && t.y >= b.y && t.x + t.w <= b.x + b.w && t.y + t.h <= b.y + b.h,
-          `${k} sits inside the ${b.text} box`);
-      }
-    }
-    for (const t of d.model.tables) {
-      assert.ok(Number.isFinite(t.x) && Number.isFinite(t.y), `${t.key} got a real position`);
-    }
-  });
-}
-
-test('the three group algorithms really do lay the diagram out differently', () => {
-  // If two of them ever converge on the same positions, one has stopped earning
-  // its place in the menu and should be dropped rather than quietly duplicated.
-  const fingerprint = (arrange) => {
-    const d = buildDiagram();
-    arrange(d);
-    return d.model.tables.map(t => `${t.key}:${t.x},${t.y}`).join('|');
-  };
-  const prints = [
-    fingerprint(arrangeGroupsSingleAxis),
-    fingerprint(arrangeGroupsMinCrossings),
-    fingerprint(arrangeGroupsCompact),
-  ];
-  assert.strictEqual(new Set(prints).size, 3, 'all three produce distinct layouts');
-});
