@@ -829,6 +829,22 @@ class SpRouter {
     this._owners = new Int32Array(8);
   }
 
+  /** Start over with no line reserved. */
+  clearReservations() {
+    this.res = new SpReservations(this.NY, this.NX);
+  }
+
+  /**
+   * Take the clearance another router on the same tables and grid has already
+   * worked out, wherever this one has not: it is the same answer either way.
+   */
+  learnClearance(blockH, blockV) {
+    for (let k = 0; k < this.N; k++) {
+      if (!this.blockH[k]) this.blockH[k] = blockH[k];
+      if (!this.blockV[k]) this.blockV[k] = blockV[k];
+    }
+  }
+
   /** Does the segment (ax, ay)-(bx, by) keep clear of every table? */
   _clearAll(ax, ay, bx, by) {
     const tables = this.tables;
@@ -1321,12 +1337,132 @@ function spFixedRoutes(diagram, skip) {
 }
 
 /**
- * Public entry point: clear every vertex and anchor, then re-route each line as
- * the shortest obstacle-free 90 degree path that also avoids running along or
- * needlessly crossing the other lines.
- * Returns { routed, crossings, overlaps, passes }.
+ * One Optimal Route run: the grid and its router, the lines to route, their
+ * docking ports, which lines touch the same table, and the trials the rip-up and
+ * pair phases are made of. A trial reads nothing but the router and the lines it
+ * is given, so a helper worker can run it on a job of its own, built from the
+ * same tables and grid (route-parallel.js).
  */
-export function organizeLinesShortestPath(diagram, targetKeys = null, options = {}) {
+export class SpJob {
+  /**
+   * `edges` are the lines to route, as { from, to } with both tables among
+   * `tables`; `touches` holds the [from key, to key] of every edge, followed by
+   * those of the lines held fixed.
+   */
+  constructor(tables, grid, edges, touches) {
+    this.tables = tables;
+    this.grid = grid;
+    this.edges = edges;
+    this.touches = touches;
+    this.router = new SpRouter(tables, grid.xs, grid.ys);
+    this._ports = new Map();
+    // Lines that touch the same table cross each other more forgivingly.
+    this._shares = edges.map((_, i) => (j) => {
+      if (i === j) return false;
+      const a = touches[i], b = touches[j];
+      return a[0] === b[0] || a[0] === b[1] || a[1] === b[0] || a[1] === b[1];
+    });
+  }
+
+  portsOf(t) {
+    let p = this._ports.get(t);
+    if (!p) { p = this.router.portsFor(t); this._ports.set(t, p); }
+    return p;
+  }
+
+  sharesWith(i) {
+    return this._shares[i];
+  }
+
+  /** Unobstructed shortest route of edge `i`: it sets the detour budget and is the fallback. */
+  base(i) {
+    const e = this.edges[i];
+    return this.router.route(e.from, e.to, this.portsOf(e.from), this.portsOf(e.to), false, Infinity, () => false);
+  }
+
+  /**
+   * Route a line against the reservations in place. Four tiers, each a fallback
+   * for the one above: inside the detour budget, then at any length, then with
+   * overlap priced instead of banned (only when the corridors are physically
+   * full), and finally the unobstructed route.
+   */
+  attempt(it) {
+    const { router } = this;
+    const shares = this.sharesWith(it.idx);
+    const fp = this.portsOf(it.e.from), tp = this.portsOf(it.e.to);
+    return router.route(it.e.from, it.e.to, fp, tp, true, it.budget, shares)
+        || router.route(it.e.from, it.e.to, fp, tp, true, Infinity, shares)
+        || router.route(it.e.from, it.e.to, fp, tp, true, Infinity, shares, SP_OVERLAP_COST)
+        || it.base;
+  }
+
+  /**
+   * A rip-up trial: the line comes out and is routed again against the rest.
+   * Returns the new route if it scores better, else null. The line stays out.
+   */
+  ripTrial(it) {
+    const { router } = this;
+    const shares = this.sharesWith(it.idx);
+    router.res.clearOwner(it.idx);
+    const before = router.evaluate(it.route, it.idx, shares).cost;
+    const fresh = this.attempt(it);
+    return fresh && router.evaluate(fresh, it.idx, shares).cost < before - 0.5 ? fresh : null;
+  }
+
+  /**
+   * Joint cost of two routes, each scored with the other in place. Ripping up
+   * one line at a time can never undo a crossing that only disappears when both
+   * lines swap lanes, because neither move helps on its own.
+   */
+  scorePair(A, B, rA, rB) {
+    const { router } = this;
+    router.res.clearOwner(A.idx);
+    router.res.clearOwner(B.idx);
+    router.reserve(rB, B.idx);
+    const cA = router.evaluate(rA, A.idx, this.sharesWith(A.idx)).cost;
+    router.res.clearOwner(B.idx);
+    router.reserve(rA, A.idx);
+    const cB = router.evaluate(rB, B.idx, this.sharesWith(B.idx)).cost;
+    router.res.clearOwner(A.idx);
+    return cA + cB;
+  }
+
+  /**
+   * A pair trial: both crossing lines come out, and both orders of reinstating
+   * them are tried. Returns the best routes as { A, B }, which are the routes the
+   * lines already had when nothing beats them. Both lines stay out.
+   */
+  pairTrial(A, B) {
+    const { router } = this;
+    let bestA = A.route, bestB = B.route;
+    let bestCost = this.scorePair(A, B, bestA, bestB);
+
+    for (const [first, second] of [[A, B], [B, A]]) {
+      router.res.clearOwner(A.idx);
+      router.res.clearOwner(B.idx);
+      const rFirst = this.attempt(first);
+      router.reserve(rFirst, first.idx);
+      const rSecond = this.attempt(second);
+      router.res.clearOwner(first.idx);
+      const rA = first === A ? rFirst : rSecond;
+      const rB = first === A ? rSecond : rFirst;
+      const cost = this.scorePair(A, B, rA, rB);
+      if (cost < bestCost - 0.5) { bestCost = cost; bestA = rA; bestB = rB; }
+    }
+    return { A: bestA, B: bestB };
+  }
+}
+
+/**
+ * Optimal Route, step by step. It works on the diagram itself, but leaves two
+ * kinds of work to whatever drives it: { type: 'bases' }, the unobstructed route
+ * of every edge, answered with those routes in edge order; and { type: 'trials' },
+ * a phase of rip-up or pair trials, each to be run against the state the phase
+ * has reached by then, unless `skip` says otherwise, and handed to `commit` in
+ * order. Driven one trial after another (spRunSteps) or many at once in helper
+ * workers (route-parallel.js), the lines come out exactly the same.
+ */
+export function* spRouteSteps(diagram, targetKeys = null, options = {}) {
   // keepOthers: when only some lines are re-routed, hold every other line as a
   //   fixed obstacle — never run along it, pay for crossing it. Without it a
   //   partial re-route ignores the rest of the diagram (the original behaviour).
@@ -1351,70 +1487,46 @@ export function organizeLinesShortestPath(diagram, targetKeys = null, options = 
   if (!tables.length) return { routed: 0, crossings: 0, overlaps: 0, passes: 0 };
 
   const fixed = keepOthers && targetKeys ? spFixedRoutes(diagram, new Set(edges.map(e => e.key))) : [];
-  const grid = spBuildGlobalGrid(tables, fixed);
-  const router = new SpRouter(tables, grid.xs, grid.ys);
-
-  const portCache = new Map();
-  const portsOf = (t) => {
-    let p = portCache.get(t);
-    if (!p) { p = router.portsFor(t); portCache.set(t, p); }
-    return p;
-  };
-
-  // Lines that touch the same table cross each other more forgivingly.
   const touches = edges.map(e => [e.fk, e.tk]);
   for (const f of fixed) touches.push([f.fk, f.tk]);
-  const shareFns = edges.map((_, i) => (j) => {
-    if (i === j) return false;
-    const a = touches[i], b = touches[j];
-    return a[0] === b[0] || a[0] === b[1] || a[1] === b[0] || a[1] === b[1];
-  });
-  const sharesWith = (i) => shareFns[i];
+  const job = new SpJob(tables, spBuildGlobalGrid(tables, fixed), edges, touches);
+  job.fixed = fixed;
+  const { router } = job;
+  const sharesWith = (i) => job.sharesWith(i);
 
   // Fixed lines are reserved first, owned past the end of the routed ones, so
   // rip-up and reroute can never touch them.
   fixed.forEach((f, k) => router.reserve({ pts: f.pts }, edges.length + k));
 
-  const items = [];
-  for (let i = 0; i < edges.length; i++) {
-    const e = edges[i];
-    // Drop the current vertices and anchor positions before recomputing.
+  // Drop the current vertices and anchor positions before recomputing.
+  for (const e of edges) {
     diagram.edgeWaypoints.delete(e.key);
     diagram.edgeAnchors.delete(e.key);
     diagram.edgeRoutings?.delete(e.key);
+  }
 
-    // Unobstructed shortest route: sets the detour budget and is the fallback.
-    const base = router.route(e.from, e.to, portsOf(e.from), portsOf(e.to), false, Infinity, () => false);
-    if (!base) continue;
+  const bases = yield { type: 'bases', job };
+  const items = [];
+  edges.forEach((e, i) => {
+    const base = bases[i];
+    if (!base) return;
     let len = 0;
     for (let k = 0; k < base.pts.length - 1; k++) {
       len += Math.abs(base.pts[k].x - base.pts[k + 1].x) + Math.abs(base.pts[k].y - base.pts[k + 1].y);
     }
     items.push({ e, idx: i, base, baseLen: len, budget: len * SP_DETOUR_FACTOR + SP_DETOUR_SLACK, route: null });
-  }
-
-  // Four tiers, each a fallback for the one above: inside the detour budget,
-  // then at any length, then with overlap priced instead of banned (only when
-  // the corridors are physically full), and finally the unobstructed route.
-  const attempt = (it) => {
-    const shares = sharesWith(it.idx);
-    const fp = portsOf(it.e.from), tp = portsOf(it.e.to);
-    return router.route(it.e.from, it.e.to, fp, tp, true, it.budget, shares)
-        || router.route(it.e.from, it.e.to, fp, tp, true, Infinity, shares)
-        || router.route(it.e.from, it.e.to, fp, tp, true, Infinity, shares, SP_OVERLAP_COST)
-        || it.base;
-  };
+  });
 
   // Pass 1: route shortest-first, so tight lines claim the direct corridors.
   const order = items.slice().sort((a, b) => a.baseLen - b.baseLen);
   for (const it of order) {
-    it.route = attempt(it);
+    it.route = job.attempt(it);
     router.reserve(it.route, it.idx);
   }
 
   // Pass 2..N: rip up the worst offender first and reroute against the rest.
   let passes = 0;
-  const ripUpUntilStable = () => {
+  const ripUpUntilStable = function* () {
     for (let n = 0; n < maxPasses; n++) {
       passes++;
       let improved = false;
@@ -1424,81 +1536,63 @@ export function organizeLinesShortestPath(diagram, targetKeys = null, options = 
         .map(it => ({ it, cost: router.evaluate(it.route, it.idx, sharesWith(it.idx)).cost }))
         .sort((a, b) => b.cost - a.cost)
         .map(entry => entry.it);
-      for (const it of worstFirst) {
-        const shares = sharesWith(it.idx);
-        router.res.clearOwner(it.idx);
-        const before = router.evaluate(it.route, it.idx, shares).cost;
-        const fresh = attempt(it);
-        if (fresh && router.evaluate(fresh, it.idx, shares).cost < before - 0.5) {
-          it.route = fresh;
-          improved = true;
-        }
-        router.reserve(it.route, it.idx);
-      }
+      yield {
+        type: 'trials',
+        job,
+        items,
+        trials: worstFirst.map(it => ({ kind: 'rip', it })),
+        skip: () => false,
+        commit(trial, fresh) {
+          const { it } = trial;
+          router.res.clearOwner(it.idx);
+          if (fresh) {
+            it.route = fresh;
+            improved = true;
+          }
+          router.reserve(it.route, it.idx);
+          return !!fresh;
+        },
+      };
       if (!improved) return;
     }
   };
-  ripUpUntilStable();
-
-  /**
-   * Joint cost of two routes, each scored with the other in place. Ripping up
-   * one line at a time can never undo a crossing that only disappears when both
-   * lines swap lanes, because neither move helps on its own.
-   */
-  const scorePair = (A, B, rA, rB) => {
-    router.res.clearOwner(A.idx);
-    router.res.clearOwner(B.idx);
-    router.reserve(rB, B.idx);
-    const cA = router.evaluate(rA, A.idx, sharesWith(A.idx)).cost;
-    router.res.clearOwner(B.idx);
-    router.reserve(rA, A.idx);
-    const cB = router.evaluate(rB, B.idx, sharesWith(B.idx)).cost;
-    router.res.clearOwner(A.idx);
-    return cA + cB;
-  };
+  yield* ripUpUntilStable();
 
   // Pass N+1: pairwise swaps. Both crossing lines come out, and both orders of
   // reinstating them are tried; whichever scores best is kept.
-  let swaps = 0;
   for (let round = 0; round < swapRounds; round++) {
     const pairs = [];
     for (let a = 0; a < items.length; a++) {
       for (let b = a + 1; b < items.length; b++) {
-        if (spRoutesCross(items[a].route.pts, items[b].route.pts)) pairs.push([items[a], items[b]]);
+        if (spRoutesCross(items[a].route.pts, items[b].route.pts)) pairs.push({ kind: 'pair', A: items[a], B: items[b] });
       }
     }
     if (!pairs.length) break;
 
     let improved = false;
-    for (const [A, B] of pairs) {
+    yield {
+      type: 'trials',
+      job,
+      items,
+      trials: pairs,
       // An earlier swap in this round may already have separated them.
-      if (!spRoutesCross(A.route.pts, B.route.pts)) continue;
-
-      let bestA = A.route, bestB = B.route;
-      let bestCost = scorePair(A, B, bestA, bestB);
-
-      for (const [first, second] of [[A, B], [B, A]]) {
+      skip: (trial) => !spRoutesCross(trial.A.route.pts, trial.B.route.pts),
+      commit(trial, best) {
+        const { A, B } = trial;
+        const changed = best.A !== A.route || best.B !== B.route;
+        if (changed) improved = true;
+        A.route = best.A;
+        B.route = best.B;
         router.res.clearOwner(A.idx);
         router.res.clearOwner(B.idx);
-        const rFirst = attempt(first);
-        router.reserve(rFirst, first.idx);
-        const rSecond = attempt(second);
-        router.res.clearOwner(first.idx);
-        const rA = first === A ? rFirst : rSecond;
-        const rB = first === A ? rSecond : rFirst;
-        const cost = scorePair(A, B, rA, rB);
-        if (cost < bestCost - 0.5) { bestCost = cost; bestA = rA; bestB = rB; }
-      }
-
-      if (bestA !== A.route || bestB !== B.route) { improved = true; swaps++; }
-      A.route = bestA;
-      B.route = bestB;
-      router.reserve(A.route, A.idx);
-      router.reserve(B.route, B.idx);
-    }
+        router.reserve(A.route, A.idx);
+        router.reserve(B.route, B.idx);
+        return changed;
+      },
+    };
 
     if (!improved) break;
-    ripUpUntilStable();
+    yield* ripUpUntilStable();
   }
 
   // Final pass: use the width of each channel instead of hugging the minimum.
@@ -1537,6 +1631,38 @@ export function organizeLinesShortestPath(diagram, targetKeys = null, options = 
     overlaps: Math.round(spCountOverlap(finished)),
     passes: passes + 1,
   };
+}
+
+/**
+ * Drive spRouteSteps() on this thread: every unobstructed route and every trial
+ * runs on the job's own router, one after another, in order. `current` is the
+ * step to start from, when the steps were already begun.
+ */
+export function spRunSteps(steps, current = steps.next()) {
+  while (!current.done) {
+    const step = current.value;
+    let reply;
+    if (step.type === 'bases') {
+      reply = step.job.edges.map((_, i) => step.job.base(i));
+    } else {
+      for (const trial of step.trials) {
+        if (step.skip(trial)) continue;
+        step.commit(trial, trial.kind === 'rip' ? step.job.ripTrial(trial.it) : step.job.pairTrial(trial.A, trial.B));
+      }
+    }
+    current = steps.next(reply);
+  }
+  return current.value;
+}
+
+/**
+ * Public entry point: clear every vertex and anchor, then re-route each line as
+ * the shortest obstacle-free 90 degree path that also avoids running along or
+ * needlessly crossing the other lines. See spRouteSteps() for the options.
+ * Returns { routed, crossings, overlaps, passes }.
+ */
+export function organizeLinesShortestPath(diagram, targetKeys = null, options = {}) {
+  return spRunSteps(spRouteSteps(diagram, targetKeys, options));
 }
 
 /** Do these two routes cross in an X anywhere? */

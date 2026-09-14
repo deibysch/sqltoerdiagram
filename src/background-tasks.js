@@ -18,6 +18,7 @@ import { layout } from './layout.js';
 import { orientDiagram } from './rotate-diagram.js';
 import { reorderWithLocalAI, reorderWithExistingGroups, reorderWithDomains } from './ai-layout.js';
 import { organizeLinesShortestPath, organizeLinesElkPorts, organizeLinesAStar, getDiagramEdges } from './line-organizer.js';
+import { organizeLinesShortestPathInParallel, canRouteInParallel, HelpersFailed } from './route-parallel.js';
 import { computeGroupBounds } from './annotations.js';
 import { measureTable } from './renderer.js';
 
@@ -139,6 +140,24 @@ export function routeOnData(input) {
   const d = standIn(input);
   const keys = getDiagramEdges(d, input.targetKeys).map(e => e.key);
   const summary = run(d, input.targetKeys, input.options || {});
+  return { summary, keys, ...linesOf(d) };
+}
+
+/**
+ * routeOnData() for Optimal Route with helper workers on the other cores
+ * (route-parallel.js): the same lines, sooner. Should the helpers fail, a fresh
+ * copy is routed on this core instead.
+ */
+export async function routeOnDataInParallel(input, helpers = {}) {
+  const d = standIn(input);
+  const keys = getDiagramEdges(d, input.targetKeys).map(e => e.key);
+  let summary;
+  try {
+    summary = await organizeLinesShortestPathInParallel(d, input.targetKeys, { ...input.options, recordHistory: false }, helpers);
+  } catch (err) {
+    if (err instanceof HelpersFailed) return routeOnData(input);
+    throw err;
+  }
   return { summary, keys, ...linesOf(d) };
 }
 
@@ -293,13 +312,15 @@ export function groupsOnData(input) {
 // ---- the tasks a worker runs ---------------------------------------------------
 
 const TASKS = {
-  lines: routeOnData,
+  // Optimal Route takes most of the time there is, so a worker with cores to
+  // spare shares it out; the other tools are quick enough on one.
+  lines: (input) => (input.tool === 'optimal' && canRouteInParallel() ? routeOnDataInParallel(input) : routeOnData(input)),
   layout: layoutOnData,
   orient: orientOnData,
   groups: groupsOnData,
 };
 
-/** Run the task named `task` on its input. */
+/** Run the task named `task` on its input. Returns the result, or a promise of it. */
 export function runTask(task, input) {
   const run = TASKS[task];
   if (!run) throw new Error(`Unknown background task: ${task}`);

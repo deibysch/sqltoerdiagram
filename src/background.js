@@ -46,18 +46,22 @@ function spawn() {
 /** Run `task` on `input`, then call done(result) or fail(message). Returns a cancel function. */
 function run(task, input, done, fail) {
   const onPage = () => {
-    const timer = setTimeout(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
       let result;
       try {
         // on a copy, as a worker would: a task must never reach the live diagram
-        result = runTask(task, structuredClone(input));
+        result = await runTask(task, structuredClone(input));
       } catch (err) {
-        fail(err?.message || String(err));
+        if (!cancelled) fail(err?.message || String(err));
         return;
       }
-      done(result);
+      if (!cancelled) done(result);
     }, 0);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   };
 
   const w = spare && !spare.failed ? spare : spawn();
