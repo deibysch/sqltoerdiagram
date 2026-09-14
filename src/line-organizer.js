@@ -523,39 +523,72 @@ const SP_SPREAD_CAP = 56;         // beyond this a neighbour is far enough to st
 const SP_SPREAD_SLACK = 24;       // px of extra length a nicer spacing may cost
 const SP_MAX_POPS = 300000;       // A* expansion guard
 
-/** Binary min-heap on `.f`, so A* does not pay a sort per pop. */
+/**
+ * Binary min-heap on `f`, so A* does not pay a sort per pop. Entries are kept in
+ * parallel typed arrays rather than as objects: a search pushes tens of
+ * thousands of them, and allocating each one cost as much as the search itself.
+ * Sifting compares exactly as an object heap would, so entries with the same `f`
+ * come out in the same order and the routes found do not change. pop() leaves the
+ * entry it took in `ts`, `tg`, `tl` and `tf`.
+ */
 class SpHeap {
-  constructor() { this.a = []; }
-  get size() { return this.a.length; }
-  push(n) {
-    const a = this.a;
-    a.push(n);
-    let i = a.length - 1;
+  constructor(capacity = 1 << 14) {
+    this.f = new Float64Array(capacity);
+    this.g = new Float64Array(capacity);
+    this.len = new Float64Array(capacity);
+    this.s = new Int32Array(capacity);
+    this.size = 0;
+    this.ts = 0; this.tg = 0; this.tl = 0; this.tf = 0;
+  }
+
+  clear() { this.size = 0; }
+
+  _grow() {
+    const grow = (Type, old) => { const a = new Type(old.length * 2); a.set(old); return a; };
+    this.f = grow(Float64Array, this.f);
+    this.g = grow(Float64Array, this.g);
+    this.len = grow(Float64Array, this.len);
+    this.s = grow(Int32Array, this.s);
+  }
+
+  _swap(a, b) {
+    const { f, g, len, s } = this;
+    let t = f[a]; f[a] = f[b]; f[b] = t;
+    t = g[a]; g[a] = g[b]; g[b] = t;
+    t = len[a]; len[a] = len[b]; len[b] = t;
+    t = s[a]; s[a] = s[b]; s[b] = t;
+  }
+
+  push(state, g, len, f) {
+    if (this.size === this.f.length) this._grow();
+    const F = this.f;
+    let i = this.size++;
+    F[i] = f; this.g[i] = g; this.len[i] = len; this.s[i] = state;
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (a[p].f <= a[i].f) break;
-      const t = a[p]; a[p] = a[i]; a[i] = t;
+      if (F[p] <= F[i]) break;
+      this._swap(p, i);
       i = p;
     }
   }
+
   pop() {
-    const a = this.a;
-    const top = a[0];
-    const last = a.pop();
-    if (a.length) {
-      a[0] = last;
+    const F = this.f;
+    this.tf = F[0]; this.tg = this.g[0]; this.tl = this.len[0]; this.ts = this.s[0];
+    const n = --this.size;
+    if (n > 0) {
+      F[0] = F[n]; this.g[0] = this.g[n]; this.len[0] = this.len[n]; this.s[0] = this.s[n];
       let i = 0;
       for (;;) {
         const l = i * 2 + 1, r = l + 1;
         let m = i;
-        if (l < a.length && a[l].f < a[m].f) m = l;
-        if (r < a.length && a[r].f < a[m].f) m = r;
+        if (l < n && F[l] < F[m]) m = l;
+        if (r < n && F[r] < F[m]) m = r;
         if (m === i) break;
-        const t = a[m]; a[m] = a[i]; a[i] = t;
+        this._swap(m, i);
         i = m;
       }
     }
-    return top;
   }
 }
 
@@ -566,10 +599,30 @@ function spSpan(t, vertical) {
     : { lo: Math.ceil(t.x + 16), hi: Math.floor(t.x + t.w - 16) };
 }
 
-/** Does the bounding box of a segment come within `pad` of a table? */
-function spNearBox(a, b, t, pad) {
-  return !(Math.max(a.x, b.x) + pad < t.x || Math.min(a.x, b.x) - pad > t.x + t.w
-        || Math.max(a.y, b.y) + pad < t.y || Math.min(a.y, b.y) - pad > t.y + t.h);
+/** Does the bounding box of the segment (ax, ay)-(bx, by) come within `pad` of a table? */
+function spNearBox(ax, ay, bx, by, t, pad) {
+  return !(Math.max(ax, bx) + pad < t.x || Math.min(ax, bx) - pad > t.x + t.w
+        || Math.max(ay, by) + pad < t.y || Math.min(ay, by) - pad > t.y + t.h);
+}
+
+/**
+ * segmentIntersectsBox(a, b, t, margin).hit, without allocating: the same tests
+ * in the same order for the horizontal and vertical segments the router is made
+ * of, which it runs millions of times. Anything slanted goes to the original.
+ */
+function spHits(ax, ay, bx, by, t, margin) {
+  if (!t || !Number.isFinite(t.x) || !Number.isFinite(t.y)) return false;
+  const minX = t.x - margin;
+  const maxX = t.x + t.w + margin;
+  const minY = t.y - margin;
+  const maxY = t.y + t.h + margin;
+  if (Math.abs(ay - by) < 1) {
+    return ay >= minY && ay <= maxY && Math.max(ax, bx) > minX && Math.min(ax, bx) < maxX;
+  }
+  if (Math.abs(ax - bx) < 1) {
+    return ax >= minX && ax <= maxX && Math.max(ay, by) > minY && Math.min(ay, by) < maxY;
+  }
+  return segmentIntersectsBox({ x: ax, y: ay }, { x: bx, y: by }, t, margin).hit;
 }
 
 /**
@@ -641,16 +694,29 @@ function spBuildGlobalGrid(tables, fixed = []) {
  * along an occupied interval is forbidden; crossing one costs.
  */
 class SpReservations {
-  constructor() {
+  constructor(horizontalLines = 0, verticalLines = 0) {
     this.h = new Map();       // horizontal line index -> [{ lo, hi, owner }]
     this.v = new Map();       // vertical line index   -> [{ lo, hi, owner }]
+    // The same arrays again, indexed by grid line: the search looks a line up for
+    // every step it takes, and a Map lookup there cost more than the step. Sized
+    // up front and filled with null, or filling them at scattered indices would
+    // turn them into slow sparse arrays. The Maps stay for going through the
+    // reserved lines in the order they came.
+    this.hAt = new Array(horizontalLines).fill(null);
+    this.vAt = new Array(verticalLines).fill(null);
     this.byOwner = new Map();
+  }
+
+  /** The reservations on one grid line, or undefined. */
+  on(horiz, line) {
+    return (horiz ? this.hAt : this.vAt)[line];
   }
 
   add(horiz, line, a, b, owner) {
     const map = horiz ? this.h : this.v;
-    let arr = map.get(line);
-    if (!arr) { arr = []; map.set(line, arr); }
+    const at = horiz ? this.hAt : this.vAt;
+    let arr = at[line];
+    if (!arr) { arr = []; map.set(line, arr); at[line] = arr; }
     const entry = { lo: Math.min(a, b), hi: Math.max(a, b), owner };
     arr.push(entry);
     let own = this.byOwner.get(owner);
@@ -670,7 +736,7 @@ class SpReservations {
 
   /** Hard constraint: would travelling this interval run on top of another line? */
   blocks(horiz, line, a, b) {
-    const arr = (horiz ? this.h : this.v).get(line);
+    const arr = this.on(horiz, line);
     if (!arr || !arr.length) return false;
     const lo = Math.min(a, b), hi = Math.max(a, b);
     for (const e of arr) {
@@ -681,7 +747,7 @@ class SpReservations {
 
   /** How many px of this interval already carry another line. */
   overlapAmount(horiz, line, a, b, minOv = 1) {
-    const arr = (horiz ? this.h : this.v).get(line);
+    const arr = this.on(horiz, line);
     if (!arr || !arr.length) return 0;
     const lo = Math.min(a, b), hi = Math.max(a, b);
     let sum = 0;
@@ -694,7 +760,7 @@ class SpReservations {
 
   /** Owners of the reservations covering one point of a grid line. */
   coverers(horiz, line, coord, out) {
-    const arr = (horiz ? this.h : this.v).get(line);
+    const arr = this.on(horiz, line);
     if (!arr || !arr.length) return 0;
     let n = 0;
     for (const e of arr) {
@@ -737,6 +803,16 @@ class SpRouter {
     this.occVal = new Float64Array(this.N * 2);
     this.occStamp = new Int32Array(this.N * 2);
 
+    // Per-route marks stamped with the same counter, where Maps and closures used
+    // to be rebuilt for every search: which states it starts from, which nodes
+    // it can finish at, and the clearance of blocked grid edges next to its two
+    // tables. The heap is reused by every search.
+    this.startStamp = new Int32Array(this.N * 2);
+    this.goalStamp = new Int32Array(this.N);
+    this.nearStamp = new Int32Array(this.N * 2);
+    this.nearFree = new Uint8Array(this.N * 2);
+    this.heap = new SpHeap();
+
     // Grid lines closer than SP_MIN_SEPARATION to each other. Two lines may not
     // run in parallel across any of these, so a crowded corridor cannot produce
     // routes 4px apart just because two tables happened to seed adjacent tracks.
@@ -749,44 +825,54 @@ class SpRouter {
     this.nearX = buildNear(xs);
     this.nearY = buildNear(ys);
 
-    this.res = new SpReservations();
+    this.res = new SpReservations(this.NY, this.NX);
     this._owners = new Int32Array(8);
   }
 
-  _clearAll(a, b) {
-    for (const t of this.tables) {
-      if (segmentIntersectsBox(a, b, t, SP_CLEARANCE - 0.5).hit) return false;
+  /** Does the segment (ax, ay)-(bx, by) keep clear of every table? */
+  _clearAll(ax, ay, bx, by) {
+    const tables = this.tables;
+    for (let k = 0; k < tables.length; k++) {
+      if (spHits(ax, ay, bx, by, tables[k], SP_CLEARANCE - 0.5)) return false;
     }
     return true;
   }
 
-  _clearFor(a, b, from, to) {
-    for (const t of this.tables) {
+  /** ... of every table but its own two, which it may touch. */
+  _clearFor(ax, ay, bx, by, from, to) {
+    const tables = this.tables;
+    for (let k = 0; k < tables.length; k++) {
+      const t = tables[k];
       const margin = (t === from || t === to) ? -1 : SP_CLEARANCE - 0.5;
-      if (segmentIntersectsBox(a, b, t, margin).hit) return false;
+      if (spHits(ax, ay, bx, by, t, margin)) return false;
     }
     return true;
   }
 
-  /** Is the grid segment usable by an edge whose endpoints are `from` and `to`? */
-  _segFree(horiz, i, j, from, to, memo) {
+  /**
+   * Is the grid segment usable by an edge whose endpoints are `from` and `to`?
+   * Only called from route(): the answers near the two tables are stamped with
+   * its generation.
+   */
+  _segFree(horiz, i, j, from, to) {
     const k = j * this.NX + i;
     const cache = horiz ? this.blockH : this.blockV;
-    const a = { x: this.xs[i], y: this.ys[j] };
-    const b = horiz ? { x: this.xs[i + 1], y: this.ys[j] } : { x: this.xs[i], y: this.ys[j + 1] };
+    const ax = this.xs[i], ay = this.ys[j];
+    const bx = horiz ? this.xs[i + 1] : ax;
+    const by = horiz ? ay : this.ys[j + 1];
     let state = cache[k];
     if (!state) {
-      state = this._clearAll(a, b) ? 1 : 2;
+      state = this._clearAll(ax, ay, bx, by) ? 1 : 2;
       cache[k] = state;
     }
     if (state === 1) return true;
     // Blocked against all tables, but the endpoints are allowed to be touched.
-    if (!spNearBox(a, b, from, SP_CLEARANCE) && !spNearBox(a, b, to, SP_CLEARANCE)) return false;
+    if (!spNearBox(ax, ay, bx, by, from, SP_CLEARANCE) && !spNearBox(ax, ay, bx, by, to, SP_CLEARANCE)) return false;
     const mk = horiz ? k * 2 : k * 2 + 1;
-    const hit = memo.get(mk);
-    if (hit !== undefined) return hit;
-    const ok = this._clearFor(a, b, from, to);
-    memo.set(mk, ok);
+    if (this.nearStamp[mk] === this.gen) return this.nearFree[mk] === 1;
+    const ok = this._clearFor(ax, ay, bx, by, from, to);
+    this.nearStamp[mk] = this.gen;
+    this.nearFree[mk] = ok ? 1 : 0;
     return ok;
   }
 
@@ -823,6 +909,12 @@ class SpRouter {
     // Vertical travel crosses horizontal reservations, and vice versa.
     const horiz = dir === 1;
     const line = dir === 1 ? j : i;
+    const reserved = (horiz ? this.res.hAt : this.res.vAt)[line];
+    if (!reserved || !reserved.length) {   // most grid lines carry nothing
+      this.crossStamp[key] = this.gen;
+      this.crossVal[key] = 0;
+      return 0;
+    }
     const coord = dir === 1 ? this.xs[i] : this.ys[j];
     const n = this.res.coverers(horiz, line, coord, this._owners);
     let cost = 0;
@@ -848,9 +940,16 @@ class SpRouter {
     const line = horiz ? j : i;
     const a = horiz ? this.xs[i] : this.ys[j];
     const b = horiz ? this.xs[ni] : this.ys[nj];
-    // Running on top of another line, plus running too close beside one.
-    let v = this.res.overlapAmount(horiz, line, a, b);
-    for (const other of (horiz ? this.nearY : this.nearX)[line]) {
+    // Running on top of another line, plus running too close beside one. Grid
+    // lines with nothing reserved add nothing, so they are skipped unread.
+    const at = horiz ? this.res.hAt : this.res.vAt;
+    const mine = at[line];
+    let v = mine && mine.length ? this.res.overlapAmount(horiz, line, a, b) : 0;
+    const near = (horiz ? this.nearY : this.nearX)[line];
+    for (let n = 0; n < near.length; n++) {
+      const other = near[n];
+      const theirs = at[other];
+      if (!theirs || !theirs.length) continue;
       // Brushing past a neighbour is fine 10px away, not 1px away: that reads
       // as one line drawn on top of another.
       const axis = horiz ? this.ys : this.xs;
@@ -885,109 +984,117 @@ class SpRouter {
    * obstacle-avoiding shortest path used for the detour budget and as fallback.
    */
   route(from, to, fromPorts, toPorts, useRes, lenBudget, shares, overlapCost = 0) {
-    const { NX, NY, xs, ys, g, parent, stamp } = this;
+    // The hot loop runs tens of thousands of steps per search and hundreds of
+    // searches per diagram, so nothing in it allocates: the heap lives in typed
+    // arrays, the start and goal lookups are generation stamps, and one relax()
+    // is made per search rather than one per step. Every sum and comparison is the
+    // one the plain version made, in the same order, so the routes are identical.
+    const { NX, NY, xs, ys, g, parent, stamp, startStamp, goalStamp, heap, tables } = this;
     const gen = ++this.gen;
-    const memo = new Map();
-    const heap = new SpHeap();
-    const startAt = new Map();
+    heap.clear();
+    const startPorts = new Map();   // start state -> its port, for the way back
+    let starts = 0;
+    const banned = overlapCost === 0;
 
-    const gOf = (s) => (stamp[s] === gen ? g[s] : Infinity);
-    const setG = (s, v) => { stamp[s] = gen; g[s] = v; };
-
+    // The heuristic: how far a point still is from the target's clearance ring.
     const hx0 = to.x - SP_CLEARANCE, hx1 = to.x + to.w + SP_CLEARANCE;
     const hy0 = to.y - SP_CLEARANCE, hy1 = to.y + to.h + SP_CLEARANCE;
-    const heur = (x, y) => {
-      const dx = x < hx0 ? hx0 - x : (x > hx1 ? x - hx1 : 0);
-      const dy = y < hy0 ? hy0 - y : (y > hy1 ? y - hy1 : 0);
-      return dx + dy;
-    };
 
     const stubUsable = (p, partner) => {
-      const a = { x: p.x, y: p.y }, b = { x: p.sx, y: p.sy };
-      for (const t of this.tables) {
+      for (let k = 0; k < tables.length; k++) {
+        const t = tables[k];
         const margin = (t === from || t === to) ? -1 : SP_CLEARANCE - 0.5;
-        if (segmentIntersectsBox(a, b, t, margin).hit) return false;
+        if (spHits(p.x, p.y, p.sx, p.sy, t, margin)) return false;
       }
-      if (segmentIntersectsBox(a, b, partner, -1).hit) return false;
-      if (useRes && overlapCost === 0 && this._stubConflict(p) > 0) return false;
+      if (spHits(p.x, p.y, p.sx, p.sy, partner, -1)) return false;
+      if (useRes && banned && this._stubConflict(p) > 0) return false;
       return true;
     };
 
     // Extra cost of the stub when overlap is merely expensive rather than banned.
     const stubPenalty = (p) => (
-      !useRes || overlapCost === 0 ? 0 : this._stubConflict(p) * overlapCost
+      !useRes || banned ? 0 : this._stubConflict(p) * overlapCost
     );
 
     for (const p of fromPorts) {
       if (!stubUsable(p, to)) continue;
       const s = ((p.sj * NX + p.si) << 1) | p.dir;
       const cost = SP_STUB + (useRes ? this._crossCost(p.si, p.sj, p.dir, shares) + stubPenalty(p) : 0);
-      if (cost >= gOf(s)) continue;
-      setG(s, cost);
+      if (cost >= (stamp[s] === gen ? g[s] : Infinity)) continue;
+      stamp[s] = gen; g[s] = cost;
       parent[s] = -1;
-      startAt.set(s, p);
-      heap.push({ s, g: cost, len: SP_STUB, f: cost + heur(p.sx, p.sy) });
+      startStamp[s] = gen;
+      startPorts.set(s, p);
+      starts++;
+      const x = p.sx, y = p.sy;
+      const dx = x < hx0 ? hx0 - x : (x > hx1 ? x - hx1 : 0);
+      const dy = y < hy0 ? hy0 - y : (y > hy1 ? y - hy1 : 0);
+      heap.push(s, cost, SP_STUB, cost + (dx + dy));
     }
-    if (!startAt.size) return null;
+    if (!starts) return null;
 
-    const goalAt = new Map();
+    const goalPorts = new Map();   // goal node -> the ports that finish there, in order
     for (const p of toPorts) {
       if (!stubUsable(p, from)) continue;
       const node = p.sj * NX + p.si;
-      let list = goalAt.get(node);
-      if (!list) { list = []; goalAt.set(node, list); }
+      let list = goalPorts.get(node);
+      if (!list) { list = []; goalPorts.set(node, list); goalStamp[node] = gen; }
       list.push(p);
     }
-    if (!goalAt.size) return null;
+    if (!goalPorts.size) return null;
 
     let best = Infinity, bestState = -1, bestPort = null;
     let pops = 0;
 
-    while (heap.size && pops++ < SP_MAX_POPS) {
-      const cur = heap.pop();
-      if (cur.g > gOf(cur.s)) continue;
-      if (cur.f >= best) break;
+    // Step from state `s` (node i, j; direction dir; cost cg; length clen) to the
+    // neighbouring node (ni, nj) travelling in `ndir`.
+    const relax = (ni, nj, ndir, s, dir, i, j, cg, clen) => {
+      const ns = ((nj * NX + ni) << 1) | ndir;
+      if (startStamp[ns] === gen) return;
+      const segLen = ndir === 0 ? Math.abs(xs[ni] - xs[i]) : Math.abs(ys[nj] - ys[j]);
+      const nlen = clen + segLen;
+      if (nlen > lenBudget) return;
+      let ng = cg + segLen + (ndir === dir ? 0 : SP_TURN_COST);
+      if (useRes) {
+        // Never run along a corridor another line occupies. That is a hard
+        // constraint until the corridors are so full that no route exists at
+        // all, at which point the caller retries with overlap merely priced.
+        const occ = this._occupancy(ndir === 0, i, j, ni, nj, banned);
+        if (occ === Infinity) return;
+        ng += occ * overlapCost + this._crossCost(ni, nj, ndir, shares);
+      }
+      if (ng >= (stamp[ns] === gen ? g[ns] : Infinity)) return;
+      stamp[ns] = gen; g[ns] = ng;
+      parent[ns] = s;
+      const x = xs[ni], y = ys[nj];
+      const dx = x < hx0 ? hx0 - x : (x > hx1 ? x - hx1 : 0);
+      const dy = y < hy0 ? hy0 - y : (y > hy1 ? y - hy1 : 0);
+      heap.push(ns, ng, nlen, ng + (dx + dy));
+    };
 
-      const s = cur.s;
+    while (heap.size && pops++ < SP_MAX_POPS) {
+      heap.pop();
+      const s = heap.ts, cg = heap.tg, clen = heap.tl;
+      if (cg > (stamp[s] === gen ? g[s] : Infinity)) continue;
+      if (heap.tf >= best) break;
+
       const dir = s & 1;
       const node = s >> 1;
       const i = node % NX;
       const j = (node / NX) | 0;
 
-      const goals = goalAt.get(node);
-      if (goals) {
-        for (const p of goals) {
-          if (cur.len + SP_STUB > lenBudget) continue;
-          const total = cur.g + SP_STUB + (p.dir === dir ? 0 : SP_TURN_COST);
+      if (goalStamp[node] === gen) {
+        for (const p of goalPorts.get(node)) {
+          if (clen + SP_STUB > lenBudget) continue;
+          const total = cg + SP_STUB + (p.dir === dir ? 0 : SP_TURN_COST);
           if (total < best) { best = total; bestState = s; bestPort = p; }
         }
       }
 
-      const relax = (ni, nj, ndir) => {
-        const ns = ((nj * NX + ni) << 1) | ndir;
-        if (startAt.has(ns)) return;
-        const segLen = ndir === 0 ? Math.abs(xs[ni] - xs[i]) : Math.abs(ys[nj] - ys[j]);
-        const nlen = cur.len + segLen;
-        if (nlen > lenBudget) return;
-        let ng = cur.g + segLen + (ndir === dir ? 0 : SP_TURN_COST);
-        if (useRes) {
-          // Never run along a corridor another line occupies. That is a hard
-          // constraint until the corridors are so full that no route exists at
-          // all, at which point the caller retries with overlap merely priced.
-          const occ = this._occupancy(ndir === 0, i, j, ni, nj, overlapCost === 0);
-          if (occ === Infinity) return;
-          ng += occ * overlapCost + this._crossCost(ni, nj, ndir, shares);
-        }
-        if (ng >= gOf(ns)) return;
-        setG(ns, ng);
-        parent[ns] = s;
-        heap.push({ s: ns, g: ng, len: nlen, f: ng + heur(xs[ni], ys[nj]) });
-      };
-
-      if (i > 0 && this._segFree(true, i - 1, j, from, to, memo)) relax(i - 1, j, 0);
-      if (i < NX - 1 && this._segFree(true, i, j, from, to, memo)) relax(i + 1, j, 0);
-      if (j > 0 && this._segFree(false, i, j - 1, from, to, memo)) relax(i, j - 1, 1);
-      if (j < NY - 1 && this._segFree(false, i, j, from, to, memo)) relax(i, j + 1, 1);
+      if (i > 0 && this._segFree(true, i - 1, j, from, to)) relax(i - 1, j, 0, s, dir, i, j, cg, clen);
+      if (i < NX - 1 && this._segFree(true, i, j, from, to)) relax(i + 1, j, 0, s, dir, i, j, cg, clen);
+      if (j > 0 && this._segFree(false, i, j - 1, from, to)) relax(i, j - 1, 1, s, dir, i, j, cg, clen);
+      if (j < NY - 1 && this._segFree(false, i, j, from, to)) relax(i, j + 1, 1, s, dir, i, j, cg, clen);
     }
 
     if (bestState < 0) return null;
@@ -998,10 +1105,10 @@ class SpRouter {
     while (s >= 0 && guard++ < 100000) {
       const node = s >> 1;
       nodes.push({ x: xs[node % NX], y: ys[(node / NX) | 0] });
-      if (startAt.has(s)) break;
+      if (startStamp[s] === gen) break;
       s = parent[s];
     }
-    const src = s >= 0 ? startAt.get(s) : null;
+    const src = s >= 0 ? startPorts.get(s) : null;
     if (!src) return null;
     nodes.reverse();
 
@@ -1033,7 +1140,7 @@ class SpRouter {
     for (let i = 0; i <= last; i++) {
       const a = pts[i], b = pts[i + 1];
       if ((i === 0 || i === last) && Math.abs(a.x - b.x) + Math.abs(a.y - b.y) < 8) return false;
-      if (!this._clearFor(a, b, from, to)) return false;
+      if (!this._clearFor(a.x, a.y, b.x, b.y, from, to)) return false;
     }
     return true;
   }
@@ -1155,10 +1262,9 @@ class SpRouter {
       // score them out of contention rather than merely penalising them.
       const own = this._lineOf(horiz, a);
       if (own >= 0) {
-        const map = horiz ? this.res.h : this.res.v;
         const near = (horiz ? this.nearY : this.nearX)[own];
         for (let n = -1; n < near.length; n++) {
-          const arr = map.get(n < 0 ? own : near[n]);
+          const arr = this.res.on(horiz, n < 0 ? own : near[n]);
           if (!arr) continue;
           const axisV = horiz ? this.ys : this.xs;
           const floor = n < 0 || Math.abs(axisV[near[n]] - axisV[own]) <= SP_NEAR_SAME ? 1 : SP_NEAR_MIN_SPAN;

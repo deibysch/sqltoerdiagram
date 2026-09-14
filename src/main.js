@@ -16,7 +16,8 @@ import { HistoryManager } from './history.js';
 import { reorderWithGemini, reorderWithLocalAI, reorderWithExistingGroups } from './ai-layout.js';
 import { createCompactSearch } from './compact-search-ui.js';
 import { orientDiagram, resetOrientation } from './rotate-diagram.js';
-import { organizeLinesElkPorts, organizeLinesAStar, organizeLinesShortestPath, resetLines } from './line-organizer.js';
+import { organizeLinesElkPorts, organizeLinesAStar, resetLines } from './line-organizer.js';
+import { startOptimalRoute } from './optimal-route.js';
 
 const $ = (id) => document.getElementById(id);
 const sqlEl = $('sql');
@@ -1502,30 +1503,40 @@ if (btnEdgeRouting && routingMenu) {
     const selectedKeys = diagram.selectedEdgeKey ? [diagram.selectedEdgeKey] : null;
 
     if (item.id === 'btn-route-shortest-path') {
-      // Rip-up and reroute is heavy on big diagrams, so park the button on a
-      // spinner and let the browser paint before the search blocks the thread.
+      // Rip-up and reroute takes seconds on a big diagram, so it runs in the
+      // background while the button shows a spinner; the page stays usable. Its
+      // lines land only if the diagram is still the one it routed.
       endFlash(btnEdgeRouting);
       const icon = btnEdgeRouting.innerHTML;
       const title = btnEdgeRouting.title;
       btnEdgeRouting.innerHTML = '<span class="spinner" style="width:14px;height:14px"></span>';
       btnEdgeRouting.disabled = true;
       btnEdgeRouting.title = 'Calculating routes…';
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        let summary;
-        try {
-          summary = organizeLinesShortestPath(diagram, selectedKeys);
-        } finally {
-          btnEdgeRouting.disabled = false;
-          btnEdgeRouting.innerHTML = icon;
-          btnEdgeRouting.title = title;
-        }
-        saveLayoutDebounced();
-        if (editorMode === 'layout') updateLayoutTextarea();
-        const n = summary.routed;
-        flashButton(btnEdgeRouting, n
-          ? `${n} route${n !== 1 ? 's' : ''} · ${summary.crossings} crossing${summary.crossings !== 1 ? 's' : ''}`
-          : 'No lines');
-      }));
+      const restore = () => {
+        btnEdgeRouting.disabled = false;
+        btnEdgeRouting.innerHTML = icon;
+        btnEdgeRouting.title = title;
+      };
+      startOptimalRoute(diagram, selectedKeys, {
+        onDone(summary) {
+          restore();
+          saveLayoutDebounced();
+          if (editorMode === 'layout') updateLayoutTextarea();
+          const n = summary.routed;
+          flashButton(btnEdgeRouting, n
+            ? `${n} route${n !== 1 ? 's' : ''} · ${summary.crossings} crossing${summary.crossings !== 1 ? 's' : ''}`
+            : 'No lines');
+        },
+        onStale() {
+          restore();
+          flashButton(btnEdgeRouting, 'Diagram changed · not applied');
+        },
+        onFail(message) {
+          restore();
+          console.warn('Optimal Route failed:', message);
+          flashButton(btnEdgeRouting, 'Could not route');
+        },
+      });
       return;
     }
 
