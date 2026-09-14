@@ -280,6 +280,27 @@ export function collectGroupsCompact(model, annotations = []) {
   return { groups, loose };
 }
 
+/**
+ * Another starting point for the search (compact-search-core.js): the same
+ * schema read in another order. Dagre breaks its ties in the order it is handed
+ * the tables and relations, and every later step builds on what dagre returns,
+ * so the whole run lands somewhere else. Seed 0 changes nothing: the arrangement
+ * this option has always given.
+ */
+function orderShuffler(seed) {
+  if (!seed) return (list) => list;
+  let s = (Math.imul(seed, 2654435761) >>> 0) || 1;
+  const rand = () => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296;
+  return (list) => {
+    const out = list.slice();
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  };
+}
+
 /** Weighted table-to-table adjacency across relations and manual links. */
 function buildLinks(diagram) {
   const weights = new Map();
@@ -507,6 +528,10 @@ function wrapWholeDiagram(tables, links, sp) {
  * route short, straight and untangled. Clears every stored waypoint and anchor
  * first, so the lines start from a clean slate. With no groups at all, the
  * whole diagram is laid out by wrapWholeDiagram instead.
+ *
+ * `opts.seed` starts from another order of the schema (see orderShuffler), and
+ * `opts.keepSizes` trusts the sizes already on the tables instead of measuring
+ * them: a worker has no canvas to measure text with.
  * Returns { groups, implicit, tables, loose, annotations, cost }.
  */
 export function arrangeGroupsCompact(diagram, opts = {}) {
@@ -528,13 +553,25 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
   const model = diagram?.model;
   if (!model?.tables?.length) throw new Error('The diagram has no tables to arrange.');
 
-  const level = diagram.diagramLevel || 'physical';
-  for (const t of model.tables) {
-    const dims = measureTable(t, level);
-    t.w = dims.w; t.h = dims.h; t.rowH = dims.rowH; t.headerH = dims.headerH;
+  if (!opts.keepSizes) {
+    const level = diagram.diagramLevel || 'physical';
+    for (const t of model.tables) {
+      const dims = measureTable(t, level);
+      t.w = dims.w; t.h = dims.h; t.rowH = dims.rowH; t.headerH = dims.headerH;
+    }
   }
 
-  const { groups, loose } = collectGroupsCompact(model, diagram.annotations);
+  // Only the order the layout reads things in changes with the seed; the model
+  // and the annotations keep their own order, and the group boxes come out in it.
+  const vary = orderShuffler(opts.seed);
+  const collected = collectGroupsCompact(model, diagram.annotations);
+  // A box keeps listing its tables as it did (`listed`): an order that leaked into
+  // the saved boxes would make the next run start from somewhere else.
+  const groups = vary(collected.groups.map((g, rank) => ({ ...g, rank, listed: g.keys }))).map(g => {
+    const order = vary(g.keys.map((_, i) => i));
+    return { ...g, keys: order.map(i => g.keys[i]), tables: order.map(i => g.tables[i]) };
+  });
+  const loose = vary(collected.loose);
 
   diagram.onHistorySnapshot?.(diagram.getSnapshot());
 
@@ -542,12 +579,12 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
   diagram.edgeWaypoints.clear();
   diagram.edgeAnchors.clear();
 
-  const links = buildLinks(diagram);
+  const links = vary(buildLinks(diagram));
 
   // No groups at all: the whole diagram is one invisible group, which the group
   // machinery below has nothing to do with. It gets its own wrap instead.
   if (!groups.length) {
-    const cost = wrapWholeDiagram(model.tables, links, {
+    const cost = wrapWholeDiagram(vary(model.tables), links, {
       rowGap: INNER.nodesep, colGap: INNER.ranksep, bandGap: GUTTER, preset: INNER,
     });
     diagram.setAnnotations((diagram.annotations || []).filter(a => a.type !== 'group'));
@@ -818,7 +855,8 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
   placeLoose();
   // --- Group boxes, measured from the tables actually inside them.
   const notes = (diagram.annotations || []).filter(a => a.type !== 'group');
-  const boxes = groups.map((g, i) => {
+  const boxes = groups.slice().sort((a, b) => a.rank - b.rank).map((g) => {
+    const i = g.rank;
     const x0 = Math.min(...g.tables.map(t => t.x));
     const y0 = Math.min(...g.tables.map(t => t.y));
     const x1 = Math.max(...g.tables.map(t => t.x + t.w));
@@ -828,7 +866,7 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
       type: 'group',
       text: g.name,
       color: g.color || 'blue',
-      tables: g.keys,
+      tables: g.listed,
       x: Math.round(x0 - PAD_X),
       y: Math.round(y0 - PAD_TOP),
       w: Math.round(x1 - x0 + PAD_X * 2),
@@ -848,4 +886,71 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
     annotations: boxes,
     cost: Math.round(best),
   };
+}
+
+/** The placed tables and their links, as indices into that list. */
+function placedLinks(diagram) {
+  const tables = (diagram.model?.tables || []).filter(t => Number.isFinite(t.x) && Number.isFinite(t.y));
+  const idx = new Map(tables.map((t, i) => [t.key.toLowerCase(), i]));
+  const links = [];
+  for (const l of buildLinks(diagram)) {
+    const a = idx.get(l.a), b = idx.get(l.b);
+    if (a !== undefined && b !== undefined) links.push({ a, b, w: l.w });
+  }
+  return { tables, links };
+}
+
+function extentOf(boxes) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const b of boxes) {
+    x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
+    x1 = Math.max(x1, b.x + b.w); y1 = Math.max(y1, b.y + b.h);
+  }
+  return boxes.length ? { w: x1 - x0, h: y1 - y0 } : { w: 0, h: 0 };
+}
+
+/**
+ * How good an arrangement is by the estimate this layout optimises, lower being
+ * better, taken from where every table stands now, loose ones included. That
+ * makes the result of one starting point comparable with another's, and with a
+ * layout the user has touched since. The shape charge is the one the layout
+ * itself uses: bands from square to 2:1 without groups, a screen-shaped target
+ * with them.
+ */
+export function scoreCompactLayout(diagram) {
+  const { tables, links } = placedLinks(diagram);
+  if (!tables.length) return 0;
+  const cost = estimateCost(tables, links);
+  const { w, h } = extentOf(tables);
+  if (!(w > 0 && h > 0)) return cost;
+  const ratio = w / h;
+  if (!collectGroupsCompact(diagram.model, diagram.annotations).groups.length) {
+    const stray = Math.max(1, ratio / GL_WHOLE_MAX_RATIO, GL_WHOLE_MIN_RATIO / ratio);
+    return cost * (1 + GL_WHOLE_STRAY_COST * Math.log(stray));
+  }
+  const off = ratio > GL_ASPECT_TARGET ? ratio / GL_ASPECT_TARGET : GL_ASPECT_TARGET / ratio;
+  return cost + (off - 1) * GL_ASPECT_COST;
+}
+
+/**
+ * What a person can read off an arrangement, by the same estimate: the length of
+ * every line centre to centre, how many of them cross, and the canvas size.
+ */
+export function compactLayoutMetrics(diagram) {
+  const { tables, links } = placedLinks(diagram);
+  let length = 0;
+  const segs = [];
+  for (const l of links) {
+    const ca = centreOf(tables[l.a]), cb = centreOf(tables[l.b]);
+    length += (Math.abs(ca.x - cb.x) + Math.abs(ca.y - cb.y)) * l.w;
+    segs.push([ca, cb]);
+  }
+  let crossings = 0;
+  for (let i = 0; i < segs.length; i++) {
+    for (let j = i + 1; j < segs.length; j++) {
+      if (segmentsCross(segs[i][0], segs[i][1], segs[j][0], segs[j][1])) crossings++;
+    }
+  }
+  const { w, h } = extentOf(tables);
+  return { length: Math.round(length), crossings, width: Math.round(w), height: Math.round(h) };
 }

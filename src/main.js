@@ -14,7 +14,7 @@ import { sanitizeAnnotations, computeGroupBounds, newId } from './annotations.js
 import { EXAMPLE_SQL } from './examples.js';
 import { HistoryManager } from './history.js';
 import { reorderWithGemini, reorderWithLocalAI, reorderWithExistingGroups } from './ai-layout.js';
-import { arrangeGroupsCompact } from './group-layout-compact.js';
+import { createCompactSearch } from './compact-search-ui.js';
 import { arrangeGroupsSingleAxis } from './group-layout-axis.js';
 import { arrangeGroupsMinCrossings } from './group-layout-crossings.js';
 import { orientDiagram, resetOrientation } from './rotate-diagram.js';
@@ -34,9 +34,14 @@ diagram.onZoom = (s) => { zoomLabel.textContent = Math.round(s * 100) + '%'; };
 window.__dbdiga = diagram;   // debug handle
 let visualEditor = null;     // created after setup; refreshed on every model change
 
+// The search panel of "Short lines, compact", created with the Tables menu.
+let compactSearch = null;
+
 // History manager (Undo / Redo) with 50 steps
 const history = new HistoryManager(50);
 diagram.onHistorySnapshot = (snapshot) => {
+  // every edit takes a snapshot first: a first arrangement still running stops here
+  compactSearch?.noteEdit();
   history.push(snapshot);
 };
 
@@ -59,6 +64,7 @@ function syncOrientation() {
 
 function performUndo() {
   if (!history.canUndo()) return;
+  compactSearch?.noteEdit();
   const current = diagram.getSnapshot();
   const previous = history.undo(current);
   if (previous) {
@@ -72,6 +78,7 @@ function performUndo() {
 
 function performRedo() {
   if (!history.canRedo()) return;
+  compactSearch?.noteEdit();
   const current = diagram.getSnapshot();
   const next = history.redo(current);
   if (next) {
@@ -256,6 +263,9 @@ function saveLayout() {
     localStorage.setItem(LAYOUT_KEY, JSON.stringify(collectLayout()));
     if (editorMode === 'layout') updateLayoutTextarea();
   } catch { /* quota */ }
+  // Every change to the diagram ends up saved here, so this is where the search
+  // panel checks that what it found still fits the schema.
+  compactSearch?.refresh();
 }
 let saveTimer = null;
 function saveLayoutDebounced() {
@@ -662,6 +672,10 @@ function syncModelGroups(model, existingAnnotations = []) {
 }
 
 function rebuild({ arrange = false, restore = null } = {}) {
+  // Re-arranging with another method puts the search panel away; any other
+  // rebuild stops a first arrangement still running, which would land on top.
+  if (arrange) compactSearch?.cancel({ hide: true });
+  else compactSearch?.noteEdit();
   const sql = sqlEl.value;
   localStorage.setItem('dbdiga-sql', sql);
   syncHighlight();
@@ -786,6 +800,7 @@ function updateStatus(result, sql) {
 // Every model-mutating edit (canvas or visual panel) funnels through here so the
 // textarea, the diagram and the visual panel stay in lockstep.
 function commitSql(newSql, { pinKey = null, renameFrom = null, renameTo = null } = {}) {
+  compactSearch?.noteEdit();
   sqlEl.value = newSql;
   localStorage.setItem('dbdiga-sql', newSql);
   syncHighlight();
@@ -902,6 +917,31 @@ function wireMenuSections(menu) {
   });
 }
 
+// "Short lines, compact" runs in a worker, and once it has run a panel offers to
+// search for better arrangements and pick one.
+compactSearch = createCompactSearch({
+  diagram,
+  host: canvas.parentElement,
+  getSpacing: () => layoutOpts.spacing,
+  // what every rearrange does once the tables have moved
+  afterApply: () => {
+    resetOrientation(diagram);
+    syncMenu();
+    diagram.fit();
+    saveLayoutDebounced();
+    if (editorMode === 'layout') updateLayoutTextarea();
+    if (editorMode === 'visual') visualEditor?.render();
+  },
+  onArranged: (res) => {
+    const loose = res.loose ? ` + ${res.loose} loose` : '';
+    // With no groups the whole diagram was one invisible group: say so, rather
+    // than a baffling "0 groups".
+    flashButton($('btn-arrange'), res.implicit
+      ? `No groups · ${res.tables} tables`
+      : `${res.groups} group${res.groups !== 1 ? 's' : ''}${loose}`);
+  },
+});
+
 syncMenu();
 wireMenuSections(arrangeMenu);
 
@@ -921,10 +961,12 @@ arrangeMenu.addEventListener('click', (e) => {
     'btn-groups-fast-grid': executeExistingGroupsReorder,
     'btn-groups-single-axis': () => runGroupArrange(arrangeGroupsSingleAxis, 'Optimized grid'),
     'btn-groups-min-crossings': () => runGroupArrange(arrangeGroupsMinCrossings, 'Fewest crossings'),
-    'btn-groups-compact': () => runGroupArrange(arrangeGroupsCompact, 'Short lines, compact'),
+    'btn-groups-compact': () => compactSearch.arrange(),
   };
   if (groupArrangers[item.id]) {
     arrangeMenu.hidden = true;
+    // the search panel belongs to "Short lines, compact" alone
+    if (item.id !== 'btn-groups-compact') compactSearch.cancel({ hide: true });
     setRearrangePick(`group:${item.id}`);
     groupArrangers[item.id]();
     return;
@@ -932,6 +974,7 @@ arrangeMenu.addEventListener('click', (e) => {
 
   if (item.id === 'btn-arrange-ai') {
     arrangeMenu.hidden = true;
+    compactSearch.cancel({ hide: true });
     openAIModal();
     return;
   }

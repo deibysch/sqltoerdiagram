@@ -293,6 +293,62 @@ a.btn { text-decoration: none; color: var(--text); }
 .mi-hint { width: 13px; height: 13px; flex: none; margin-left: auto; opacity: .5; }
 .menu-item:hover .mi-hint, .menu-item.active .mi-hint { opacity: .85; }
 
+/* ---------- search panel of "Short lines, compact" ---------- */
+.search-panel {
+  position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%);
+  z-index: 7;
+  display: flex; flex-direction: column; gap: 8px;
+  width: max-content; min-width: 320px; max-width: calc(100% - 32px);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 10px 10px 14px;
+  box-shadow: 0 10px 28px rgba(0,0,0,.28);
+  font-size: 12.5px;
+}
+.search-panel[hidden] { display: none; }
+.sp-head { display: flex; align-items: flex-start; gap: 10px; }
+.sp-spinner { margin-top: 2px; }
+.sp-spinner[hidden] { display: none; }
+.sp-text { flex: 1; min-width: 0; max-width: 520px; }
+.sp-title { font-weight: 600; color: var(--text); }
+.sp-status { color: var(--muted); margin-top: 2px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+/* what just happened: applied, stopped, time limit */
+.sp-note { color: var(--muted); margin-top: 2px; line-height: 1.4; font-size: 12px; opacity: .8; }
+.sp-note[hidden] { display: none; }
+.sp-close { margin: -4px -2px 0 0; }
+.sp-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.sp-actions .btn { padding: 5px 10px; font-size: 12.5px; }
+.sp-actions .btn.ghost { border-color: var(--border); }
+.sp-actions .btn[hidden] { display: none; }
+.sp-progress { height: 3px; background: var(--panel-2); border-radius: 2px; overflow: hidden; }
+.sp-progress[hidden] { display: none; }
+/* no end to show: a search runs until it is stopped */
+.sp-bar { height: 100%; width: 30%; background: var(--accent); animation: sp-slide 1.3s ease-in-out infinite; }
+@keyframes sp-slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+
+/* ---------- pick a layout (Compare) ---------- */
+.modal-card.options-card {
+  max-width: 900px; max-height: calc(100vh - 32px);
+  display: flex; flex-direction: column;
+}
+/* a short window scrolls the cards, never the header or the buttons */
+.options-card .modal-body { overflow: auto; min-height: 0; }
+.layout-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.layout-option {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px; text-align: left;
+  font: inherit; color: var(--text);
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+  cursor: pointer;
+}
+.layout-option:hover, .layout-option:focus-visible { border-color: var(--accent); outline: none; }
+.layout-option.current { border-style: dashed; }
+.layout-option canvas { display: block; width: 100%; aspect-ratio: 16 / 10; border-radius: 6px; }
+.lo-name { font-weight: 600; font-size: 13px; }
+.lo-metrics { font-size: 12px; color: var(--muted); line-height: 1.5; font-variant-numeric: tabular-nums; }
+.lo-metrics b { font-weight: 600; }
+.lo-metrics b.better { color: #5fbf83; }
+.lo-metrics b.worse { color: #e0a23c; }
+
 /* ---------- diagram level menu ---------- */
 .diagram-level-menu {
   min-width: 250px;
