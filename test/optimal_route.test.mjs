@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { organizeLinesShortestPath, getDiagramEdges } from '../src/line-organizer.js';
-import { routeInput, routeOnData, applyRoute } from '../src/optimal-route-core.js';
+import { routeInput, routeOnData, applyRoute } from '../src/background-tasks.js';
 
 // the seeded grid of test/line_organizer.test.mjs, smaller
 function gridDiagram(rows, cols, seed = 12345) {
@@ -47,7 +47,7 @@ function bothWays(prepare, targetKeys, options) {
   const inPlace = prepare();
   const viaData = prepare();
   const direct = organizeLinesShortestPath(inPlace, targetKeys, options);
-  const result = routeOnData(routeInput(viaData), targetKeys, options);
+  const result = routeOnData(routeInput(viaData, { targetKeys, options }));
   applyRoute(viaData, result, { recordHistory: options?.recordHistory !== false });
   return { inPlace, viaData, direct, result };
 }

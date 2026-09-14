@@ -17,9 +17,11 @@ const PRESETS = {
   spacious:    { nodesep: 60, ranksep: 200, edgesep: 36, gap: 32 },
 };
 
-function prepareTableSizes(model) {
+// `measure` is measureTable unless the sizes were measured elsewhere: a worker
+// cannot measure text, so the page measures the tables for it (background-tasks.js).
+function prepareTableSizes(model, measure = measureTable) {
   for (const t of model.tables) {
-    const dims = measureTable(t);
+    const dims = measure(t);
     t.w = dims.w;
     t.h = dims.h;
     t.rowH = dims.rowH;
@@ -53,7 +55,7 @@ export function dagreLayout(model, opts = {}, hidden = null) {
   const preset = PRESETS[opts.spacing] || PRESETS.comfortable;
   const isHidden = (key) => !!(hidden && hidden.has(key));
 
-  prepareTableSizes(model);
+  prepareTableSizes(model, opts.measure);
 
   const degree = new Map();
   const bump = (k) => degree.set(k, (degree.get(k) || 0) + 1);
@@ -126,7 +128,7 @@ export function dagreLayout(model, opts = {}, hidden = null) {
  */
 export function forceLayout(model, opts = {}, hidden = null) {
   const isHidden = (key) => !!(hidden && hidden.has(key));
-  prepareTableSizes(model);
+  prepareTableSizes(model, opts.measure);
 
   const visibleTables = model.tables.filter(t => !isHidden(t.key));
   const n = visibleTables.length;
@@ -253,7 +255,7 @@ export function forceLayout(model, opts = {}, hidden = null) {
  */
 export function radialLayout(model, opts = {}, hidden = null) {
   const isHidden = (key) => !!(hidden && hidden.has(key));
-  prepareTableSizes(model);
+  prepareTableSizes(model, opts.measure);
 
   const visibleTables = model.tables.filter(t => !isHidden(t.key));
   if (!visibleTables.length) return;
@@ -358,6 +360,7 @@ export function radialLayout(model, opts = {}, hidden = null) {
 /**
  * Dispatcher for auto-layout algorithms:
  * opts.algo = 'dagre' (default) | 'force' | 'radial'
+ * opts.measure = (table) => { w, h, rowH, headerH }, when not measureTable
  */
 export function layout(model, opts = {}, hidden = null) {
   const algo = opts.algo || 'dagre';

@@ -1,6 +1,5 @@
 import './style.css';
 import { parseSchema, FORMATS, detectFormat } from './parse.js';
-import { layout } from './layout.js';
 import { Diagram } from './diagram.js';
 import { exportSVG } from './svg-export.js';
 import { EDGE_COLORS } from './renderer.js';
@@ -13,11 +12,12 @@ import { encodeShare, decodeShare } from './share.js';
 import { sanitizeAnnotations, computeGroupBounds, newId } from './annotations.js';
 import { EXAMPLE_SQL } from './examples.js';
 import { HistoryManager } from './history.js';
-import { reorderWithGemini, reorderWithLocalAI, reorderWithExistingGroups } from './ai-layout.js';
+import { askGemini } from './ai-layout.js';
 import { createCompactSearch } from './compact-search-ui.js';
-import { orientDiagram, resetOrientation } from './rotate-diagram.js';
-import { organizeLinesElkPorts, organizeLinesAStar, resetLines } from './line-organizer.js';
-import { startOptimalRoute } from './optimal-route.js';
+import { resetOrientation } from './rotate-diagram.js';
+import { resetLines } from './line-organizer.js';
+import { startJob } from './background.js';
+import { routeInput, applyRoute, layoutInput, applyLayout, orientInput, applyOrient, groupsInput } from './background-tasks.js';
 
 const $ = (id) => document.getElementById(id);
 const sqlEl = $('sql');
@@ -339,7 +339,8 @@ function placeNewTables(model) {
   const missing = model.tables.filter(t => !Number.isFinite(t.x));
   if (!missing.length) return;
   const placed = model.tables.filter(t => Number.isFinite(t.x));
-  if (!placed.length) { layout(model, layoutOpts, diagram.hidden); resetOrientation(diagram); return; }
+  // nothing on the canvas yet: lay the whole diagram out, in the background
+  if (!placed.length) { arrangeTables('place'); return; }
   let x1 = -Infinity, y0 = Infinity;
   for (const t of placed) { x1 = Math.max(x1, t.x + t.w); y0 = Math.min(y0, t.y); }
   let x = x1 + 80, y = Number.isFinite(y0) ? y0 : 40;
@@ -723,24 +724,12 @@ function rebuild({ arrange = false, restore = null } = {}) {
   }
 
   if (arrange) {
-    diagram.onHistorySnapshot?.(diagram.getSnapshot());
-    // Every table is about to move, so stored vertices and anchor positions would
-    // describe geometry that no longer exists: drop them, as the group layouts do.
-    diagram.edgeWaypoints.clear();
-    diagram.edgeAnchors.clear();
-    layout(result, layoutOpts, diagram.hidden);
     // This lays the tables out with the without-groups algorithm, so that is what
     // the menu shows, rather than a with-groups option picked earlier.
-    rearrangePick = `algo:${layoutOpts.algo}`;
-    localStorage.setItem('dbdiga-rearrange', rearrangePick);
-    syncMenu();
-    resetOrientation(diagram);
-    syncOrientation();
-    if (result.groups?.length) {
-      diagram.setAnnotations(syncModelGroups(result, diagram.annotations));
-    }
-    diagram.fit();
+    setRearrangePick(`algo:${layoutOpts.algo}`);
+    arrangeTables('arrange');
   } else if (restore) {
+    tablesJob?.cancel();                             // a layout still running would land on the restored one
     diagram.setHidden(restore.hidden);               // restore hidden tables before placing
     diagram.setManualLinks(restore.manualLinks);     // restore user-drawn / inferred links
     placeNewTables(result);                          // tables not in the saved layout
@@ -752,17 +741,8 @@ function rebuild({ arrange = false, restore = null } = {}) {
     if (restore.camera) diagram.setCamera(restore.camera);
     else diagram.fit();
   } else if (firstRender) {
-    layout(result, layoutOpts, diagram.hidden);
-    // This lays the tables out with the without-groups algorithm, so that is what
-    // the menu shows, rather than a with-groups option picked earlier.
-    rearrangePick = `algo:${layoutOpts.algo}`;
-    localStorage.setItem('dbdiga-rearrange', rearrangePick);
-    syncMenu();
-    resetOrientation(diagram);
-    if (result.groups?.length) {
-      diagram.setAnnotations(syncModelGroups(result, diagram.annotations));
-    }
-    diagram.fit();
+    setRearrangePick(`algo:${layoutOpts.algo}`);
+    arrangeTables('first');
   } else if (structureChanged) {
     placeNewTables(result);                          // keep manual layout, place only new tables
     if (result.groups?.length) {
@@ -780,6 +760,75 @@ function rebuild({ arrange = false, restore = null } = {}) {
   if (editorMode === 'layout') updateLayoutTextarea();
   renderTables();
   if (visualEditor) visualEditor.render();
+}
+
+// ---- tables without groups, laid out in the background ----
+// Three kinds of run: 'arrange' is a pick from the Tables menu, one undo step that
+// drops the stored lines; 'first' is a diagram's first arrangement, with nothing to
+// undo; 'place' lays out a diagram none of whose tables has a place yet, and no more.
+// 'arrange' and 'first' also fit the diagram in view and bring its model groups along.
+let tablesJob = null;
+const TABLE_RUNS = ['place', 'first', 'arrange'];
+
+function arrangeTables(kind) {
+  // A run replacing one still going (typing while the first layout runs, say)
+  // keeps whatever more that one was going to do.
+  if (tablesJob && TABLE_RUNS.indexOf(tablesJob.kind) > TABLE_RUNS.indexOf(kind)) kind = tablesJob.kind;
+  tablesJob?.cancel();
+
+  const btn = $('btn-arrange');
+  const idle = busyButton(btn, 'Arranging tables…');
+  const run = { kind };
+  const end = () => {
+    idle();
+    if (tablesJob === run) tablesJob = null;
+  };
+  const unplaced = () => diagram.model.tables.length > 0 && !diagram.model.tables.some(t => Number.isFinite(t.x));
+
+  const job = startJob('layout', () => layoutInput(diagram.model, layoutOpts, diagram.hidden), {
+    apply(result) {
+      end();
+      if (kind === 'arrange') {
+        diagram.onHistorySnapshot?.(diagram.getSnapshot());
+        // Every table is about to move, so stored vertices and anchor positions would
+        // describe geometry that no longer exists: drop them, as the group layouts do.
+        diagram.edgeWaypoints.clear();
+        diagram.edgeAnchors.clear();
+      }
+      applyLayout(diagram.model, result);
+      resetOrientation(diagram);
+      syncOrientation();
+      if (kind !== 'place') {
+        if (diagram.model.groups?.length) {
+          diagram.setAnnotations(syncModelGroups(diagram.model, diagram.annotations));
+        }
+        diagram.fit();
+      }
+      diagram.fitAllGroups();
+      diagram.markDirty();
+      saveLayoutDebounced();
+      if (editorMode === 'layout') updateLayoutTextarea();
+      renderTables();
+      visualEditor?.render();
+    },
+    onStale() {
+      end();
+      // With nothing on the canvas yet there is nothing to keep: lay out the
+      // diagram as it is now.
+      if (unplaced()) arrangeTables(kind);
+      else if (kind === 'arrange') flashButton(btn, 'Diagram changed · not applied');
+    },
+    onFail(message) {
+      end();
+      console.warn('Arranging the tables failed:', message);
+      flashButton(btn, 'Could not arrange');
+    },
+  });
+  run.cancel = () => {
+    job.cancel();
+    end();
+  };
+  tablesJob = run;
 }
 
 function updateStatus(result, sql) {
@@ -1011,30 +1060,34 @@ arrangeMenu.addEventListener('click', (e) => {
     const target = item.dataset.orient;
     if (target !== (diagram.orientation || 'LR')) {
       // A quarter turn re-traces the lines it breaks, which takes seconds on a
-      // big diagram, so park the Arrange button on a spinner and paint first.
+      // big diagram, so it runs in the background with the Arrange button on a
+      // spinner. The turn lands only if the diagram is still the one it turned.
       const btn = $('btn-arrange');
-      endFlash(btn);
-      const original = btn.innerHTML;
-      btn.innerHTML = '<span class="spinner" style="width:14px;height:14px"></span>';
-      btn.disabled = true;
+      const idle = busyButton(btn, 'Turning the diagram…');
       arrangeMenu.hidden = true;
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        let res;
-        try {
-          res = orientDiagram(diagram, target);
-        } finally {
-          btn.disabled = false;
-          btn.innerHTML = original;
-        }
-        syncMenu();
-        diagram.fit();
-        saveLayoutDebounced();
-        if (editorMode === 'layout') updateLayoutTextarea();
-        if (editorMode === 'visual') visualEditor?.render();
-        if (res.repaired) {
-          flashButton(btn, `${res.repaired} line${res.repaired !== 1 ? 's' : ''} re-routed`);
-        }
-      }));
+      startJob('orient', () => orientInput(diagram, target), {
+        apply(result) {
+          idle();
+          const res = applyOrient(diagram, result);
+          syncMenu();
+          diagram.fit();
+          saveLayoutDebounced();
+          if (editorMode === 'layout') updateLayoutTextarea();
+          if (editorMode === 'visual') visualEditor?.render();
+          if (res.repaired) {
+            flashButton(btn, `${res.repaired} line${res.repaired !== 1 ? 's' : ''} re-routed`);
+          }
+        },
+        onStale() {
+          idle();
+          flashButton(btn, 'Diagram changed · not applied');
+        },
+        onFail(message) {
+          idle();
+          console.warn('Direction failed:', message);
+          flashButton(btn, 'Could not turn');
+        },
+      });
     }
     return;
   }
@@ -1080,8 +1133,31 @@ function openAIModal() {
   if (aiStatusBox) aiStatusBox.hidden = true;
 }
 
+// The arrangement the modal is running in the background, and a count that turns
+// away a Gemini answer nobody is waiting for any more.
+let aiJob = null;
+let aiAsk = 0;
+
+function aiRunning(on) {
+  for (const b of [btnRunLocalAI, btnRunGeminiAI, btnRunExistingGroups]) if (b) b.disabled = on;
+}
+
+function aiStatus(text) {
+  if (!aiStatusBox) return;
+  aiStatusBox.hidden = !text;
+  if (text) aiStatusText.textContent = text;
+}
+
+function stopAI() {
+  aiAsk++;
+  aiJob?.cancel();
+  aiJob = null;
+  aiRunning(false);
+}
+
 function closeAIModal() {
   if (!modalAI) return;
+  stopAI();
   modalAI.hidden = true;
   if (aiStatusBox) aiStatusBox.hidden = true;
 }
@@ -1092,6 +1168,43 @@ modalAI?.addEventListener('click', (e) => {
   if (e.target === modalAI) closeAIModal();
 });
 
+/**
+ * Run an AI arrangement (background-tasks.js groupsInput) in the background and,
+ * if the diagram still is what it read, put it on the canvas, undo step first:
+ * `land(res)` does what is particular to each button.
+ */
+function runAIArrangement(mode, domains, options, land) {
+  aiJob = startJob('groups', () => groupsInput(diagram, { mode, domains, options }), {
+    apply(res) {
+      aiJob = null;
+      aiRunning(false);
+      diagram.onHistorySnapshot?.(diagram.getSnapshot());
+      land(res);
+      resetOrientation(diagram);
+      syncMenu();
+      if (options.lineStyle) diagram.setEdgeRouting(options.lineStyle);
+      diagram.markDirty();
+      diagram.fit();
+      diagram.onLayoutChange?.();
+      saveLayoutDebounced();
+      if (editorMode === 'layout') updateLayoutTextarea();
+      if (editorMode === 'visual') visualEditor?.render();
+      closeAIModal();
+    },
+    onStale() {
+      aiJob = null;
+      aiRunning(false);
+      aiStatus('The diagram changed while arranging · not applied');
+    },
+    onFail(message) {
+      aiJob = null;
+      aiRunning(false);
+      console.error('AI Arrange Error:', message);
+      aiStatus('Error: ' + (message || 'Rearrange failed'));
+    },
+  });
+}
+
 async function executeAIReorder(isGemini = false) {
   if (!diagram.model || !diagram.model.tables || !diagram.model.tables.length) {
     alert('The diagram has no tables to arrange.');
@@ -1101,56 +1214,42 @@ async function executeAIReorder(isGemini = false) {
   const createGroups = aiCreateGroups ? aiCreateGroups.checked : true;
   const selectedLineStyle = aiLineStyle ? aiLineStyle.value : (diagram.edgeRouting || 'ortho-rounded');
 
-  if (aiStatusBox) {
-    aiStatusBox.hidden = false;
-    aiStatusText.textContent = isGemini ? 'Asking Google Gemini AI...' : 'Running the local semantic AI...';
-  }
+  stopAI();
+  const ask = aiAsk;
+  aiRunning(true);
+  aiStatus(isGemini ? 'Asking Google Gemini AI...' : 'Running the local semantic AI...');
 
-  diagram.onHistorySnapshot?.(diagram.getSnapshot());
-
-  try {
-    let res;
-    if (isGemini) {
+  // Only the question to Gemini runs here; laying out its answer, or the local AI
+  // when Gemini is out of quota, runs in the background on the diagram as it is then.
+  let answer = {};
+  if (isGemini) {
+    try {
       const apiKey = aiKeyInput ? aiKeyInput.value.trim() : '';
       if (!apiKey) {
         throw new Error('Por favor ingresa tu Gemini API Key o haz clic en "Ejecutar con IA Local".');
       }
       localStorage.setItem('gemini_api_key', apiKey);
-      res = await reorderWithGemini(diagram.model, apiKey, { createGroups, lineStyle: selectedLineStyle });
-    } else {
-      res = reorderWithLocalAI(diagram.model, { createGroups, lineStyle: selectedLineStyle });
+      answer = await askGemini(diagram.model, apiKey);
+    } catch (err) {
+      if (ask !== aiAsk) return;
+      console.error('AI Arrange Error:', err);
+      aiRunning(false);
+      aiStatus('Error: ' + (err.message || 'Rearrange failed'));
+      return;
     }
+    if (ask !== aiAsk) return;   // closed, or run again, while Gemini was answering
+  }
 
+  runAIArrangement(answer.domains ? 'domains' : 'local', answer.domains || null, { createGroups, lineStyle: selectedLineStyle }, (res) => {
+    applyLayout(diagram.model, res);
     if (res.annotations && res.annotations.length) {
       const notes = diagram.annotations.filter(a => a.type === 'note');
       diagram.setAnnotations([...notes, ...res.annotations]);
     }
-
-    if (selectedLineStyle) {
-      diagram.setEdgeRouting(selectedLineStyle);
-    }
-
-    resetOrientation(diagram);
-    syncMenu();
-    diagram.markDirty();
-    diagram.fit();
-    diagram.onLayoutChange?.();
-    saveLayoutDebounced();
-    if (editorMode === 'layout') updateLayoutTextarea();
-    if (editorMode === 'visual') visualEditor?.render();
-
-    closeAIModal();
-
-    if (res.fallbackToLocal) {
+    if (answer.quota) {
       flashButton($('btn-arrange'), 'IA Local (Cuota Gemini)');
     }
-  } catch (err) {
-    console.error('AI Arrange Error:', err);
-    if (aiStatusBox) {
-      aiStatusBox.hidden = false;
-      aiStatusText.textContent = 'Error: ' + (err.message || 'Rearrange failed');
-    }
-  }
+  });
 }
 
 function executeExistingGroupsReorder() {
@@ -1161,20 +1260,17 @@ function executeExistingGroupsReorder() {
 
   const selectedLineStyle = aiLineStyle ? aiLineStyle.value : (diagram.edgeRouting || 'ortho-rounded');
 
-  try {
-    const res = reorderWithExistingGroups(diagram.model, diagram.annotations, {
-      createGroups: true,
-      lineStyle: selectedLineStyle,
-      spacing: layoutOpts.spacing,
-    });
+  stopAI();
+  aiRunning(true);
+  aiStatus('Arranging the current groups...');
 
-    diagram.onHistorySnapshot?.(diagram.getSnapshot());
-
-    // Every table just moved, so any stored vertex or anchor position now refers
-    // to geometry that no longer exists. Wipe them, as the other three group
+  runAIArrangement('existing', null, { createGroups: true, lineStyle: selectedLineStyle, spacing: layoutOpts.spacing }, (res) => {
+    // Every table moves, so any stored vertex or anchor position would refer to
+    // geometry that no longer exists. Wipe them, as the other three group
     // algorithms do, and let the lines be re-derived from scratch.
     diagram.edgeWaypoints.clear();
     diagram.edgeAnchors.clear();
+    applyLayout(diagram.model, res);
 
     // Without groups there is no box to put back, but a stale empty group box
     // still goes, exactly as the other three algorithms drop it.
@@ -1182,27 +1278,8 @@ function executeExistingGroupsReorder() {
       const notes = diagram.annotations.filter(a => a.type === 'note');
       diagram.setAnnotations([...notes, ...res.annotations]);
     }
-
-    resetOrientation(diagram);
-    syncMenu();
-
-    if (selectedLineStyle) {
-      diagram.setEdgeRouting(selectedLineStyle);
-    }
-
-    diagram.markDirty();
-    diagram.fit();
-    diagram.onLayoutChange?.();
-    saveLayoutDebounced();
-    if (editorMode === 'layout') updateLayoutTextarea();
-    if (editorMode === 'visual') visualEditor?.render();
-
-    closeAIModal();
     flashButton($('btn-arrange'), res.implicit ? 'Arranged without groups' : 'Groups arranged');
-  } catch (err) {
-    console.warn('Arrange existing groups warning:', err);
-    alert(err.message || 'Could not arrange the existing groups.');
-  }
+  });
 }
 
 btnRunLocalAI?.addEventListener('click', () => executeAIReorder(false));
@@ -1502,60 +1579,38 @@ if (btnEdgeRouting && routingMenu) {
 
     const selectedKeys = diagram.selectedEdgeKey ? [diagram.selectedEdgeKey] : null;
 
-    if (item.id === 'btn-route-shortest-path') {
-      // Rip-up and reroute takes seconds on a big diagram, so it runs in the
-      // background while the button shows a spinner; the page stays usable. Its
-      // lines land only if the diagram is still the one it routed.
-      endFlash(btnEdgeRouting);
-      const icon = btnEdgeRouting.innerHTML;
-      const title = btnEdgeRouting.title;
-      btnEdgeRouting.innerHTML = '<span class="spinner" style="width:14px;height:14px"></span>';
-      btnEdgeRouting.disabled = true;
-      btnEdgeRouting.title = 'Calculating routes…';
-      const restore = () => {
-        btnEdgeRouting.disabled = false;
-        btnEdgeRouting.innerHTML = icon;
-        btnEdgeRouting.title = title;
-      };
-      startOptimalRoute(diagram, selectedKeys, {
-        onDone(summary) {
-          restore();
+    // Optimal Route, Ports and channels, Around tables.
+    const tool = { 'btn-route-shortest-path': 'optimal', 'btn-route-elk-ports': 'ports', 'btn-route-astar-grid': 'around' }[item.id];
+    if (tool) {
+      // Routing takes seconds on a big diagram (rip-up and reroute most of all), so
+      // it runs in the background while the button shows a spinner; the page stays
+      // usable. The lines land only if the diagram is still the one they were routed on.
+      const idle = busyButton(btnEdgeRouting, 'Calculating routes…');
+      startJob('lines', () => routeInput(diagram, { tool, targetKeys: selectedKeys }), {
+        apply(result) {
+          idle();
+          const summary = applyRoute(diagram, result);
           saveLayoutDebounced();
           if (editorMode === 'layout') updateLayoutTextarea();
-          const n = summary.routed;
-          flashButton(btnEdgeRouting, n
-            ? `${n} route${n !== 1 ? 's' : ''} · ${summary.crossings} crossing${summary.crossings !== 1 ? 's' : ''}`
-            : 'No lines');
+          if (tool === 'optimal') {
+            const n = summary.routed;
+            flashButton(btnEdgeRouting, n
+              ? `${n} route${n !== 1 ? 's' : ''} · ${summary.crossings} crossing${summary.crossings !== 1 ? 's' : ''}`
+              : 'No lines');
+          } else {
+            flashButton(btnEdgeRouting, summary ? `${summary} route${summary !== 1 ? 's' : ''}` : 'Clean routes');
+          }
         },
         onStale() {
-          restore();
+          idle();
           flashButton(btnEdgeRouting, 'Diagram changed · not applied');
         },
         onFail(message) {
-          restore();
-          console.warn('Optimal Route failed:', message);
+          idle();
+          console.warn('Routing the lines failed:', message);
           flashButton(btnEdgeRouting, 'Could not route');
         },
       });
-      return;
-    }
-
-
-    if (item.id === 'btn-route-elk-ports') {
-      const count = organizeLinesElkPorts(diagram, selectedKeys);
-      saveLayoutDebounced();
-      if (editorMode === 'layout') updateLayoutTextarea();
-      flashButton(btnEdgeRouting, count ? `${count} route${count !== 1 ? 's' : ''}` : 'Clean routes');
-      return;
-    }
-
-
-
-    if (item.id === 'btn-route-astar-grid') {
-      const count = organizeLinesAStar(diagram, selectedKeys);
-      saveLayoutDebounced();
-      if (editorMode === 'layout') updateLayoutTextarea();
-      flashButton(btnEdgeRouting, count ? `${count} route${count !== 1 ? 's' : ''}` : 'Clean routes');
       return;
     }
 
@@ -1812,6 +1867,37 @@ function endFlash(btn) {
   if (st.icon) btn.classList.add('icon');
   flashState.delete(btn);
 }
+
+// A button parked on a spinner while its job runs in the background. Jobs can
+// overlap on one button (typing while the tables are being laid out, say), so it
+// comes back only once the last of them is done. Returns the function that says
+// a job is done; calling it again does nothing.
+const busyState = new Map();
+
+function busyButton(btn, title) {
+  let st = busyState.get(btn);
+  if (!st) {
+    endFlash(btn);
+    st = { jobs: 0, html: btn.innerHTML, title: btn.title };
+    busyState.set(btn, st);
+    btn.innerHTML = '<span class="spinner" style="width:14px;height:14px"></span>';
+    btn.disabled = true;
+    if (title) btn.title = title;
+  }
+  st.jobs++;
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    if (--st.jobs > 0) return;
+    busyState.delete(btn);
+    endFlash(btn);   // a flash shown meanwhile took the spinner for the button's content
+    btn.innerHTML = st.html;
+    btn.title = st.title;
+    btn.disabled = false;
+  };
+}
+
 $('btn-share').addEventListener('click', async () => {
   const btn = $('btn-share');
   const project = { app: 'dbdiga', version: 1, sql: sqlEl.value, dialect, ...collectLayout() };

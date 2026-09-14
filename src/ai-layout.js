@@ -282,9 +282,11 @@ export function applySemanticDomainLayout(model, domains, createGroups = true, o
 
   const tableMap = new Map(model.tables.map(t => [t.key.toLowerCase(), t]));
 
-  // Measure all tables
+  // Measure all tables. A worker cannot measure text, so there the sizes the page
+  // measured come in as options.measure (background-tasks.js).
+  const measure = options.measure || measureTable;
   for (const t of model.tables) {
-    const dims = measureTable(t);
+    const dims = measure(t);
     t.w = dims.w; t.h = dims.h; t.rowH = dims.rowH; t.headerH = dims.headerH;
   }
 
@@ -455,9 +457,12 @@ function extractJSON(rawText) {
 }
 
 /**
- * Execute reordering with Google Gemini API.
+ * Ask Google Gemini to sort the tables into business domains. Only the question
+ * runs here; laying the answer out is reorderWithDomains, which the page runs in
+ * the background. Returns { domains } as Gemini gave them, or { quota: message }
+ * when every Flash model is out of quota, so the caller can use Local AI instead.
  */
-export async function reorderWithGemini(model, apiKey, options = {}) {
+export async function askGemini(model, apiKey) {
   const cleanKey = apiKey ? apiKey.trim() : '';
   if (!cleanKey) {
     throw new Error('Gemini API Key is required. Please provide a key or choose Local AI.');
@@ -542,26 +547,29 @@ Include every single table from the schema. Do not omit any tables.`;
   }
 
   if (!rawText) {
-    // If Gemini quota is exceeded on all models or unavailable, fallback automatically to Local AI
+    // If Gemini quota is exceeded on all models or unavailable, the caller falls back to Local AI
     console.warn('Gemini quota reached on free tier. Gracefully falling back to Local AI:', lastError?.message);
-    const localResult = reorderWithLocalAI(model, options);
-    return {
-      ...localResult,
-      fallbackToLocal: true,
-      originalError: lastError?.message || 'Quota exceeded (429)',
-    };
+    return { quota: lastError?.message || 'Quota exceeded (429)' };
   }
 
   const parsed = extractJSON(rawText);
   if (!parsed.domains || !Array.isArray(parsed.domains)) {
     throw new Error('Invalid JSON structure returned by Gemini.');
   }
+  return { domains: parsed.domains };
+}
 
+/**
+ * Lay out the domains an AI sorted the tables into, given as { name, color,
+ * tables } with table names in any case. A table named twice stays in the first
+ * domain, and the tables left out go to a "General" one.
+ */
+export function reorderWithDomains(model, answer, options = {}) {
   // Validate tables: map case-insensitively to exact table keys
   const validKeys = new Map(model.tables.map(t => [t.key.toLowerCase(), t.key]));
   const seen = new Set();
 
-  const domains = parsed.domains.map(d => {
+  const domains = answer.map(d => {
     const mappedTables = (d.tables || [])
       .map(k => validKeys.get(String(k).toLowerCase()))
       .filter(k => k && !seen.has(k));
