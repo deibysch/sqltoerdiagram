@@ -256,6 +256,35 @@ function spacingScale(spacing) {
   return { gap: f, pad: f, gutter: 1 + (f - 1) * 0.5 };
 }
 
+/**
+ * The padding of a group box and the gap between two tables side by side, at
+ * `spacing`: what this layout leaves, for whatever moves its tables afterwards
+ * (compact-refine.js).
+ */
+export function compactSpacing(spacing) {
+  const S = spacingScale(spacing);
+  return {
+    padX: Math.round(GL_PAD_X * S.pad),
+    padTop: Math.round(GL_PAD_TOP * S.pad),
+    padBottom: Math.round(GL_PAD_BOTTOM * S.pad),
+    gap: Math.round(GL_INNER.nodesep * S.gap),
+  };
+}
+
+/** The box this layout draws around `tables`, with the padding of compactSpacing(). */
+export function fitGroupBox(tables, pad) {
+  const x0 = Math.min(...tables.map(t => t.x));
+  const y0 = Math.min(...tables.map(t => t.y));
+  const x1 = Math.max(...tables.map(t => t.x + t.w));
+  const y1 = Math.max(...tables.map(t => t.y + t.h));
+  return {
+    x: Math.round(x0 - pad.padX),
+    y: Math.round(y0 - pad.padTop),
+    w: Math.round(x1 - x0 + pad.padX * 2),
+    h: Math.round(y1 - y0 + pad.padTop + pad.padBottom),
+  };
+}
+
 /** Groups defined on the canvas, with their member tables resolved. */
 export function collectGroupsCompact(model, annotations = []) {
   const tables = model?.tables || [];
@@ -854,24 +883,14 @@ export function arrangeGroupsCompact(diagram, opts = {}) {
   placeLoose();
   // --- Group boxes, measured from the tables actually inside them.
   const notes = (diagram.annotations || []).filter(a => a.type !== 'group');
-  const boxes = groups.slice().sort((a, b) => a.rank - b.rank).map((g) => {
-    const i = g.rank;
-    const x0 = Math.min(...g.tables.map(t => t.x));
-    const y0 = Math.min(...g.tables.map(t => t.y));
-    const x1 = Math.max(...g.tables.map(t => t.x + t.w));
-    const y1 = Math.max(...g.tables.map(t => t.y + t.h));
-    return {
-      id: g.id || `group_gl_${i}_${Date.now().toString(36)}`,
-      type: 'group',
-      text: g.name,
-      color: g.color || 'blue',
-      tables: g.listed,
-      x: Math.round(x0 - PAD_X),
-      y: Math.round(y0 - PAD_TOP),
-      w: Math.round(x1 - x0 + PAD_X * 2),
-      h: Math.round(y1 - y0 + PAD_TOP + PAD_BOTTOM),
-    };
-  });
+  const boxes = groups.slice().sort((a, b) => a.rank - b.rank).map((g) => ({
+    id: g.id || `group_gl_${g.rank}_${Date.now().toString(36)}`,
+    type: 'group',
+    text: g.name,
+    color: g.color || 'blue',
+    tables: g.listed,
+    ...fitGroupBox(g.tables, { padX: PAD_X, padTop: PAD_TOP, padBottom: PAD_BOTTOM }),
+  }));
   diagram.setAnnotations([...notes, ...boxes]);
 
   diagram.markDirty();

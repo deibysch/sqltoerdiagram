@@ -979,9 +979,11 @@ compactSearch = createCompactSearch({
   host: canvas.parentElement,
   getSpacing: () => layoutOpts.spacing,
   getShape: () => layoutOpts.shape,
-  // what every rearrange does once the tables have moved
-  afterApply: () => {
+  // what every rearrange does once the tables have moved; a layout Refine reached
+  // from a turned diagram is still turned that way
+  afterApply: (entry) => {
     resetOrientation(diagram);
+    if (entry?.orientation) diagram.orientation = entry.orientation;
     syncMenu();
     diagram.fit();
     saveLayoutDebounced();

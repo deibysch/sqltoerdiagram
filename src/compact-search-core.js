@@ -85,8 +85,8 @@ export function compactInputKey(input) {
   ]);
 }
 
-// A throwaway diagram for one try or one measurement: its own copies of the tables.
-function diagramFrom(input, positions = null) {
+/** A throwaway diagram for one try or one measurement: its own copies of the tables. */
+export function diagramFrom(input, positions = null) {
   const at = positions ? new Map(positions.map(([key, x, y]) => [key, { x, y }])) : null;
   return {
     model: {
@@ -222,6 +222,14 @@ export function stepReport(search, step) {
 export function measureRealLines(input, positions) {
   const d = diagramFrom(input, positions);
   organizeLinesShortestPath(d, null, { recordHistory: false, forceStyle: false });
+  return realLinesOf(d);
+}
+
+/**
+ * measureRealLines() of a diagram whose lines are already routed: what they
+ * measure, the lines as the diagram stores them, and each route as points.
+ */
+export function realLinesOf(d) {
   const routes = [];
   let length = 0, bends = 0;
   for (const e of getDiagramEdges(d)) {

@@ -23,11 +23,18 @@
 // applied, and an applied layout brings its measured lines along when the diagram
 // draws 90 degree lines.
 //
+// Refine goes the other way: rather than new starting points, neighbouring
+// tables trade places, each swap judged by the real lines (compact-refine.js).
+// It starts from the layout on the canvas and, after a search, the best two
+// others, then puts the best layout it reaches on the canvas with its lines.
+// From then on the panel compares by the real lines.
+//
 // What a search finds stays good while the schema, the groups and the settings
 // stay as they were (compactInputKey): tables can be moved around meanwhile,
 // even while it runs. Anything else stops the search and drops what it found.
 
 import { compactInput, compactInputKey, createJob, keepBest, mergeTop, applyCompactResult } from './compact-search-core.js';
+import { createRefineJob } from './compact-refine.js';
 import { compactLayoutMetrics } from './group-layout-compact.js';
 import { goalOf, resolveShape, rankScore, rankCandidates, chooseBest, ratioText } from './layout-goals.js';
 import { measureTable } from './renderer.js';
@@ -37,6 +44,8 @@ const SEARCH_LIMIT_MS = 10 * 60 * 1000;   // a search left running stops by itse
 const OPTIONS_COUNT = 3;                  // layouts shown beside the current one, and measured
 const KEEP = OPTIONS_COUNT + 1;           // one of the best may be the layout on the canvas
 const FRONT = 8;                          // layouts kept for improving lines and crossings at once
+const REFINE_STARTS = 3;                  // layouts Refine starts from: the one on the canvas and the best others
+const KEEP_REFINED = 4;                   // layouts Refine reached, kept among the candidates
 
 const nf = new Intl.NumberFormat('en-US');
 const count = (n, one, many) => `${nf.format(n)} ${n === 1 ? one : many}`;
@@ -65,16 +74,21 @@ function clock(ms) {
 }
 
 /**
- * Run a job (createJob) in a worker, reporting each step and the end. A worker
- * that fails before saying a word never started (a browser without module
- * workers, say), so the same job then runs on the page, one step per task.
- * Returns { stop }.
+ * Run a job (createJob, or createRefineJob) in a worker, reporting each step and
+ * the end. A worker that fails before saying a word never started (a browser
+ * without module workers, say), so the same job then runs on the page, one step
+ * per task. Returns { stop }.
  */
 function runJob(message, on) {
   const onPage = () => {
-    const job = createJob(message);
+    const job = message.kind === 'refine' ? createRefineJob(message) : createJob(message);
     let stopped = false;
-    const tick = () => {
+    const failed = (err) => {
+      stopped = true;
+      job.close?.();
+      on.fail(err?.message || String(err));
+    };
+    const tick = async () => {
       if (stopped) return;
       try {
         if (job.done()) {
@@ -82,16 +96,17 @@ function runJob(message, on) {
           on.done(job.finish());
           return;
         }
-        on.step(job.step());
+        const report = await job.step();
+        if (stopped) return;
+        on.step(report);
       } catch (err) {
-        stopped = true;
-        on.fail(err?.message || String(err));
+        failed(err);
         return;
       }
       setTimeout(tick, 0);
     };
     setTimeout(tick, 0);
-    return { stop() { stopped = true; } };
+    return { stop() { stopped = true; job.close?.(); } };
   };
 
   let worker;
@@ -145,6 +160,7 @@ function buildPanel(host) {
       <button type="button" class="btn primary sp-apply" hidden title="Puts the best layout found on the canvas. Ctrl+Z goes back.">Apply best</button>
       <button type="button" class="btn ghost sp-compare" hidden title="Shows the best layouts found beside the current one, to pick one by eye.">Compare</button>
       <button type="button" class="btn primary sp-search" title="Tries other starting points in the background until you stop it. The diagram does not change until you apply a layout.">Search</button>
+      <button type="button" class="btn ghost sp-refine" hidden title="Neighbouring tables trade places wherever the real 90° lines come out shorter or with fewer crossings, each swap judged with Optimal Route. Starts from the layout on the canvas and, after a search, the best two others, then applies the best it reaches, lines included. Seconds on a big diagram; Stop applies the best found so far.">Refine</button>
       <button type="button" class="btn ghost sp-lines" hidden></button>
       <button type="button" class="btn primary sp-stop" hidden>Stop</button>
     </div>`;
@@ -154,7 +170,7 @@ function buildPanel(host) {
     el,
     spinner: q('.sp-spinner'), title: q('.sp-title'), status: q('.sp-status'), note: q('.sp-note'),
     progress: q('.sp-progress'), ask: q('.sp-ask'), askYes: q('.sp-ask-yes'), askNo: q('.sp-ask-no'),
-    apply: q('.sp-apply'), compare: q('.sp-compare'), search: q('.sp-search'), lines: q('.sp-lines'),
+    apply: q('.sp-apply'), compare: q('.sp-compare'), search: q('.sp-search'), refine: q('.sp-refine'), lines: q('.sp-lines'),
     stop: q('.sp-stop'), close: q('.sp-close'),
   };
 }
@@ -327,6 +343,8 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     attempts: 0, elapsed: 0, nextSeed: 0,
     lines: 'estimate', asked: false, // compared by the estimate or by the real lines, once asked
     real: new Map(),                // layout signature -> its measurement with the real lines
+    refined: [],                    // the layouts Refine reached
+    settled: new Set(),             // ... where it ended: refining them again finds nothing
   });
 
   const canvasSignature = () => diagram.model.tables.map(t => `${t.x},${t.y}`).join(';');
@@ -354,11 +372,12 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     };
   }
 
-  // everything the searches kept, once; nothing before the first search
+  // everything the searches kept and Refine reached, once; nothing searched before the first search
   function pool() {
-    if (!session?.attempts) return [];
+    if (!session) return [];
     const seen = new Set();
-    return [...session.top, ...session.front].filter(r => !seen.has(r.signature) && seen.add(r.signature));
+    const searched = session.attempts ? [...session.top, ...session.front] : [];
+    return [...searched, ...session.refined].filter(r => !seen.has(r.signature) && seen.add(r.signature));
   }
 
   // the same layout with its real-line metrics, when it has been measured
@@ -444,6 +463,7 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
         if (j.kind === 'measure') j.session.lines = 'estimate';
         setNote(j.kind === 'arrange' ? `Could not arrange the tables: ${message}`
           : j.kind === 'measure' ? `Could not measure the real lines: ${message}`
+          : j.kind === 'refine' ? `Refine stopped on an error: ${message}`
           : `The search stopped on an error: ${message}`);
         render();
       },
@@ -523,6 +543,78 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     }, { keepNote: true });
   }
 
+  // Refine: the layout on the canvas and, after a search, the best two others,
+  // each swap judged by the real lines. From here on the panel compares by them.
+  function refine() {
+    if (job || !settings) return;
+    const { input, key } = readInput();
+    if (!session || session.key !== key) session = newSession(key);
+    const s = session;
+    const base = canvasEntry();
+    const others = standing().ranked.slice(0, REFINE_STARTS - 1);
+    s.lines = 'real';
+    s.asked = true;
+    const starts = [
+      {
+        signature: base.signature, positions: base.positions, orientation: diagram.orientation || 'LR',
+        groupBoxes: (diagram.annotations || []).filter(a => a.type === 'group'),
+      },
+      ...others.map(c => ({ signature: c.signature, positions: c.positions, groupBoxes: c.groupBoxes, orientation: c.orientation || 'LR' })),
+    ].map(start => ({
+      ...start,
+      groupBoxes: start.groupBoxes.map(b => ({ ...b, tables: [...(b.tables || [])] })),
+      // measured already: those lines, which can be better than routing from scratch
+      measurement: s.real.get(start.signature) || null,
+    }));
+    const j = {
+      kind: 'refine', key, session: s, base, starts: starts.length,
+      index: 0, round: 0, phase: 'measuring', evaluated: 0, total: 0, baseReal: null, best: null,
+    };
+    begin(j, { kind: 'refine', input, starts }, {
+      step(m) {
+        if (m.type === 'measured') {
+          s.real.set(m.signature, m.measurement);
+          if (m.index === 0) j.baseReal = m.measurement;
+        } else if (m.type === 'best') {
+          const { measurement, ...entry } = m.result;
+          s.real.set(entry.signature, measurement);
+          j.best = entry;
+        } else if (m.type === 'progress') {
+          Object.assign(j, { index: m.index, round: m.round, phase: m.phase, evaluated: m.evaluated, total: m.total });
+        }
+      },
+      done() {
+        finishRefine(j, { stopped: false });
+      },
+    });
+  }
+
+  // What Refine reached joins the candidates; the best goes on the canvas when it
+  // beats what is there, unless the canvas changed meanwhile.
+  function finishRefine(j, { stopped }) {
+    const s = j.session;
+    const best = j.best;
+    if (!best) {
+      setNote('Stopped refining before the lines were measured. Nothing moved.');
+      return;
+    }
+    if (!stopped) s.settled.add(best.signature);
+    s.refined = [best, ...s.refined.filter(r => r.signature !== best.signature)].slice(0, KEEP_REFINED);
+    const real = s.real.get(best.signature);
+    if (best.signature === j.base.signature) {
+      setNote(stopped ? 'Stopped refining: nothing better found yet.'
+        : 'Refined with the real lines: no swap of neighbouring tables improves them.', { aboutCanvas: true });
+      return;
+    }
+    if (canvasSignature() !== j.base.signature) {
+      setNote('The diagram changed while refining, so nothing moved. The refined layout is under Compare.');
+      return;
+    }
+    apply(best);
+    setNote(`${stopped ? 'Stopped refining, applied the best so far' : 'Refined with the real lines'}: ` +
+      `${describeChange(j.baseReal.metrics, real.metrics)}. Ctrl+Z goes back.`, { aboutCanvas: true });
+  }
+
   function stop() {
     const j = halt();
     if (!j) return;
@@ -530,7 +622,8 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     else if (j.kind === 'measure') {
       j.session.lines = 'estimate';
       setNote('Stopped measuring: back to the estimate.');
-    } else if (!j.finished) setNote('Stopped before a try finished.');
+    } else if (j.kind === 'refine') finishRefine(j, { stopped: true });
+    else if (!j.finished) setNote('Stopped before a try finished.');
     render();
   }
 
@@ -543,6 +636,7 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
       const j = halt();
       setNote(j.kind === 'arrange' ? 'Stopped: the diagram changed. Nothing moved.'
         : j.kind === 'measure' ? 'Stopped measuring: the diagram changed.'
+        : j.kind === 'refine' ? 'Stopped refining: the diagram changed. Nothing moved.'
         : 'Search stopped: the diagram changed.');
     }
     if (session && session.key !== key) session = null;
@@ -582,6 +676,17 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     if (j.kind === 'measure') {
       return `Measuring real lines · ${j.measured} of ${j.total} · ${clock(performance.now() - j.startedAt)}`;
     }
+    if (j.kind === 'refine') {
+      const which = j.starts > 1 ? `layout ${j.index + 1} of ${j.starts} · ` : '';
+      const doing = j.phase === 'measuring'
+        ? (j.round ? `round ${j.round + 1} · routing every line` : 'routing every line')
+        : `round ${j.round + 1} · ${nf.format(j.evaluated)} of ${count(j.total, 'swap', 'swaps')}`;
+      const real = j.best && s.real.get(j.best.signature);
+      const found = real && j.best.signature !== j.base.signature
+        ? `best: ${describeChange(j.baseReal.metrics, real.metrics)}`
+        : 'nothing better yet';
+      return `Refining with real lines · ${which}${doing} · ${found} · ${clock(performance.now() - j.startedAt)}`;
+    }
     const best = s.top.find(r => r.signature !== j.base.signature);
     const found = best && best.score < j.base.score - 0.5
       ? `best: ${describeChange(j.base.metrics, best.metrics)}`
@@ -591,8 +696,11 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
 
   function idleText(st, best) {
     const prefix = st.real ? 'Real lines · ' : '';
+    if (best) {
+      const of = session.attempts ? `Best of ${tries(session.attempts)}` : 'Best found';
+      return `${prefix}${of}: ${describeChange(st.current.metrics, best.metrics)}`;
+    }
     if (!session?.attempts) return prefix + metricsText(st.current.metrics);
-    if (best) return `${prefix}Best of ${tries(session.attempts)}: ${describeChange(st.current.metrics, best.metrics)}`;
     return st.real
       ? `Real lines · the current layout is the best of the ${count(st.ranked.length + 1, 'layout', 'layouts')} measured.`
       : `The current layout is the best of ${tries(session.attempts)}.`;
@@ -609,7 +717,7 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     ui.progress.hidden = !running;
     ui.stop.hidden = !running;
     if (running) {
-      for (const b of [ui.apply, ui.compare, ui.search, ui.lines, ui.ask]) b.hidden = true;
+      for (const b of [ui.apply, ui.compare, ui.search, ui.refine, ui.lines, ui.ask]) b.hidden = true;
       ui.status.textContent = workingText(job);
       return;
     }
@@ -626,6 +734,8 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     // the button to press next stands out
     ui.search.classList.toggle('primary', !best);
     ui.search.classList.toggle('ghost', !!best);
+    // nothing to refine where a refine has just ended
+    ui.refine.hidden = !!session?.settled.has(canvasSignature());
     // once there is something to compare, ask once; after that, a button switches
     const asking = hasOptions && !session.asked;
     ui.ask.hidden = !asking;
@@ -706,6 +816,7 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
   ui.apply.addEventListener('click', applyBest);
   ui.compare.addEventListener('click', compare);
   ui.search.addEventListener('click', search);
+  ui.refine.addEventListener('click', refine);
   ui.stop.addEventListener('click', stop);
   ui.askYes.addEventListener('click', () => answer(true));
   ui.askNo.addEventListener('click', () => answer(false));

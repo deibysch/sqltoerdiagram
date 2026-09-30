@@ -689,6 +689,12 @@ function spBuildGlobalGrid(tables, fixed = []) {
   return { xs: merge(baseX, portX, laneX), ys: merge(baseY, portY, laneY) };
 }
 
+/** How many nodes the grid of Optimal Route has over these tables: what a router's memory goes with. */
+export function spGridSize(tables) {
+  const { xs, ys } = spBuildGlobalGrid(tables.filter(t => Number.isFinite(t.x) && Number.isFinite(t.y)));
+  return xs.length * ys.length;
+}
+
 /**
  * Intervals already occupied by routed lines, indexed by grid line. Travelling
  * along an occupied interval is forbidden; crossing one costs.
