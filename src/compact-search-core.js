@@ -217,11 +217,17 @@ export function stepReport(search, step) {
  * `positions` puts them, which is what the canvas draws once that route is
  * applied. Returns the metrics as the estimate names them (bends are the corners
  * of the drawn lines), the lines themselves as the diagram stores them, and each
- * route as points, for the thumbnails. Takes a second or more on a big diagram.
+ * route as points, for the thumbnails.
+ *
+ * It is the quick Optimal Route, without the pair phase: on a real schema of 39
+ * tables and 79 relations the full one took 47 to 143 s per layout on one core,
+ * the quick one 5.5 to 9 s, for 104 crossings against 107, 176 against 182 and
+ * 84 against 97, which ranks layouts the same way. Lines > Optimal Route still
+ * draws the full one.
  */
 export function measureRealLines(input, positions) {
   const d = diagramFrom(input, positions);
-  organizeLinesShortestPath(d, null, { recordHistory: false, forceStyle: false });
+  organizeLinesShortestPath(d, null, { recordHistory: false, forceStyle: false, quick: true });
   return realLinesOf(d);
 }
 

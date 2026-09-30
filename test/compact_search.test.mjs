@@ -6,7 +6,7 @@ import {
   polishGoalFor, measureRealLines, createJob,
 } from '../src/compact-search-core.js';
 import { rankScore, resolveShape, improvesBoth } from '../src/layout-goals.js';
-import { spCountCrossings } from '../src/line-organizer.js';
+import { spCountCrossings, organizeLinesShortestPath } from '../src/line-organizer.js';
 import { measureTable } from '../src/renderer.js';
 
 // --- schemas --------------------------------------------------------------
@@ -198,6 +198,35 @@ test('without groups, applying a try leaves no group box behind', () => {
 });
 
 // --- the real lines ---------------------------------------------------------
+
+test('a layout is measured with the quick Optimal Route, the one Refine judges by', () => {
+  // nine tables in a grid, two relations each at random (the seeded grid of
+  // optimal_route.test.mjs): dense enough that the full Optimal Route draws other
+  // lines than the quick one
+  const rnd = (() => { let s = 12345; return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; })();
+  const tables = [];
+  for (let i = 0; i < 9; i++) {
+    tables.push({ key: `t${i}`, name: `t${i}`, x: 60 + (i % 3) * 260, y: 60 + Math.floor(i / 3) * 230, w: 180, h: 126,
+      columns: [{ name: 'id' }, { name: 'a_id' }, { name: 'b_id' }, { name: 'c_id' }] });
+  }
+  const relations = [];
+  for (let i = 0; i < 9; i++) {
+    for (const col of ['a_id', 'b_id']) {
+      const j = Math.floor(rnd() * 9);
+      if (j !== i) relations.push({ fromTable: `t${i}`, toTable: `t${j}`, fromCols: ['id'], toCols: [col] });
+    }
+  }
+  const input = compactInput(shell(tables, relations, []), SETTINGS);
+  const positions = tables.map(t => [t.key, t.x, t.y]);
+  const drawn = (quick) => {
+    const d = shell(tables.map(t => ({ ...t })), relations, []);
+    organizeLinesShortestPath(d, null, { recordHistory: false, forceStyle: false, quick });
+    return [...d.edgeWaypoints].map(([key, pts]) => [key, pts.map(p => ({ x: p.x, y: p.y }))]);
+  };
+  const { lines } = measureRealLines(input, positions);
+  assert.deepStrictEqual(lines.waypoints, drawn(true));
+  assert.notDeepStrictEqual(lines.waypoints, drawn(false), 'not the full one');
+});
 
 test('a layout measured with the real lines counts what those lines do', () => {
   const d = measured(schema(16, 3, 8));

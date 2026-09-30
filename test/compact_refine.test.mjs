@@ -279,9 +279,23 @@ test('a start measured already keeps its lines and is not routed again', () => {
   const measurement = measureRealLines(input, start.positions);
   const known = run({ ...start, measurement });
   const fresh = run(start);
-  assert.strictEqual(known.reports.find(m => m.type === 'measured').measurement, measurement);
-  assert.strictEqual(known.routed, fresh.routed - 1, 'only the start is not routed');
+  const measured = (r) => r.reports.find(m => m.type === 'measured');
+  assert.strictEqual(measured(known).measurement, measurement);
+  assert.strictEqual(known.routed, 0, 'Refine routes a whole layout only to measure a start');
+  assert.strictEqual(fresh.routed, 1);
   assert.deepStrictEqual(outcome(known.reports), outcome(fresh.reports), 'measured the same, it refines the same');
+});
+
+test('a refine says which layouts it refined to the end, and a settled start is only measured', () => {
+  const { input, start, reports } = REFINES[0][1]();
+  const settled = reports.filter(m => m.type === 'settled');
+  const end = lastBest(reports).signature;
+  assert.deepStrictEqual(settled.map(m => m.signatures), [[start.signature, end]]);
+
+  const again = runAll(createRefineJob({ kind: 'refine', input, starts: [{ ...start, settled: true }] }));
+  assert.ok(again.some(m => m.type === 'measured'), 'measured');
+  assert.ok(!again.some(m => m.type === 'progress' && m.phase === 'swapping'), 'but no swap tried');
+  assert.ok(!again.some(m => m.type === 'settled'));
 });
 
 // --- on several cores -----------------------------------------------------------
@@ -328,7 +342,7 @@ test('helpers on other cores reach exactly the layouts and lines of one core', a
   const delay = delays(7);
   let spawned = 0;
   const judge = (ctx) => parallelJudge(ctx, {
-    spawn: () => { spawned++; return fakeHelper(delay); }, helpers: 3, routeHelpers: { helpers: 1 },
+    spawn: () => { spawned++; return fakeHelper(delay); }, helpers: 3,
   });
   const many = await runAllAsync(createRefineJob(message, judge));
   assert.strictEqual(spawned, 3);
@@ -340,7 +354,7 @@ test('helpers that stop part way leave the rest to this thread, with the same re
   const { message, reports: one } = onOneCore();
   const delay = delays(3);
   const judge = (ctx) => parallelJudge(ctx, {
-    spawn: () => fakeHelper(delay, { failAfter: 4 }), helpers: 3, routeHelpers: { helpers: 1 },
+    spawn: () => fakeHelper(delay, { failAfter: 4 }), helpers: 3,
   });
   const many = await runAllAsync(createRefineJob(message, judge));
   assert.deepStrictEqual(outcome(many), outcome(one));

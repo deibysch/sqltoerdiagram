@@ -1476,8 +1476,10 @@ export function* spRouteSteps(diagram, targetKeys = null, options = {}) {
   //   that must not change the line style can switch these off.
   // quick: skip the pairwise lane-swap rounds and cap rip-up at two passes. For
   //   repairing a handful of lines, where waiting half a minute defeats the point.
-  const { keepOthers = false, recordHistory = true, forceStyle = true, quick = false } = options;
-  const maxPasses = quick ? 2 : SP_MAX_PASSES;
+  // ripUpPasses: the rip-up passes a quick run makes, 0 for none: only the lines
+  //   routed shortest-first once. For judging a layout rather than drawing it.
+  const { keepOthers = false, recordHistory = true, forceStyle = true, quick = false, ripUpPasses = 2 } = options;
+  const maxPasses = quick ? ripUpPasses : SP_MAX_PASSES;
   const swapRounds = quick ? 0 : SP_SWAP_ROUNDS;
   const edges = getDiagramEdges(diagram, targetKeys);
   if (!edges.length) return { routed: 0, crossings: 0, overlaps: 0, passes: 0 };

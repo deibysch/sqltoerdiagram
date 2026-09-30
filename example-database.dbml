@@ -1,0 +1,621 @@
+// ==============================================================================
+// PROYECTO: Mi Dulce Flor
+// DESCRIPCIÓN: Esquema Relacional de Base de Datos DBML
+// EXTENSIÓN: Optimizado para TWulfZ.dddbml (VS Code) & dbdiagram.io
+// ==============================================================================
+
+Project MiDulceFlor {
+  database_type: 'PostgreSQL'
+  Note: '''
+    # Mi Dulce Flor — Base de Datos Central
+    Sistema de Gestión de Inventario, Ventas, Consignaciones, Compras y Campañas.
+    Organizado en 6 Bounded Contexts / Áreas funcionales.
+  '''
+}
+
+// ==============================================================================
+// 1. SEGURIDAD Y ACCESO
+// ==============================================================================
+
+Table rol {
+  id int [pk, increment]
+  nombre varchar(50) [unique, not null, note: 'ADMINISTRADOR, VENDEDORA, LOGISTICA']
+  descripcion varchar(255) [null]
+
+  Note: 'Roles de usuario y control de accesos'
+}
+
+Table permiso {
+  id int [pk, increment]
+  nombre varchar(100) [unique, not null]
+  modulo varchar(50) [null]
+
+  Note: 'Permisos granulares del sistema'
+}
+
+Table rol_permiso {
+  rol_id int [ref: > rol.id, not null]
+  permiso_id int [ref: > permiso.id, not null]
+
+  indexes {
+    (rol_id, permiso_id) [pk]
+  }
+
+  Note: 'Tabla intermedia N:M de asignación de permisos por rol'
+}
+
+Table usuario {
+  id int [pk, increment]
+  rol_id int [ref: > rol.id, not null]
+  nombre varchar(100) [not null]
+  correo varchar(150) [unique, not null, note: 'Credencial de Login']
+  contrasena varchar(255) [not null]
+  telefono varchar(30) [null]
+  activo boolean [not null, default: true]
+
+  Note: 'Usuarios operativos y administradores del sistema'
+}
+
+TableGroup SeguridadYAcceso [color: #38bdf8] {
+  rol
+  permiso
+  rol_permiso
+  usuario
+}
+
+// ==============================================================================
+// 2. CATÁLOGO E INVENTARIO
+// ==============================================================================
+
+Table categoria_producto {
+  id int [pk, increment]
+  nombre varchar(100) [unique, not null]
+  descripcion text [null]
+
+  Note: 'Categorías y familias de productos de maquillaje/belleza'
+}
+
+Table producto {
+  id int [pk, increment]
+  codigo_interno varchar(50) [unique, not null, note: 'SKU obligatorio y unico (identificador comercial de vitrina)']
+  alias varchar(150) [null, note: 'Nombre comercial corto opcional']
+  nombre varchar(150) [not null]
+  estado varchar(30) [not null, default: 'DISPONIBLE', note: 'DISPONIBLE, EN_TRANSITO, RESERVADO_PEDIDO, INACTIVO']
+  descripcion text [null]
+  url_imagen varchar(255) [null]
+  activo boolean [not null, default: true]
+
+  Note: 'Catálogo base de productos disponibles'
+}
+
+Table categoria_producto_pivote {
+  id int [pk, increment]
+  producto_id int [ref: > producto.id, not null]
+  categoria_id int [ref: > categoria_producto.id, not null]
+
+  indexes {
+    (producto_id, categoria_id) [unique]
+  }
+
+  Note: 'Tabla pivote N:M para categorías múltiples opcionales por producto'
+}
+
+Table imagen {
+  id int [pk, increment]
+  imageable_type varchar(255) [not null, note: 'Polymorphic: App\\Models\\Producto, App\\Models\\Gasto, etc.']
+  imageable_id bigint [not null]
+  ruta varchar(255) [not null, note: 'Ruta relativa en storage/app/public/']
+  es_portada boolean [not null, default: false]
+  orden int [not null, default: 0]
+
+  indexes {
+    (imageable_type, imageable_id)
+  }
+
+  Note: 'Motor polimórfico de fotografías y archivos adjuntos (productos, gastos, etc.)'
+}
+
+Table lote_inventario {
+  id int [pk, increment]
+  producto_id int [ref: > producto.id, not null]
+  proveedor_id int [ref: > proveedor.id, null, note: 'Nullable si es producto propio/Excel']
+  consignacion_id int [ref: > consignacion.id, null, note: 'Nullable si ingreso por remesa de consignacion']
+  compra_id int [ref: > compra.id, null, note: 'Compra que lo ingreso (nace al recibir una solicitud); null = consignacion o stock inicial']
+  precio_capital bigint [not null, note: 'PC en centavos: Costo real unitario de compra']
+  precio_por_mayor bigint [not null, note: 'PPM en centavos: Costo reposicion mayorista']
+  precio_tienda bigint [not null, note: 'PT en centavos: Precio referencial para venta tienda']
+  stock_inicial int [not null, default: 0]
+  stock_actual int [not null, default: 0]
+  fecha_ingreso datetime [null]
+  fecha_vencimiento date [null]
+  estado varchar(30) [not null, default: 'ACTIVO', note: 'ACTIVO, AGOTADO, RETIRADO']
+  pedido_cliente_id int [ref: > pedido_cliente.id, null, note: 'Lote apartado para el pedido de una clienta: solo se le vende a ella']
+
+  Note: 'Lotes valorizados de stock con trazabilidad de costos PC, PPM y PT'
+}
+
+Table conteo_inventario {
+  id int [pk, increment]
+  proveedor_id int [ref: > proveedor.id, null, note: 'null = mercaderia sin proveedor']
+  usuario_id int [ref: > usuario.id, not null]
+  campana_id int [ref: > campana.id, null]
+  fecha_hora datetime [not null]
+  productos_contados int [not null, default: 0]
+  productos_con_diferencia int [not null, default: 0]
+  notas varchar(500) [null]
+
+  Note: 'Conteo fisico de la mercaderia de un proveedor (planilla A4). Las diferencias generan ajustes SOBRANTE_CONTEO / FALTANTE_CONTEO'
+}
+
+Table detalle_conteo_inventario {
+  id int [pk, increment]
+  conteo_inventario_id int [ref: > conteo_inventario.id, not null]
+  producto_id int [ref: > producto.id, not null]
+  stock_sistema int [not null, note: 'Suma del stock de los lotes del proveedor al contar']
+  stock_contado int [not null]
+  diferencia int [not null, note: 'contado - sistema']
+}
+
+Table ajuste_inventario {
+  id int [pk, increment]
+  lote_id int [ref: > lote_inventario.id, not null]
+  conteo_inventario_id int [ref: > conteo_inventario.id, null, note: 'Ajuste generado por un conteo fisico']
+  usuario_id int [ref: > usuario.id, not null]
+  tipo_ajuste varchar(50) [not null, note: 'MERMA_ROTURA, FALLA_FABRICA, VENCIMIENTO, USO_INTERNO_MUESTRA, CANJE_PUBLICITARIO, BONIFICACION_REGALIA, REPOSICION_GARANTIA, DEVOLUCION_CLIENTE, SOBRANTE_CONTEO, FALTANTE_CONTEO']
+  cantidad int [not null]
+  costo_unitario_pc bigint [not null, note: 'PC historico del lote afectado en centavos']
+  motivo text [not null]
+  fecha_hora datetime [not null]
+
+  Note: 'Ajustes, mermas y modificaciones extraordinarias de stock'
+}
+
+TableGroup CatalogoEInventario [color: #4ade80] {
+  categoria_producto
+  producto
+  categoria_producto_pivote
+  imagen
+  lote_inventario
+  ajuste_inventario
+  conteo_inventario
+  detalle_conteo_inventario
+}
+
+// ==============================================================================
+// 3. COMERCIAL Y LOGÍSTICA
+// ==============================================================================
+
+Table cliente {
+  id int [pk, increment]
+  codigo_interno varchar(50) [unique, not null, note: 'Identificador unico ej: SC1482, 2216, DF0773B']
+  nombre varchar(150) [null, note: 'Nullable por confidencialidad/talonario rapido']
+  tipo_cliente varchar(30) [not null, default: 'LOCAL', note: 'LOCAL, NO_LOCAL_ENVIO, ANONIMO_TALONARIO']
+  telefono varchar(30) [null]
+  direccion text [null]
+  activo boolean [not null, default: true]
+
+  Note: 'Directorio de clientes mayoristas, locales y de envio'
+}
+
+Table pedido_cliente {
+  id int [pk, increment]
+  cliente_id int [ref: > cliente.id, not null]
+  campana_id int [ref: > campana.id, null, note: 'Campana de imputacion del anticipo']
+  venta_id int [ref: > venta.id, null, note: 'Venta con la que se entrego el pedido']
+  notas varchar(500) [null]
+  monto_adelanto bigint [not null, default: 0, note: 'Anticipo en centavos']
+  fecha_adelanto datetime [not null]
+  estado varchar(30) [not null, default: 'SOLICITADO', note: 'SOLICITADO (por pedir), EN_TRANSITO, RECIBIDO (listo para entregar), APLICADO_A_VENTA (vendido), CANCELADO. Se recalcula segun sus lineas']
+
+  Note: 'Pedidos que una clienta encarga a la tienda, con anticipo opcional'
+}
+
+Table detalle_pedido_cliente {
+  id int [pk, increment]
+  pedido_cliente_id int [ref: > pedido_cliente.id, not null]
+  producto_id int [ref: > producto.id, not null, note: 'Del catalogo o creado con el pedido (estado RESERVADO_PEDIDO)']
+  cantidad int [not null]
+  precio_acordado bigint [null, note: 'Precio unitario pactado con la clienta en centavos']
+
+  Note: 'Lineas del pedido de cliente'
+}
+
+Table tienda_telefono_whatsapp {
+  id int [pk, increment]
+  numero varchar(20) [unique, not null, note: 'Numero telefonico de WhatsApp']
+  etiqueta varchar(100) [not null, note: 'Etiqueta descriptiva (ej: WhatsApp Ventas 1)']
+  sufijo varchar(10) [null, note: 'Identificador corto (ej: W1, W2, W3)']
+  es_principal boolean [not null, default: false]
+  activo boolean [not null, default: true]
+
+  Note: 'Lineas oficiales corporativas de WhatsApp de atencion al cliente'
+}
+
+Table venta {
+  id int [pk, increment]
+  cliente_id int [ref: > cliente.id, not null]
+  usuario_vendedor_id int [ref: > usuario.id, not null, note: 'Vendedora que atendio la venta']
+  usuario_aprobador_id int [ref: > usuario.id, null, note: 'Usuario que aprobo y cobro la venta']
+  whatsapp_tienda_id int [ref: > tienda_telefono_whatsapp.id, null, note: 'Linea de WhatsApp receptora del pedido']
+  campana_id int [ref: > campana.id, null]
+  codigo_talonario_manual varchar(50) [null, note: 'Numero o referencia de nota fisica']
+  fecha_hora datetime [not null]
+  tipo_venta varchar(30) [not null, default: 'LOCAL_TIENDA', note: 'LOCAL_TIENDA, LOCAL_DELIVERY, NACIONAL_ENCOMIENDA']
+  total_venta bigint [not null, note: 'TV cobrado total en centavos']
+  descuento_general bigint [not null, default: 0, note: 'Descuento general final aprobado en centavos. Sale 100% de la GB: GB = Σ (PV - PPM) × cant - descuento + envio (VEN-01)']
+  monto_envio_cobrado bigint [not null, default: 0, note: 'Costo de flete trasladado al cliente en centavos']
+  monto_pagado bigint [not null, default: 0, note: 'Monto amortizado en centavos (para fiados)']
+  saldo_pendiente bigint [not null, default: 0, note: 'Saldo pendiente de cobro en centavos']
+  estado_pago varchar(30) [not null, default: 'PAGADO', note: 'PAGADO, PAGO_PARCIAL, PENDIENTE_CREDITO']
+  estado_aprobacion varchar(30) [not null, default: 'APROBADA', note: 'PENDIENTE (stock reservado, por aprobar), CANCELADA (la vendedora, mientras estaba pendiente), RECHAZADA (administracion; no se edita, se copia en una nota nueva), APROBADA, ANULADA (administracion, despues de aprobada)']
+  fecha_aprobacion datetime [null, note: 'Timestamp de aprobacion y cobro de la venta']
+  motivo_anulacion varchar(255) [null, note: 'Por que se cancelo, rechazo o anulo (segun estado_aprobacion)']
+  usuario_anulador_id int [ref: > usuario.id, null, note: 'Quien la cancelo, rechazo o anulo']
+  fecha_anulacion datetime [null, note: 'Cuando se cancelo, rechazo o anulo']
+
+  Note: 'Cabecera de ventas efectuadas en tienda o despachos'
+}
+
+Table detalle_venta {
+  id int [pk, increment]
+  venta_id int [ref: > venta.id, not null]
+  lote_id int [ref: > lote_inventario.id, not null]
+  cantidad int [not null]
+  precio_capital_unitario bigint [not null, note: 'PC historico del lote vendido en centavos']
+  precio_por_mayor_unitario bigint [not null, note: 'PPM historico del lote en centavos']
+  precio_unitario_vendido bigint [not null, note: 'PV cobrado y aprobado al cliente en centavos']
+  ganancia_bruta_unitaria bigint [not null, note: 'GB = PV - PPM en centavos']
+
+  Note: 'Lineas de venta con desglose unitario de rentabilidad GB'
+}
+
+Table envio {
+  id int [pk, increment]
+  venta_id int [ref: - venta.id, unique, not null, note: 'Relacion 1 a 1 estricta con la venta']
+  usuario_empaque_id int [ref: > usuario.id, null]
+  usuario_despacho_id int [ref: > usuario.id, null]
+  cuenta_financiera_id int [ref: > cuenta_financiera.id, null, note: 'Cuenta de donde se desembolsa el flete']
+  gasto_id int [ref: > gasto.id, null, note: 'Egreso contable generado por el flete']
+  destino_ciudad varchar(100) [not null]
+  empresa_transporte varchar(100) [null, note: 'Flota, Trufi, BoA, Mototaxi']
+  nro_guia_recibo varchar(100) [null]
+  envio_asumido_por varchar(30) [not null, default: 'CLIENTE', note: 'CLIENTE o TIENDA']
+  costo_flete_pagado bigint [not null, default: 0, note: 'Flete pagado en centavos']
+  foto_guia_despacho varchar(255) [null, note: 'Foto del paquete rotulado o guia de transporte']
+  estado_envio varchar(30) [not null, default: 'PENDIENTE', note: 'PENDIENTE, EMPAQUETADO, ENVIADO, ENTREGADO']
+  fecha_empaque datetime [null]
+  fecha_envio datetime [null]
+
+  Note: 'Logistica de empaque y despacho para encomiendas y deliveries'
+}
+
+TableGroup ComercialYLogistica [color: #facc15] {
+  tienda_telefono_whatsapp
+  cliente
+  pedido_cliente
+  detalle_pedido_cliente
+  venta
+  detalle_venta
+  envio
+}
+
+// ==============================================================================
+// 4. ABASTECIMIENTO Y GASTOS
+// ==============================================================================
+
+Table proveedor {
+  id int [pk, increment]
+  nombre_empresa varchar(150) [not null, note: 'Alexpress, Victor, Duena (Prestamo), Fabricas Brasil']
+  nombre_contacto varchar(100) [null]
+  telefono varchar(30) [null]
+  direccion text [null]
+  activo boolean [not null, default: true]
+
+  Note: 'Proveedores de compra (via solicitud) y de consignacion'
+}
+
+Table consignacion {
+  id int [pk, increment]
+  proveedor_id int [ref: > proveedor.id, not null, note: 'Alexpress, Victor o Duena']
+  usuario_id int [ref: > usuario.id, not null, note: 'Usuario que recepciona el paquete']
+  campana_id int [ref: > campana.id, null, note: 'Campana de ingreso']
+  nro_documento_remision varchar(100) [null, note: 'Guia fisica o nota de entrega']
+  fecha_recepcion datetime [not null]
+  estado varchar(30) [not null, default: 'ACTIVA', note: 'ACTIVA, CERRADA, ANULADA']
+  observaciones text [null]
+
+  Note: 'Remesas y cajas recibidas en modalidad de consignacion'
+}
+
+Table detalle_consignacion {
+  id int [pk, increment]
+  consignacion_id int [ref: > consignacion.id, not null]
+  producto_id int [ref: > producto.id, not null]
+  cantidad int [not null]
+  precio_capital_unitario bigint [not null, note: 'PC acordado con el consignante en centavos']
+
+  Note: 'Desglose de productos que ingresan en una consignacion'
+}
+
+Table solicitud_compra {
+  id int [pk, increment]
+  proveedor_id int [ref: > proveedor.id, not null]
+  usuario_id int [ref: > usuario.id, not null]
+  campana_id int [ref: > campana.id, null]
+  compra_id int [ref: - compra.id, null, note: 'Compra generada al recibir la mercaderia']
+  usuario_recepcion_id int [ref: > usuario.id, null]
+  fecha_solicitud datetime [not null]
+  fecha_estimada_llegada date [null]
+  fecha_recepcion datetime [null]
+  estado varchar(30) [not null, default: 'EN_TRANSITO', note: 'EN_TRANSITO, RECIBIDA, CANCELADA']
+  costo_transporte_importacion bigint [not null, default: 0]
+  total bigint [not null, default: 0, note: 'Estimado al pedir; real al recibir (centavos)']
+  monto_pagado bigint [not null, default: 0, note: 'Anticipos y cuotas pagados al proveedor (centavos)']
+  notas varchar(500) [null]
+
+  Note: 'Unico camino de compra (CMP-06): pedido al proveedor -> pagos (anticipo, cuotas, al recibir; de varias cuentas) -> recepcion que genera la compra. Lo que falte pagar queda como deuda'
+}
+
+Table detalle_solicitud_compra {
+  id int [pk, increment]
+  solicitud_compra_id int [ref: > solicitud_compra.id, not null]
+  producto_id int [ref: > producto.id, not null]
+  pedido_cliente_id int [ref: > pedido_cliente.id, null, note: 'Si se pidio para el pedido de una clienta: al llegar queda apartado para ella']
+  cantidad_solicitada int [not null]
+  cantidad_recibida int [null]
+  precio_capital_unitario bigint [not null]
+  precio_por_mayor bigint [not null]
+  precio_tienda bigint [not null]
+  fecha_vencimiento date [null]
+}
+
+Table compra {
+  id int [pk, increment]
+  proveedor_id int [ref: > proveedor.id, not null]
+  usuario_id int [ref: > usuario.id, not null]
+  campana_id int [ref: > campana.id, null]
+  fecha_hora datetime [not null]
+  total_compra bigint [not null, note: 'Total compra en centavos']
+  costo_transporte_importacion bigint [not null, default: 0, note: 'Costo transporte en centavos']
+
+  Note: 'Mercaderia recibida (solo lectura): nace al recibir una solicitud de compra (CMP-06); sus pagos estan en la solicitud'
+}
+
+Table detalle_compra {
+  id int [pk, increment]
+  compra_id int [ref: > compra.id, not null]
+  producto_id int [ref: > producto.id, not null]
+  cantidad int [not null]
+  precio_capital_unitario bigint [not null, note: 'PC facturado por el proveedor en centavos']
+
+  Note: 'Renglones y detalle de productos adquiridos'
+}
+
+Table categoria_gasto {
+  id int [pk, increment]
+  nombre varchar(100) [unique, not null, note: 'ENVIOS, SUELDOS, COMIDA, BOLSAS, SERVICIOS, IMPUESTOS']
+  descripcion varchar(255) [null]
+
+  Note: 'Clasificacion de rubros de gastos operativos'
+}
+
+Table gasto {
+  id int [pk, increment]
+  categoria_gasto_id int [ref: > categoria_gasto.id, not null]
+  campana_id int [ref: > campana.id, null]
+  usuario_id int [ref: > usuario.id, not null]
+  monto bigint [not null, note: 'Monto en centavos']
+  descripcion text [not null]
+  fecha_hora datetime [not null]
+
+  Note: 'Gastos operativos, viaticos y salidas de dinero del negocio'
+}
+
+TableGroup AbastecimientoYGastos [color: #c084fc] {
+  proveedor
+  solicitud_compra
+  detalle_solicitud_compra
+  compra
+  detalle_compra
+  consignacion
+  detalle_consignacion
+  categoria_gasto
+  gasto
+}
+
+// ==============================================================================
+// 5. TESORERÍA, CAJAS Y CUENTAS
+// ==============================================================================
+
+Table cuenta_financiera {
+  id int [pk, increment]
+  nombre varchar(100) [unique, not null, note: 'BNB, FIE, UNION, BISA, YAPE, TIGO, TIENDA_EFECTIVO, MSC']
+  tipo varchar(30) [not null, note: 'BANCO, BILLETERA, CAJA_EFECTIVO, FONDO_RESERVA']
+  numero_cuenta varchar(100) [null]
+  titular varchar(150) [null]
+  saldo_actual bigint [not null, default: 0, note: 'Saldo vivo acumulado en centavos']
+  activo boolean [not null, default: true]
+
+  Note: 'Bancos, billeteras digitales y cajas fisicas de la empresa'
+}
+
+Table transferencia_cuenta {
+  id int [pk, increment]
+  cuenta_origen_id int [ref: > cuenta_financiera.id, not null]
+  cuenta_destino_id int [ref: > cuenta_financiera.id, not null]
+  usuario_id int [ref: > usuario.id, not null]
+  caja_sesion_id int [ref: > caja_sesion.id, null, note: 'Turno activo de ejecucion']
+  monto bigint [not null, note: 'Monto transferido en centavos']
+  fecha_hora datetime [not null]
+  motivo_concepto varchar(255) [null]
+  nro_comprobante varchar(100) [null]
+
+  Note: 'Traspasos entre cuentas bancarias, billeteras o retiros a caja'
+}
+
+Table movimiento_cuenta {
+  id int [pk, increment]
+  cuenta_financiera_id int [ref: > cuenta_financiera.id, not null]
+  usuario_id int [ref: > usuario.id, not null]
+  tipo_movimiento varchar(50) [not null, note: 'INGRESO_PAGO, EGRESO_PAGO, TRANSFERENCIA_EGRESO, TRANSFERENCIA_INGRESO']
+  monto bigint [not null, note: 'Monto en centavos']
+  saldo_anterior bigint [not null, note: 'Saldo anterior en centavos']
+  saldo_posterior bigint [not null, note: 'Saldo posterior en centavos']
+  descripcion varchar(255) [null]
+  referencia_tipo varchar(50) [not null, note: 'Polimorfico: VENTA, COMPRA, etc.']
+  referencia_id int [not null, note: 'ID de la entidad vinculada']
+  fecha_hora datetime [not null]
+
+  Note: 'Libro mayor de transacciones auditables por cuenta'
+}
+
+Table caja_sesion {
+  id int [pk, increment]
+  usuario_apertura_id int [ref: > usuario.id, not null]
+  usuario_cierre_id int [ref: > usuario.id, null]
+  fecha_apertura datetime [not null]
+  fecha_cierre datetime [null]
+  estado varchar(30) [not null, default: 'ABIERTA', note: 'ABIERTA, CERRADA, ANULADA']
+  observaciones text [null]
+
+  Note: 'Turnos operativos de caja física de la tienda'
+}
+
+Table caja_sesion_arqueo {
+  id int [pk, increment]
+  caja_sesion_id int [ref: > caja_sesion.id, not null]
+  cuenta_financiera_id int [ref: > cuenta_financiera.id, not null]
+  saldo_inicial bigint [not null, default: 0, note: 'Saldo con que abre el turno en centavos']
+  total_ventas bigint [not null, default: 0, note: 'Cobros de ventas en este turno en centavos']
+  total_adelantos bigint [not null, default: 0, note: 'Adelantos cobrados en turno en centavos']
+  total_salidas_extras bigint [not null, default: 0, note: 'Gastos pagados en turno en centavos']
+  total_compras bigint [not null, default: 0, note: 'Compras pagadas en turno en centavos']
+  total_transferencias_ingreso bigint [not null, default: 0, note: 'Traspasos recibidos en turno en centavos']
+  total_transferencias_egreso bigint [not null, default: 0, note: 'Traspasos enviados en turno en centavos']
+  saldo_sistema_esperado bigint [not null, default: 0, note: 'Calculado en centavos: Inicial + Ventas + Adelantos - Gastos - Compras + Transf_In - Transf_Out']
+  saldo_real_declarado bigint [not null, default: 0, note: 'Contado fisico / extracto en centavos']
+  diferencia bigint [not null, default: 0, note: 'Sobrante (+) o Faltante (-) en centavos']
+  notas text [null]
+
+  Note: 'Arqueo detallado de cuentas por turno de caja'
+}
+
+Table pago {
+  id int [pk, increment]
+  pagable_type varchar(50) [not null, note: 'VENTA, COMPRA, GASTO, ENVIO, PEDIDO_ESPECIAL']
+  pagable_id int [not null]
+  cuenta_financiera_id int [ref: > cuenta_financiera.id, null, note: 'Nullable si metodo_pago = ADELANTO_PEDIDO']
+  pedido_cliente_id int [ref: > pedido_cliente.id, null, note: 'Anticipo del pedido de cliente aplicado como pago (ADELANTO_PEDIDO)']
+  caja_sesion_id int [ref: > caja_sesion.id, null, note: 'Turno exacto de ejecucion del pago']
+  usuario_id int [ref: > usuario.id, not null]
+  metodo_pago varchar(30) [not null, note: 'EFECTIVO, QR, TRANSFERENCIA, TARJETA, ADELANTO_PEDIDO']
+  monto bigint [not null, note: 'Monto pagado en centavos']
+  nro_referencia_bancaria varchar(100) [null]
+  fecha_hora datetime [not null]
+  notas text [null]
+
+  Note: 'Motor polimorfico universal de ingresos, egresos y amortizaciones'
+}
+
+TableGroup TesoreriaCajasYCuentas [color: #eab308] {
+  cuenta_financiera
+  transferencia_cuenta
+  movimiento_cuenta
+  caja_sesion
+  caja_sesion_arqueo
+  pago
+}
+
+// ==============================================================================
+// 6. AUDITORÍA Y CAMPAÑAS
+// ==============================================================================
+
+Table campana {
+  id int [pk, increment]
+  usuario_cierre_id int [ref: > usuario.id, null]
+  codigo_campana varchar(50) [unique, null]
+  fecha_inicio datetime [not null]
+  fecha_fin datetime [null]
+  estado varchar(30) [not null, default: 'ABIERTO', note: 'ABIERTO, CERRADO']
+  total_ganancia_liquida bigint [not null, default: 0, note: 'GL = GB + GR - Salidas en centavos']
+  total_ganancia_bruta_mostrador bigint [not null, default: 0, note: 'Suma de GB en centavos']
+  total_ganancia_recaudada bigint [not null, default: 0, note: 'Suma de GR en centavos']
+  total_capital_recaudado_proveedores bigint [not null, default: 0, note: 'Suma de CR en centavos']
+  total_salidas_extras bigint [not null, default: 0, note: 'Total salidas en centavos']
+  total_compras_directas bigint [not null, default: 0, note: 'Suma de compras directas y fletes en centavos']
+  total_adelantos_pedidos bigint [not null, default: 0, note: 'Suma de anticipos de clientes recibidos en centavos']
+  saldo_inicial_bancos_caja bigint [not null, default: 0, note: 'Total disponible al inicio del ciclo en centavos']
+  saldo_final_bancos_caja_sistema bigint [not null, default: 0, note: 'Calculado segun movimientos en centavos']
+  saldo_final_bancos_caja_real bigint [not null, default: 0, note: 'Total real contado/extractos al cierre en centavos']
+  dep_total_calculado bigint [not null, default: 0, note: 'Dinero Esperado en Campaña (DEP) en centavos']
+  total_bancos_caja_real bigint [not null, default: 0, note: 'Total real disponible en centavos']
+  de_diferencia bigint [not null, default: 0, note: 'DE+ = Total Real - DEP en centavos']
+  fecha_arqueo datetime [null, note: 'Paso 1 del asistente: cuando se declaro el dinero real']
+  motivo_diferencia varchar(500) [null, note: 'Obligatorio si DE+ != 0 al cerrar']
+  total_cr_pagado bigint [not null, default: 0, note: 'CR liquidado a proveedores al cerrar (centavos)']
+  total_monto_reservado bigint [not null, default: 0, note: 'Anticipos pendientes + reservas que quedan en cuenta (centavos)']
+  total_retiro_ganancia bigint [not null, default: 0, note: 'Retirado a la cuenta personal de la duena al cerrar (centavos)']
+
+  Note: 'Ciclos de cuadre general (Campaña). DEP = GL + CR a pagar + anticipos pendientes. Al cerrar, las cuentas quedan en 0 salvo lo reservado'
+}
+
+Table campana_proveedor {
+  id int [pk, increment]
+  campana_id int [ref: > campana.id, not null]
+  proveedor_id int [ref: > proveedor.id, not null]
+  unidades_vendidas_total int [not null, default: 0]
+  total_capital_recaudado bigint [not null, default: 0, note: 'CR = Suma(UV * PC) (Deuda al Proveedor) en centavos']
+  total_ganancia_recaudada bigint [not null, default: 0, note: 'GR = Suma(UV * (PPM - PC)) (Utilidad Tienda) en centavos']
+  monto_liquidado_pagado bigint [not null, default: 0, note: 'Monto liquidado en centavos']
+  estado_pago varchar(30) [not null, default: 'PENDIENTE', note: 'PENDIENTE, PAGADO']
+
+  Note: 'Liquidacion y saldo a pagar a cada proveedor por consignacion en la Campaña'
+}
+
+Table campana_inventario {
+  id int [pk, increment]
+  campana_id int [ref: > campana.id, not null]
+  lote_id int [ref: > lote_inventario.id, not null]
+  producto_nombre_historico varchar(150) [not null]
+  proveedor_nombre_historico varchar(150) [not null]
+  stock_inicial_campana int [not null, note: 'CI']
+  stock_final_campana int [not null, note: 'CF']
+  unidades_vendidas int [not null, note: 'UV = CI - CF']
+  precio_capital bigint [not null, note: 'PC en centavos']
+  precio_por_mayor bigint [not null, note: 'PPM en centavos']
+  precio_tienda bigint [not null, note: 'PT en centavos']
+  capital_recaudado bigint [not null, note: 'CR = UV * PC en centavos']
+  ganancia_recaudada bigint [not null, note: 'GR = UV * (PPM - PC) en centavos']
+
+  Note: 'Snapshot inmutable de unidades y valorizacion de inventario de la Campaña'
+}
+
+Table campana_cuenta {
+  id int [pk, increment]
+  campana_id int [ref: > campana.id, not null]
+  cuenta_financiera_id int [ref: > cuenta_financiera.id, not null]
+  saldo_inicial bigint [not null, note: 'Saldo inicial en centavos']
+  saldo_final_sistema bigint [not null, note: 'Saldo final sistema en centavos']
+  saldo_final_real_declarado bigint [not null, note: 'Saldo real en centavos']
+  diferencia bigint [not null, note: 'Diferencia en centavos']
+
+  Note: 'Snapshot de saldos bancarios y cajas al momento del cierre de Campaña'
+}
+
+Table campana_reserva {
+  id int [pk, increment]
+  campana_id int [ref: > campana.id, not null]
+  concepto varchar(100) [not null, note: 'GASTOS_FIJOS, IMPUESTOS, FONDO_MSC, RESERVA']
+  monto_reservado bigint [not null, note: 'Monto reservado en centavos']
+  notas text [null]
+
+  Note: 'Provisiones de fondos y reservas de capital apartadas al cierre'
+}
+
+TableGroup AuditoriaYCampanas [color: #94a3b8] {
+  campana
+  campana_proveedor
+  campana_inventario
+  campana_cuenta
+  campana_reserva
+}

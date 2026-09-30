@@ -18,10 +18,10 @@
 // Those numbers are an estimate, lines straight from centre to centre, and on
 // crossings it can be well off (it saw 6 where the drawn lines had 1). So once
 // there is something to compare, the panel asks whether to measure with the real
-// 90 degree lines instead, which takes a second or more per layout. Said yes, the
-// layout on the canvas and the best few are measured before they are compared or
-// applied, and an applied layout brings its measured lines along when the diagram
-// draws 90 degree lines.
+// 90 degree lines instead (the quick Optimal Route, measureRealLines), which takes
+// seconds per layout on a big diagram. Said yes, the layout on the canvas and the
+// best few are measured before they are compared or applied, and an applied
+// layout brings its measured lines along when the diagram draws 90 degree lines.
 //
 // Refine goes the other way: rather than new starting points, neighbouring
 // tables trade places, each swap judged by the real lines (compact-refine.js).
@@ -160,7 +160,7 @@ function buildPanel(host) {
       <button type="button" class="btn primary sp-apply" hidden title="Puts the best layout found on the canvas. Ctrl+Z goes back.">Apply best</button>
       <button type="button" class="btn ghost sp-compare" hidden title="Shows the best layouts found beside the current one, to pick one by eye.">Compare</button>
       <button type="button" class="btn primary sp-search" title="Tries other starting points in the background until you stop it. The diagram does not change until you apply a layout.">Search</button>
-      <button type="button" class="btn ghost sp-refine" hidden title="Neighbouring tables trade places wherever the real 90° lines come out shorter or with fewer crossings, each swap judged with Optimal Route. Starts from the layout on the canvas and, after a search, the best two others, then applies the best it reaches, lines included. Seconds on a big diagram; Stop applies the best found so far.">Refine</button>
+      <button type="button" class="btn ghost sp-refine" hidden title="Neighbouring tables trade places wherever the real 90° lines come out shorter or with fewer crossings, each swap judged with Optimal Route. Starts from the layout on the canvas and, after a search, the best two others, then applies the best it reaches, lines included. Up to half a minute on a big diagram; Stop applies the best found so far.">Refine</button>
       <button type="button" class="btn ghost sp-lines" hidden></button>
       <button type="button" class="btn primary sp-stop" hidden>Stop</button>
     </div>`;
@@ -344,7 +344,7 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     lines: 'estimate', asked: false, // compared by the estimate or by the real lines, once asked
     real: new Map(),                // layout signature -> its measurement with the real lines
     refined: [],                    // the layouts Refine reached
-    settled: new Set(),             // ... where it ended: refining them again finds nothing
+    settled: new Set(),             // layouts refined to the end, and where they ended: refining them again finds nothing
   });
 
   const canvasSignature = () => diagram.model.tables.map(t => `${t.x},${t.y}`).join(';');
@@ -565,10 +565,12 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
       groupBoxes: start.groupBoxes.map(b => ({ ...b, tables: [...(b.tables || [])] })),
       // measured already: those lines, which can be better than routing from scratch
       measurement: s.real.get(start.signature) || null,
+      settled: s.settled.has(start.signature),
     }));
     const j = {
       kind: 'refine', key, session: s, base, starts: starts.length,
-      index: 0, round: 0, phase: 'measuring', evaluated: 0, total: 0, baseReal: null, best: null,
+      index: 0, round: 0, phase: 'measuring', evaluated: 0, total: 0,
+      baseReal: null, best: null, bestReal: null,
     };
     begin(j, { kind: 'refine', input, starts }, {
       step(m) {
@@ -577,8 +579,10 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
           if (m.index === 0) j.baseReal = m.measurement;
         } else if (m.type === 'best') {
           const { measurement, ...entry } = m.result;
-          s.real.set(entry.signature, measurement);
           j.best = entry;
+          j.bestReal = measurement;
+        } else if (m.type === 'settled') {
+          for (const signature of m.signatures) s.settled.add(signature);
         } else if (m.type === 'progress') {
           Object.assign(j, { index: m.index, round: m.round, phase: m.phase, evaluated: m.evaluated, total: m.total });
         }
@@ -589,8 +593,15 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     });
   }
 
-  // What Refine reached joins the candidates; the best goes on the canvas when it
-  // beats what is there, unless the canvas changed meanwhile.
+  // A layout Refine reached joins the candidates with the lines it reached it
+  // with, which are the ones it is drawn with once applied.
+  function keepRefined(s, entry, measurement) {
+    s.real.set(entry.signature, measurement);
+    s.refined = [entry, ...s.refined.filter(r => r.signature !== entry.signature)].slice(0, KEEP_REFINED);
+  }
+
+  // The best layout Refine reached goes on the canvas when it beats what is
+  // there, unless the canvas changed meanwhile.
   function finishRefine(j, { stopped }) {
     const s = j.session;
     const best = j.best;
@@ -598,14 +609,13 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
       setNote('Stopped refining before the lines were measured. Nothing moved.');
       return;
     }
-    if (!stopped) s.settled.add(best.signature);
-    s.refined = [best, ...s.refined.filter(r => r.signature !== best.signature)].slice(0, KEEP_REFINED);
-    const real = s.real.get(best.signature);
+    const real = j.bestReal;
     if (best.signature === j.base.signature) {
       setNote(stopped ? 'Stopped refining: nothing better found yet.'
         : 'Refined with the real lines: no swap of neighbouring tables improves them.', { aboutCanvas: true });
       return;
     }
+    keepRefined(s, best, real);
     if (canvasSignature() !== j.base.signature) {
       setNote('The diagram changed while refining, so nothing moved. The refined layout is under Compare.');
       return;
@@ -681,7 +691,7 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
       const doing = j.phase === 'measuring'
         ? (j.round ? `round ${j.round + 1} · routing every line` : 'routing every line')
         : `round ${j.round + 1} · ${nf.format(j.evaluated)} of ${count(j.total, 'swap', 'swaps')}`;
-      const real = j.best && s.real.get(j.best.signature);
+      const real = j.bestReal;
       const found = real && j.best.signature !== j.base.signature
         ? `best: ${describeChange(j.baseReal.metrics, real.metrics)}`
         : 'nothing better yet';
@@ -734,8 +744,9 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     // the button to press next stands out
     ui.search.classList.toggle('primary', !best);
     ui.search.classList.toggle('ghost', !!best);
-    // nothing to refine where a refine has just ended
-    ui.refine.hidden = !!session?.settled.has(canvasSignature());
+    // nothing to refine where every layout Refine would start from has been refined
+    ui.refine.hidden = [st.current, ...st.ranked.slice(0, REFINE_STARTS - 1)]
+      .every(e => session?.settled.has(e.signature));
     // once there is something to compare, ask once; after that, a button switches
     const asking = hasOptions && !session.asked;
     ui.ask.hidden = !asking;
@@ -766,7 +777,7 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     ];
     const which = choices.length === 1 ? 'The best layout' : `The ${choices.length} best layouts`;
     picker.desc.textContent = st.real
-      ? `${which} measured, beside the one you have. Lines are drawn and counted as Optimal Route draws them.`
+      ? `${which} measured, beside the one you have. Lines are drawn and counted as the quick Optimal Route draws them; Lines > Optimal Route can polish them further.`
       : `${which} found in ${tries(session.attempts)}, beside the one you have. ` +
         'Lines are drawn straight, centre to centre, the way they are estimated, and the numbers come from the same estimate.';
     picker.list.replaceChildren();

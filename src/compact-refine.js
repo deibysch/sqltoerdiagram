@@ -12,13 +12,23 @@
 // to 100 ms against 0.2 to 3 s for the whole diagram, and it told better from
 // worse exactly as routing the whole diagram did, on all 49.
 //
+// Refine only has to tell layouts apart, not draw their best lines, so it routes
+// the cheap way: a layout is measured as the panel measures every layout, with
+// quick Optimal Route (measureRealLines), and a swap routes its lines once, with
+// no rip-up. On a real schema of 39 tables, 79 relations and 6 groups, judging
+// swaps without rip-up halved their time for one crossing more at the end (82
+// against 81), and synthetic schemas came out the same either way.
+//
 // A round tries every table with its nearest neighbour in each of the four
 // directions, within its own group. It takes the swap that improves the most,
-// tries the other improving ones again from there, and ends with Optimal Route
-// over the whole diagram, since lines re-routed a few at a time drift from what
-// it would draw. Rounds go on until one finds nothing. Measured from Balanced's
-// first arrangement: 35 tables without groups, lines -7.6%; 35 tables in 6
-// groups, -13.8%; 60 tables in 10 groups, -12.4% and 13 crossings down to 7.
+// tries the other improving ones again from there, and rounds go on until one
+// finds nothing. Routing the whole diagram again between rounds, to undo the
+// drift of lines re-routed a few at a time, bought one crossing on the real
+// schema for 68 s, and nothing elsewhere, so it is not done. Measured from
+// Balanced's first arrangement, on one core: 35 tables without groups, lines
+// -6.6% and 4 crossings down to 3 (10 s); 35 tables in 6 groups, lines -22.7%
+// (6 s); 60 tables in 10 groups, lines -12.5% and 13 crossings down to 6 (23 s);
+// the real schema, lines -7.3% and 107 crossings down to 78 (135 s).
 //
 // Tables of different sizes trade places too. Along the row or column the two
 // share, the pair keeps the span it had; whatever the bigger one now presses
@@ -42,9 +52,9 @@ const CLEAR_SHARE = 0.6;     // closer than this share of the gap between tables
 const GROUP_CLEAR = 24;      // px a group box keeps from another group box
 const TABLE_CLEAR = 16;      // ... and from a table outside it
 const HIT_MARGIN = 8;        // a line this close to a table that moved is routed again
-// A round has never gained more than 14% (the most measured), so a start that
-// measures further than this behind the best so far is only measured.
-const REACH = 1.15;
+// A refine has gained up to 23% from one start (35 tables in 6 groups), so a
+// start that measures further than this behind the best so far is only measured.
+const REACH = 1.3;
 
 const DIRECTIONS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 
@@ -287,8 +297,8 @@ function linesToRoute(d, moved) {
 
 /**
  * Judge a move (placeSwap) by the real lines: route again only the lines it
- * touches, the others held where `state` has them. Returns its score and metrics
- * and, for every line routed, [key, anchors, waypoints], null for none.
+ * touches, once each, the others held where `state` has them. Returns its score
+ * and metrics and, for every line routed, [key, anchors, waypoints], null for none.
  */
 export function evaluateMove(ctx, state, move) {
   const d = stateDiagram(ctx, state);
@@ -300,7 +310,9 @@ export function evaluateMove(ctx, state, move) {
   });
   const keys = linesToRoute(d, moved);
   // no key at all would route every line
-  if (keys.length) organizeLinesShortestPath(d, keys, { recordHistory: false, forceStyle: false, keepOthers: true, quick: true });
+  if (keys.length) {
+    organizeLinesShortestPath(d, keys, { recordHistory: false, forceStyle: false, keepOthers: true, quick: true, ripUpPasses: 0 });
+  }
   const { metrics } = realLinesOf(d);
   return {
     score: rankScore(metrics, ctx.objective),
@@ -357,7 +369,9 @@ function entryOf(ctx, state, orientation) {
  * { type: 'evaluate', state, moves }, answered with evaluateMove() of every move
  * against that state, in order. Everything else it yields is a report:
  * 'measured' when a start has been measured, 'best' when the best layout so far
- * changes, and 'progress'.
+ * changes, 'settled' once a start has been refined to the end (with the layout
+ * it ended on, which refining again leaves as it is), and 'progress'. A start
+ * marked `settled` is only measured.
  */
 export function* refineSteps(ctx, starts, { maxRounds = MAX_ROUNDS } = {}) {
   let best = null;
@@ -378,7 +392,8 @@ export function* refineSteps(ctx, starts, { maxRounds = MAX_ROUNDS } = {}) {
       best = state;
       yield report(state, start.orientation);
     }
-    if (state.score > best.score * REACH) continue;
+    // settled: refined before to the end, and refining is the same every time
+    if (starts[index].settled || state.score > best.score * REACH) continue;
 
     for (let round = 0; round < maxRounds; round++) {
       let accepted = 0;
@@ -403,17 +418,8 @@ export function* refineSteps(ctx, starts, { maxRounds = MAX_ROUNDS } = {}) {
         pairs = improving.slice(1).map(([, k]) => moves[k].pair);
       }
       if (!accepted) break;
-
-      yield { type: 'progress', index, round, phase: 'measuring', evaluated: 0, total: 0 };
-      const fresh = yield { type: 'route', positions: state.positions };
-      if (rankScore(fresh.metrics, ctx.objective) < state.score - 0.5) {
-        state = stateFrom(ctx, state, fresh);
-        if (state.score < best.score - 0.5) {
-          best = state;
-          yield report(state, start.orientation);
-        }
-      }
     }
+    yield { type: 'settled', signatures: [start.signature, signatureOf(state.positions)] };
   }
 }
 

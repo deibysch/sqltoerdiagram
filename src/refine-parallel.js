@@ -4,15 +4,18 @@
 // judged against the same state, each on its own. So helper workers judge them,
 // a few each, while this thread only hands them out: every helper builds the
 // same context from the same input, gets each new state once, and answers every
-// move with exactly what judging it here gives. The whole diagram is routed with
-// Optimal Route on several cores too (route-parallel.js). The result is the one
-// the refine gives on one core, which is also what runs when there are too few
-// cores or the helpers cannot start.
+// move with exactly what judging it here gives. The result is the one the refine
+// gives on one core, which is also what runs when there are too few cores or the
+// helpers cannot start.
+//
+// A whole layout is routed here, on one core. Quick Optimal Route has no pair
+// phase, the part that helpers speed up (route-parallel.js), and spread over
+// them it was slower: 17.8 s against 6.7 s on one thread, on a real schema of 39
+// tables and 79 relations.
 
 import { refineContext, evaluateMove, localJudge } from './compact-refine.js';
-import { diagramFrom, realLinesOf } from './compact-search-core.js';
 import { spGridSize } from './line-organizer.js';
-import { organizeLinesShortestPathInParallel, HelpersFailed } from './route-parallel.js';
+import { HelpersFailed } from './route-parallel.js';
 
 const MAX_HELPERS = 10;
 const HELPERS_MEMORY = 512 * 1024 * 1024;  // what the helpers' routers may take together
@@ -38,10 +41,9 @@ export function createRefineHelper(post) {
  * What judges the moves of a refine on up to `helpers` helpers from `spawn()` (a
  * Worker, or anything with its postMessage, onmessage, onerror and terminate),
  * fewer on a diagram whose routers would not fit in memory. Should the helpers
- * fail, the moves are judged here instead, with the same answers. `route` routes
- * a whole layout; `routeHelpers` is handed to route-parallel.js as it is.
+ * fail, the moves are judged here instead, with the same answers.
  */
-export function parallelJudge(ctx, { spawn = spawnWorker, helpers = defaultHelpers(), routeHelpers = {} } = {}) {
+export function parallelJudge(ctx, { spawn = spawnWorker, helpers = defaultHelpers() } = {}) {
   const local = localJudge(ctx);
   const nodes = Math.max(1, spGridSize(ctx.input.tables));
   const count = Math.min(helpers, Math.floor(HELPERS_MEMORY / (nodes * ROUTER_BYTES_PER_NODE)));
@@ -69,16 +71,7 @@ export function parallelJudge(ctx, { spawn = spawnWorker, helpers = defaultHelpe
         return local.evaluate(state, moves);
       });
     },
-    async route(positions) {
-      const d = diagramFrom(ctx.input, positions);
-      try {
-        await organizeLinesShortestPathInParallel(d, null, { recordHistory: false, forceStyle: false }, routeHelpers);
-      } catch (err) {
-        if (err instanceof HelpersFailed) return local.route(positions);
-        throw err;
-      }
-      return realLinesOf(d);
-    },
+    route: local.route,
     close: fallBack,
   };
 }
