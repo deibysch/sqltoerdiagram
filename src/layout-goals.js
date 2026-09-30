@@ -131,11 +131,6 @@ export function rankCandidates(goalId, current, candidates) {
   return unique.sort((a, b) => both(a) - both(b) || a.score - b.score);
 }
 
-/** What Apply best puts on the canvas: the first ranked candidate that beats `current`, or null. */
-export function chooseBest(goalId, current, candidates) {
-  return rankCandidates(goalId, current, candidates).find(c => c.score < current.score - 0.5) || null;
-}
-
 /**
  * The layouts that no other one beats on both lines and crossings, at most `cap`
  * of them, lowest score first. Balanced needs them: a list of the best scores can

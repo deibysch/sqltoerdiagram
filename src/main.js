@@ -55,10 +55,12 @@ function updateUndoRedoButtons() {
 }
 history.onChange(updateUndoRedoButtons);
 
-// Direction is state of the canvas: the menu always shows which way the diagram
-// on screen actually flows, including after undo/redo or loading a layout.
+// Direction and the line style are state of the canvas: the menus always show
+// which way the diagram on screen flows and how its lines are drawn, including
+// after undo/redo (Improve switches the lines to 90 degrees) or loading a layout.
 function syncOrientation() {
   syncMenu();
+  syncRoutingMenu();
 }
 
 function performUndo() {
@@ -973,19 +975,21 @@ function wireMenuSections(menu) {
 }
 
 // The "Optimize for" goals run in a worker, and once one has run a panel offers
-// to search for better arrangements and pick one.
+// Improve, which keeps putting better layouts on the canvas until it is stopped.
 compactSearch = createCompactSearch({
   diagram,
   host: canvas.parentElement,
   getSpacing: () => layoutOpts.spacing,
   getShape: () => layoutOpts.shape,
-  // what every rearrange does once the tables have moved; a layout Refine reached
-  // from a turned diagram is still turned that way
-  afterApply: (entry) => {
+  // What every rearrange does once the tables have moved. A layout Improve
+  // reached from a turned diagram is still turned that way, and one it puts on
+  // the canvas as it goes leaves the view where you had it.
+  afterApply: (entry, { live = false } = {}) => {
     resetOrientation(diagram);
     if (entry?.orientation) diagram.orientation = entry.orientation;
     syncMenu();
-    diagram.fit();
+    syncRoutingMenu();
+    if (!live) diagram.fit();
     saveLayoutDebounced();
     if (editorMode === 'layout') updateLayoutTextarea();
     if (editorMode === 'visual') visualEditor?.render();

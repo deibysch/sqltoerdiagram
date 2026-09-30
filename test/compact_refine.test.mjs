@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { compactInput, compactAttempt, measureRealLines, applyCompactResult } from '../src/compact-search-core.js';
-import { refineContext, neighbourPairs, placeSwap, evaluateMove, createRefineJob, localJudge } from '../src/compact-refine.js';
+import { refineContext, neighbourPairs, placeSwap, evaluateMove, createImproveJob, localJudge } from '../src/compact-refine.js';
 import { parallelJudge, createRefineHelper } from '../src/refine-parallel.js';
 import { rankScore } from '../src/layout-goals.js';
 import { measureTable } from '../src/renderer.js';
@@ -68,7 +68,7 @@ function boxes(list, relations = [], annotations = []) {
 
 const SETTINGS = { spacing: 'comfortable', goal: 'balanced' };
 
-/** The first arrangement of Balanced, as a start for a refine. */
+/** The first arrangement of Balanced, as a start for Improve. */
 function firstLayout(d) {
   const input = compactInput(d, SETTINGS);
   const a = compactAttempt(input, 0);
@@ -89,10 +89,10 @@ async function runAllAsync(job) {
   return reports;
 }
 
-/** What a refine found: the layouts it measured and reached, with their lines. */
+/** What Improve found: the layouts it measured and reached, with their lines. */
 const outcome = (reports) => reports
-  .filter(m => m.type === 'measured' || m.type === 'best')
-  .map(m => (m.type === 'best' ? ['best', m.result.signature, m.result.measurement] : ['measured', m.signature, m.measurement]));
+  .filter(m => m.type === 'measured' || m.type === 'best' || m.type === 'candidate')
+  .map(m => (m.type === 'measured' ? ['measured', m.signature, m.measurement] : [m.type, m.result.signature, m.result.measurement]));
 
 function assertNoOverlap(positions, input) {
   const size = new Map(input.tables.map(t => [t.key, t]));
@@ -196,27 +196,33 @@ test('a swap routes again only the lines of the tables that moved, and those now
   assert.strictEqual(result.score, rankScore(result.metrics, { goal: input.goal, shape: input.shape }));
 });
 
-// --- the whole refine ---------------------------------------------------------
+// --- Improve --------------------------------------------------------------------
 
-// A refine takes seconds, so each one the tests look at runs once.
+/** Improve from `start` on `input`, `maxTries` starting points explored after refining it. */
+const improve = (input, start, maxTries = 0, makeJudge) =>
+  createImproveJob({ kind: 'improve', input, start, options: { maxTries } }, makeJudge);
+
+// Improve takes seconds, so each run the tests look at runs once.
 const once = (f) => { let value; return () => (value ??= f()); };
-const refineOf = (n, groups, seed) => once(() => {
+const improveOf = (n, groups, seed) => once(() => {
   const { input, start } = firstLayout(schema(n, groups, seed));
-  return { input, start, reports: runAll(createRefineJob({ kind: 'refine', input, starts: [start] })) };
+  return { input, start, reports: runAll(improve(input, start)) };
 });
-const REFINES = [['without groups', refineOf(14, 0, 3)], ['with groups', refineOf(18, 3, 5)]];
+const RUNS = [['without groups', improveOf(14, 0, 3)], ['with groups', improveOf(18, 3, 5)]];
 const lastBest = (reports) => reports.filter(m => m.type === 'best').at(-1).result;
 
-for (const [label, refined] of REFINES) {
-  test(`${label}: a refine never ends worse than it starts, and reports real lines of valid layouts`, () => {
-    const { input, start, reports } = refined();
+for (const [label, run] of RUNS) {
+  test(`${label}: Improve starts from the layout given, never ends worse, and reports real lines of valid layouts`, () => {
+    const { input, start, reports } = run();
     const measured = reports.filter(m => m.type === 'measured');
-    assert.deepStrictEqual(measured.map(m => [m.index, m.signature]), [[0, start.signature]]);
+    assert.deepStrictEqual(measured.map(m => m.signature), [start.signature]);
     const objective = { goal: input.goal, shape: input.shape };
     const startScore = rankScore(measured[0].measurement.metrics, objective);
 
     const bests = reports.filter(m => m.type === 'best').map(m => m.result);
-    assert.ok(bests.length >= 1);
+    // the first is the layout it started from, with its lines, for the canvas to draw
+    assert.strictEqual(bests[0].signature, start.signature);
+    assert.deepStrictEqual(bests[0].measurement.metrics, measured[0].measurement.metrics);
     let last = Infinity;
     for (const b of bests) {
       const score = rankScore(b.measurement.metrics, objective);
@@ -238,16 +244,16 @@ for (const [label, refined] of REFINES) {
   });
 }
 
-test('with groups, refining finds shorter real lines than the first arrangement', () => {
-  const { reports } = REFINES[1][1]();
+test('with groups, Improve finds shorter real lines than the first arrangement', () => {
+  const { reports } = RUNS[1][1]();
   const before = reports.find(m => m.type === 'measured').measurement.metrics;
   const after = lastBest(reports).measurement.metrics;
   assert.ok(after.length < before.length && after.crossings <= before.crossings,
     `lines ${before.length} -> ${after.length}, crossings ${before.crossings} -> ${after.crossings}`);
 });
 
-test('a refined layout goes on the diagram with its group boxes and its lines', () => {
-  const { input, reports } = REFINES[1][1]();
+test('a layout Improve reached goes on the diagram with its group boxes and its lines', () => {
+  const { input, reports } = RUNS[1][1]();
   const best = lastBest(reports);
   const d = schema(18, 3, 5);
   applyCompactResult(d, best, { lines: best.measurement.lines });
@@ -256,17 +262,49 @@ test('a refined layout goes on the diagram with its group boxes and its lines', 
   assert.strictEqual(d.edgeAnchors.size, input.relations.length);
 });
 
-test('a start that measures far behind the best so far is measured and not refined', () => {
-  const { input, start } = firstLayout(schema(12, 0, 7));
-  // the same tables spread three times as far apart: far longer lines
-  const far = { signature: 'far', positions: start.positions.map(([k, x, y]) => [k, x * 3, y * 3]), groupBoxes: [] };
-  const reports = runAll(createRefineJob({ kind: 'refine', input, starts: [start, far] }));
-  assert.deepStrictEqual(reports.filter(m => m.type === 'measured').map(m => m.index), [0, 1]);
-  const swapped = new Set(reports.filter(m => m.type === 'progress' && m.phase === 'swapping').map(m => m.index));
-  assert.ok(!swapped.has(1), 'the far start is never swapped');
+test('exploring measures the most promising of each few starting points, and refines it unless it is far behind', () => {
+  const { input, start } = firstLayout(schema(14, 2, 21));
+  const reports = runAll(createImproveJob({ kind: 'improve', input, start, options: { firstSeed: 5, maxTries: 8 } }));
+
+  const tried = reports.filter(m => m.type === 'progress' && m.phase === 'exploring');
+  assert.deepStrictEqual(tried.map(m => [m.tries, m.seed]), [1, 2, 3, 4, 5, 6, 7, 8].map(n => [n, 5 + n]));
+  // of seeds 5 to 8, and of 9 to 12, the one the estimate scores best
+  const pick = (seeds) => seeds.map(seed => compactAttempt(input, seed)).sort((a, b) => a.score - b.score)[0].signature;
+  const measured = reports.filter(m => m.type === 'measured').map(m => m.signature);
+  assert.deepStrictEqual(measured, [start.signature, pick([5, 6, 7, 8]), pick([9, 10, 11, 12])]);
+
+  // Each layout measured is refined (swaps tried before the next is measured)
+  // unless it measures more than 30% behind the best so far. Each one refined
+  // is a chain of better and better layouts, the best so far or candidates to
+  // pick, and it settles on the last one it reported.
+  const objective = { goal: input.goal, shape: input.shape };
+  const scoreOf = (m) => rankScore(m.result.measurement.metrics, objective);
+  let best = Infinity;
+  let behind = null;
+  const last = new Map();
+  for (const m of reports) {
+    if (m.type === 'measured') {
+      const score = rankScore(m.measurement.metrics, objective);
+      behind = score > Math.min(best, score) * 1.3;
+    } else if (m.type === 'best') {
+      assert.ok(scoreOf(m) < best, 'a best beats the one before');
+      best = scoreOf(m);
+    } else if (m.type === 'candidate') {
+      assert.ok(scoreOf(m) >= best - 0.5, 'a candidate does not beat the best');
+      assert.ok(!behind, 'and it is not far behind');
+    } else if (m.type === 'progress' && m.phase === 'swapping') {
+      assert.ok(!behind, 'a layout far behind is not refined');
+    }
+    if (m.type === 'best' || m.type === 'candidate') {
+      if (last.has(m.chain)) assert.ok(scoreOf(m) < last.get(m.chain).score, 'a chain only gets better');
+      last.set(m.chain, { signature: m.result.signature, score: scoreOf(m) });
+    }
+    if (m.type === 'settled') assert.strictEqual(m.result.signature, last.get(m.chain).signature);
+  }
+  assert.ok(last.size >= 2, 'the layout it started from, and at least one explored');
 });
 
-test('a start measured already keeps its lines and is not routed again', () => {
+test('a layout measured already keeps its lines and is not routed again', () => {
   const { input, start } = firstLayout(schema(12, 0, 7));
   const run = (s) => {
     let routed = 0;
@@ -274,25 +312,26 @@ test('a start measured already keeps its lines and is not routed again', () => {
       const local = localJudge(ctx);
       return { ...local, route: (positions) => { routed++; return local.route(positions); } };
     };
-    return { reports: runAll(createRefineJob({ kind: 'refine', input, starts: [s] }, counting)), routed };
+    return { reports: runAll(improve(input, s, 0, counting)), routed };
   };
   const measurement = measureRealLines(input, start.positions);
   const known = run({ ...start, measurement });
   const fresh = run(start);
   const measured = (r) => r.reports.find(m => m.type === 'measured');
   assert.strictEqual(measured(known).measurement, measurement);
-  assert.strictEqual(known.routed, 0, 'Refine routes a whole layout only to measure a start');
+  assert.strictEqual(known.routed, 0, 'Improve routes a whole layout only to measure it');
   assert.strictEqual(fresh.routed, 1);
   assert.deepStrictEqual(outcome(known.reports), outcome(fresh.reports), 'measured the same, it refines the same');
 });
 
-test('a refine says which layouts it refined to the end, and a settled start is only measured', () => {
-  const { input, start, reports } = REFINES[0][1]();
+test('Improve says which layouts it refined to the end, and a settled one is only measured', () => {
+  const { input, start, reports } = RUNS[0][1]();
   const settled = reports.filter(m => m.type === 'settled');
   const end = lastBest(reports).signature;
   assert.deepStrictEqual(settled.map(m => m.signatures), [[start.signature, end]]);
+  assert.strictEqual(settled[0].result.signature, end, 'with the layout it ended on, to pick later');
 
-  const again = runAll(createRefineJob({ kind: 'refine', input, starts: [{ ...start, settled: true }] }));
+  const again = runAll(improve(input, { ...start, settled: true }));
   assert.ok(again.some(m => m.type === 'measured'), 'measured');
   assert.ok(!again.some(m => m.type === 'progress' && m.phase === 'swapping'), 'but no swap tried');
   assert.ok(!again.some(m => m.type === 'settled'));
@@ -333,8 +372,8 @@ function fakeHelper(delay, { failAfter = Infinity } = {}) {
 
 const onOneCore = once(() => {
   const { input, start } = firstLayout(schema(16, 2, 11));
-  const message = { kind: 'refine', input, starts: [start] };
-  return { message, reports: runAll(createRefineJob(message)) };
+  const message = { kind: 'improve', input, start, options: { maxTries: 4 } };
+  return { message, reports: runAll(createImproveJob(message)) };
 });
 
 test('helpers on other cores reach exactly the layouts and lines of one core', async () => {
@@ -344,9 +383,9 @@ test('helpers on other cores reach exactly the layouts and lines of one core', a
   const judge = (ctx) => parallelJudge(ctx, {
     spawn: () => { spawned++; return fakeHelper(delay); }, helpers: 3,
   });
-  const many = await runAllAsync(createRefineJob(message, judge));
+  const many = await runAllAsync(createImproveJob(message, judge));
   assert.strictEqual(spawned, 3);
-  assert.ok(outcome(one).filter(([type]) => type === 'best').length >= 2, 'the refine moves tables');
+  assert.ok(outcome(one).filter(([type]) => type === 'best').length >= 2, 'Improve moves tables');
   assert.deepStrictEqual(outcome(many), outcome(one));
 });
 
@@ -356,6 +395,6 @@ test('helpers that stop part way leave the rest to this thread, with the same re
   const judge = (ctx) => parallelJudge(ctx, {
     spawn: () => fakeHelper(delay, { failAfter: 4 }), helpers: 3,
   });
-  const many = await runAllAsync(createRefineJob(message, judge));
+  const many = await runAllAsync(createImproveJob(message, judge));
   assert.deepStrictEqual(outcome(many), outcome(one));
 });

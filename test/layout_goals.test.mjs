@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import {
-  GOALS, SHAPES, resolveShape, ratioText, rankScore, layoutScore, rankCandidates, chooseBest, keepFront, improvesBoth,
+  GOALS, SHAPES, resolveShape, ratioText, rankScore, layoutScore, rankCandidates, keepFront, improvesBoth,
 } from '../src/layout-goals.js';
 import { arrangeGroupsCompact, compactLayoutMetrics } from '../src/group-layout-compact.js';
 
@@ -65,7 +65,7 @@ test('each goal ranks by what it is named after', () => {
 });
 
 test('Balanced puts first the layout that improves lines and crossings at once', () => {
-  const pick = (goal) => chooseBest(goal, scored(goal, current), [scored(goal, optionA), scored(goal, optionB)]).signature;
+  const pick = (goal) => rankCandidates(goal, scored(goal, current), [scored(goal, optionA), scored(goal, optionB)])[0].signature;
   // A scores better on the Balanced sum, and still B comes first: it gives up nothing
   assert.ok(scored('balanced', optionA).score < scored('balanced', optionB).score);
   assert.strictEqual(pick('balanced'), 'B');
@@ -76,12 +76,11 @@ test('Balanced puts first the layout that improves lines and crossings at once',
     ['B', 'A']);
 });
 
-test('nothing is chosen when nothing beats the layout on the canvas', () => {
+test('the layout on the canvas is never one of its own options', () => {
   const goal = 'balanced';
   const best = scored(goal, { signature: 'best', metrics: m(20000, 2) });
   const worse = scored(goal, { signature: 'worse', metrics: m(25000, 3) });
-  assert.strictEqual(chooseBest(goal, best, [worse]), null);
-  assert.strictEqual(chooseBest(goal, best, [{ ...best }]), null, 'the same layout is not an option');
+  assert.deepStrictEqual(rankCandidates(goal, best, [{ ...best }, worse, { ...worse }]).map(c => c.signature), ['worse']);
 });
 
 test('the layouts nobody beats on both are kept, once per pair of numbers', () => {

@@ -1,4 +1,4 @@
-// Refine on several cores (compact-refine.js).
+// Refining, the core of Improve (compact-refine.js), on several cores.
 //
 // Nearly all of a refine goes on judging swaps, and the swaps of a round are all
 // judged against the same state, each on its own. So helper workers judge them,

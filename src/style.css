@@ -319,20 +319,15 @@ a.btn { text-decoration: none; color: var(--text); }
 .sp-actions .btn { padding: 5px 10px; font-size: 12.5px; }
 .sp-actions .btn.ghost { border-color: var(--border); }
 .sp-actions .btn[hidden] { display: none; }
-/* the one question the panel asks: measure with the real lines? */
-.sp-ask {
-  display: flex; flex-direction: column; gap: 8px; max-width: 560px;
-  padding: 9px 10px; border-radius: 8px;
-  background: var(--panel-2); border: 1px solid var(--border);
-  color: var(--text); font-size: 12px; line-height: 1.45;
+/* how long Improve waits for a better layout before it stops by itself */
+.sp-patience { display: flex; align-items: center; gap: 6px; margin-left: auto; color: var(--muted); font-size: 12px; }
+.sp-patience select {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 3px 6px; font-size: 12px; font-family: inherit;
 }
-.sp-ask[hidden] { display: none; }
-.sp-ask-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.sp-ask-actions .btn { padding: 4px 10px; font-size: 12px; }
-.sp-ask-actions .btn.ghost { border-color: var(--border); }
 .sp-progress { height: 3px; background: var(--panel-2); border-radius: 2px; overflow: hidden; }
 .sp-progress[hidden] { display: none; }
-/* no end to show: a search runs until it is stopped */
+/* no end to show: Improve runs until it is stopped */
 .sp-bar { height: 100%; width: 30%; background: var(--accent); animation: sp-slide 1.3s ease-in-out infinite; }
 @keyframes sp-slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
 

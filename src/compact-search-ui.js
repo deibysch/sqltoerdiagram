@@ -1,55 +1,55 @@
-// Once an "Optimize for" option has run, a panel offers to look for a better
-// arrangement.
+// Once an "Optimize for" option has run, a panel offers one thing: Improve.
 //
-// The option gives the same arrangement every time, and more polish rounds find
-// nothing more; what does find better ones is starting somewhere else
-// (compact-search-core.js). So Search tries other starting points in a worker
-// (compact-search-worker.js) for as long as you let it, without touching the
-// diagram, and the panel counts the tries and says what the best of them would
-// change. Stop it, and then:
+// The option gives the same arrangement every time, chosen by a cheap estimate
+// (every line straight from centre to centre). Improve looks for a better one,
+// judging every layout by the real lines, as the quick
+// Optimal Route draws them (compact-refine.js): it refines the layout on the
+// canvas, neighbouring tables trading places, then keeps exploring other starting
+// points and refining the most promising. Every better layout it finds goes on
+// the canvas at once, lines included, so the diagram improves as you watch.
 //
-//   Apply best       puts the best layout found on the canvas;
-//   Compare          shows the best few beside the current one as thumbnails,
-//                    to pick by eye: the score is an estimate, and the layout
-//                    that scores best is not always the one that reads best;
-//   Keep searching   carries on from the next starting point, with everything
-//                    found so far still in the running.
+// It stops by itself once nothing better has turned up for as long as Patience
+// says (15 s to 5 min, 30 s unless changed, or unlimited), or when Stop is
+// pressed. Then the best layouts it found are shown side by side to pick one; the
+// one on the canvas stays unless another is picked. Ctrl+Z goes back to where
+// Improve started, in one step. Improve again carries on where it stopped.
 //
-// Those numbers are an estimate, lines straight from centre to centre, and on
-// crossings it can be well off (it saw 6 where the drawn lines had 1). So once
-// there is something to compare, the panel asks whether to measure with the real
-// 90 degree lines instead (the quick Optimal Route, measureRealLines), which takes
-// seconds per layout on a big diagram. Said yes, the layout on the canvas and the
-// best few are measured before they are compared or applied, and an applied
-// layout brings its measured lines along when the diagram draws 90 degree lines.
-//
-// Refine goes the other way: rather than new starting points, neighbouring
-// tables trade places, each swap judged by the real lines (compact-refine.js).
-// It starts from the layout on the canvas and, after a search, the best two
-// others, then puts the best layout it reaches on the canvas with its lines.
-// From then on the panel compares by the real lines.
-//
-// What a search finds stays good while the schema, the groups and the settings
-// stay as they were (compactInputKey): tables can be moved around meanwhile,
-// even while it runs. Anything else stops the search and drops what it found.
+// It runs in a worker (compact-search-worker.js), and stops by itself when the
+// schema, the groups or the settings change (compactInputKey), or when the
+// diagram is edited, since the next layout it put on the canvas would undo that.
 
-import { compactInput, compactInputKey, createJob, keepBest, mergeTop, applyCompactResult } from './compact-search-core.js';
-import { createRefineJob } from './compact-refine.js';
-import { compactLayoutMetrics } from './group-layout-compact.js';
-import { goalOf, resolveShape, rankScore, rankCandidates, chooseBest, ratioText } from './layout-goals.js';
+import { compactInput, compactInputKey, createJob, applyCompactResult } from './compact-search-core.js';
+import { createImproveJob } from './compact-refine.js';
+import { goalOf, resolveShape, rankScore, rankCandidates, ratioText } from './layout-goals.js';
 import { measureTable } from './renderer.js';
 import { computeGroupBounds, resolveGroupColor } from './annotations.js';
 
-const SEARCH_LIMIT_MS = 10 * 60 * 1000;   // a search left running stops by itself
-const OPTIONS_COUNT = 3;                  // layouts shown beside the current one, and measured
-const KEEP = OPTIONS_COUNT + 1;           // one of the best may be the layout on the canvas
-const FRONT = 8;                          // layouts kept for improving lines and crossings at once
-const REFINE_STARTS = 3;                  // layouts Refine starts from: the one on the canvas and the best others
-const KEEP_REFINED = 4;                   // layouts Refine reached, kept among the candidates
+const OPTIONS_COUNT = 3;   // layouts shown beside the one on the canvas
+const KEEP_FOUND = 12;     // layouts found kept to pick from, the best by score
+
+// Patience: how long Improve goes on without putting a better layout on the
+// canvas before it stops by itself. The choice is remembered in the browser.
+const PATIENCE = [
+  { id: '15', label: '15 s', ms: 15e3 },
+  { id: '30', label: '30 s', ms: 30e3 },
+  { id: '60', label: '1 min', ms: 60e3 },
+  { id: '300', label: '5 min', ms: 300e3 },
+  { id: 'unlimited', label: 'Unlimited', ms: Infinity },
+];
+const DEFAULT_PATIENCE = '30';
+const PATIENCE_KEY = 'dbdiga-patience';
+
+function storedPatience() {
+  try {
+    const id = localStorage.getItem(PATIENCE_KEY);
+    return PATIENCE.some(p => p.id === id) ? id : DEFAULT_PATIENCE;
+  } catch {
+    return DEFAULT_PATIENCE;
+  }
+}
 
 const nf = new Intl.NumberFormat('en-US');
 const count = (n, one, many) => `${nf.format(n)} ${n === 1 ? one : many}`;
-const tries = (n) => count(n, 'try', 'tries');
 
 function metricsText(m) {
   return `Lines ${nf.format(m.length)} px · ${count(m.crossings, 'crossing', 'crossings')} · ${ratioText(m.width, m.height)}`;
@@ -74,14 +74,14 @@ function clock(ms) {
 }
 
 /**
- * Run a job (createJob, or createRefineJob) in a worker, reporting each step and
+ * Run a job (createJob, or createImproveJob) in a worker, reporting each step and
  * the end. A worker that fails before saying a word never started (a browser
  * without module workers, say), so the same job then runs on the page, one step
  * per task. Returns { stop }.
  */
 function runJob(message, on) {
   const onPage = () => {
-    const job = message.kind === 'refine' ? createRefineJob(message) : createJob(message);
+    const job = message.kind === 'improve' ? createImproveJob(message) : createJob(message);
     let stopped = false;
     const failed = (err) => {
       stopped = true;
@@ -149,29 +149,21 @@ function buildPanel(host) {
       <button type="button" class="btn ghost icon sp-close" title="Close" aria-label="Close">✕</button>
     </div>
     <div class="sp-progress" hidden><div class="sp-bar"></div></div>
-    <div class="sp-ask" hidden>
-      <div>These lines and crossings are estimated with straight lines. Measure the best layouts with the real 90° lines instead? It takes a few seconds per layout.</div>
-      <div class="sp-ask-actions">
-        <button type="button" class="btn primary sp-ask-yes">Measure real lines</button>
-        <button type="button" class="btn ghost sp-ask-no">Keep the estimate</button>
-      </div>
-    </div>
     <div class="sp-actions">
-      <button type="button" class="btn primary sp-apply" hidden title="Puts the best layout found on the canvas. Ctrl+Z goes back.">Apply best</button>
-      <button type="button" class="btn ghost sp-compare" hidden title="Shows the best layouts found beside the current one, to pick one by eye.">Compare</button>
-      <button type="button" class="btn primary sp-search" title="Tries other starting points in the background until you stop it. The diagram does not change until you apply a layout.">Search</button>
-      <button type="button" class="btn ghost sp-refine" hidden title="Neighbouring tables trade places wherever the real 90° lines come out shorter or with fewer crossings, each swap judged with Optimal Route. Starts from the layout on the canvas and, after a search, the best two others, then applies the best it reaches, lines included. Up to half a minute on a big diagram; Stop applies the best found so far.">Refine</button>
-      <button type="button" class="btn ghost sp-lines" hidden></button>
+      <button type="button" class="btn primary sp-improve" title="Looks for a better layout, judging each one by the real 90° lines, until nothing better turns up for as long as Patience says, or you press Stop. Every better layout goes on the canvas as soon as it is found; then pick among the best. Ctrl+Z goes back to where it started.">Improve</button>
+      <button type="button" class="btn ghost sp-options" hidden title="The best layouts found, side by side, to pick one by eye.">See options</button>
       <button type="button" class="btn primary sp-stop" hidden>Stop</button>
+      <label class="sp-patience" title="How long Improve keeps looking without finding a better layout before it stops by itself. Unlimited: until you press Stop.">Patience
+        <select class="sp-patience-select">${PATIENCE.map(p => `<option value="${p.id}">${p.label}</option>`).join('')}</select>
+      </label>
     </div>`;
   host.appendChild(el);
   const q = (s) => el.querySelector(s);
   return {
     el,
     spinner: q('.sp-spinner'), title: q('.sp-title'), status: q('.sp-status'), note: q('.sp-note'),
-    progress: q('.sp-progress'), ask: q('.sp-ask'), askYes: q('.sp-ask-yes'), askNo: q('.sp-ask-no'),
-    apply: q('.sp-apply'), compare: q('.sp-compare'), search: q('.sp-search'), refine: q('.sp-refine'), lines: q('.sp-lines'),
-    stop: q('.sp-stop'), close: q('.sp-close'),
+    progress: q('.sp-progress'), improve: q('.sp-improve'), options: q('.sp-options'), stop: q('.sp-stop'),
+    patience: q('.sp-patience-select'), close: q('.sp-close'),
   };
 }
 
@@ -200,9 +192,8 @@ function buildPicker() {
 
 /**
  * A small picture of a layout: the group boxes, each table with its header band,
- * and the lines, as measured when `layout.routes` has them and otherwise straight
- * from centre to centre, the way the estimate sees them. `layout` is
- * { positions: [[key, x, y]], groups: [group annotation], routes?: [[[x, y]]] }.
+ * and its lines as measured. `layout` is { positions: [[key, x, y]], groups:
+ * [group annotation], routes: [[[x, y]]] }.
  */
 function drawThumbnail(canvas, layout, diagram) {
   const theme = diagram.theme;
@@ -222,7 +213,6 @@ function drawThumbnail(canvas, layout, diagram) {
     if (t && Number.isFinite(x) && Number.isFinite(y)) boxes.push({ key, x, y, w: t.w, h: t.h });
   }
   if (!boxes.length) return;
-  const byKey = new Map(boxes.map(b => [b.key.toLowerCase(), b]));
   const groups = (layout.groups || [])
     .map(g => ({ color: resolveGroupColor(g.color), b: computeGroupBounds(g, boxes) }))
     .filter(g => g.b);
@@ -261,21 +251,8 @@ function drawThumbnail(canvas, layout, diagram) {
   ctx.strokeStyle = theme.edge;
   ctx.lineWidth = px;
   ctx.beginPath();
-  if (layout.routes) {
-    for (const pts of layout.routes) {
-      pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-    }
-  } else {
-    const links = [
-      ...(diagram.model.relations || []).map(r => [r.fromTable, r.toTable]),
-      ...(diagram.manualLinks || []).map(l => [l.from?.table, l.to?.table]),
-    ];
-    for (const [from, to] of links) {
-      const a = byKey.get(String(from || '').toLowerCase()), b = byKey.get(String(to || '').toLowerCase());
-      if (!a || !b || a === b) continue;
-      ctx.moveTo(a.x + a.w / 2, a.y + a.h / 2);
-      ctx.lineTo(b.x + b.w / 2, b.y + b.h / 2);
-    }
+  for (const pts of layout.routes || []) {
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
   }
   ctx.stroke();
 
@@ -323,28 +300,33 @@ function metricsBlock(m, base) {
 
 /**
  * The panel and what it runs. `getSpacing` and `getShape` read the Tables menu;
- * `afterApply` finishes whatever a rearrange finishes (direction, fit, save);
- * `onArranged` reports the first arrangement.
+ * `afterApply(entry, { live })` finishes whatever a rearrange finishes (direction,
+ * fit, save), `live` for a layout Improve puts on the canvas as it goes, where the
+ * view should stay put; `onArranged` reports the first arrangement.
  * Returns { arrange, cancel, noteEdit, refresh }.
  */
 export function createCompactSearch({ diagram, host, getSpacing, getShape, afterApply, onArranged }) {
-  let settings = null;  // the last arrangement's { spacing, goal, shape }
-  let job = null;       // running: the first arrangement, a search, or a measurement
-  let session = null;   // what was found for those settings (newSession)
-  let note = null;      // a line on what just happened: { text, canvas }
+  let settings = null;    // the last arrangement's { spacing, goal, shape }
+  let job = null;         // running: the first arrangement, or Improve
+  let session = null;     // what Improve found for those settings (newSession)
+  let note = null;        // a line on what just happened: { text, canvas }
   let ticker = null;
+  let applying = false;   // the panel itself is changing the diagram: not an edit to stop for
 
   const ui = buildPanel(host);
   const picker = buildPicker();
+  ui.patience.value = storedPatience();
+  const patience = () => PATIENCE.find(p => p.id === ui.patience.value) || PATIENCE.find(p => p.id === DEFAULT_PATIENCE);
 
   const newSession = (key) => ({
     key,
-    top: [], front: [],             // the best layouts, and the ones improving lines and crossings at once
-    attempts: 0, elapsed: 0, nextSeed: 0,
-    lines: 'estimate', asked: false, // compared by the estimate or by the real lines, once asked
-    real: new Map(),                // layout signature -> its measurement with the real lines
-    refined: [],                    // the layouts Refine reached
-    settled: new Set(),             // layouts refined to the end, and where they ended: refining them again finds nothing
+    nextSeed: 1,           // the starting point exploring carries on from
+    tries: 0,              // starting points explored, all runs together
+    elapsed: 0,            // ms Improve has run, all runs together
+    found: new Map(),      // signature -> a layout found, with its measurement
+    settled: new Set(),    // layouts refined to the end, and where they ended
+    baseline: null,        // the layout Improve first started from, as found
+    drawn: null,           // the layout found whose lines are on the canvas
   });
 
   const canvasSignature = () => diagram.model.tables.map(t => `${t.x},${t.y}`).join(';');
@@ -361,75 +343,50 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     return { input, key: compactInputKey(input) };
   }
 
-  // the arrangement on the canvas, measured and scored like every try
-  function canvasEntry() {
-    const metrics = compactLayoutMetrics(diagram);
-    return {
-      signature: canvasSignature(),
-      positions: diagram.model.tables.map(t => [t.key, t.x, t.y]),
-      metrics,
-      score: rankScore(metrics, settings),
-    };
-  }
-
-  // everything the searches kept and Refine reached, once; nothing searched before the first search
-  function pool() {
-    if (!session) return [];
-    const seen = new Set();
-    const searched = session.attempts ? [...session.top, ...session.front] : [];
-    return [...searched, ...session.refined].filter(r => !seen.has(r.signature) && seen.add(r.signature));
-  }
-
-  // the same layout with its real-line metrics, when it has been measured
-  function withReal(entry) {
-    const m = session?.real.get(entry.signature);
-    return m ? { ...entry, metrics: m.metrics, score: rankScore(m.metrics, settings), measurement: m } : entry;
-  }
-
-  // Where things stand: the layout on the canvas and the candidates, ranked. With
-  // real lines asked for, only the layouts measured so far, once the one on the
-  // canvas has been measured too: an estimate is no match for a measurement.
-  function standing() {
-    const cur = canvasEntry();
-    const found = pool();
-    if (session?.lines === 'real' && session.real.has(cur.signature)) {
-      const current = withReal(cur);
-      const measured = found.filter(c => session.real.has(c.signature)).map(withReal);
-      return { real: true, current, ranked: rankCandidates(settings.goal, current, measured) };
-    }
-    return { real: false, current: cur, ranked: rankCandidates(settings.goal, cur, found) };
-  }
-
-  // with real lines asked for: the layout on the canvas and the best few by the estimate, not measured yet
-  function unmeasured() {
-    if (session?.lines !== 'real' || !session.attempts) return [];
-    const cur = canvasEntry();
-    return [cur, ...rankCandidates(settings.goal, cur, pool()).slice(0, OPTIONS_COUNT)]
-      .filter(e => !session.real.has(e.signature));
-  }
-
   // A note `aboutCanvas` describes the layout on the canvas, and goes once that
   // layout changes (after Ctrl+Z, say). Any other stays until the next action.
   function setNote(text, { aboutCanvas = false } = {}) {
     note = { text, canvas: aboutCanvas ? canvasSignature() : null };
   }
 
-  function apply(entry) {
-    const measurement = session?.lines === 'real' ? session.real.get(entry.signature) : null;
-    const drawsRightAngles = diagram.edgeRouting === 'ortho-rounded' || diagram.edgeRouting === 'ortho-sharp';
-    applyCompactResult(diagram, entry, { lines: measurement && drawsRightAngles ? measurement.lines : null });
-    afterApply?.(entry);
+  // a layout found, as the goal ranks it: by what its real lines measure
+  const ranked = (entry) => ({ ...entry, metrics: entry.measurement.metrics, score: rankScore(entry.measurement.metrics, settings) });
+
+  // Keep a layout found: the best KEEP_FOUND by score, and always the one on the canvas.
+  function keep(s, entry) {
+    s.found.set(entry.signature, entry);
+    if (s.found.size <= KEEP_FOUND) return;
+    const onCanvas = canvasSignature();
+    const worst = [...s.found.values()]
+      .filter(e => e.signature !== onCanvas && e.signature !== entry.signature)
+      .sort((a, b) => ranked(b).score - ranked(a).score)[0];
+    if (worst) s.found.delete(worst.signature);
   }
 
-  // Only the tries that finished count: an interrupted one is tried again next time.
+  // the layout on the canvas as found, and the best others to pick from
+  function options() {
+    const current = session?.found.get(canvasSignature());
+    if (!current) return { current: null, choices: [] };
+    const others = [...session.found.values()].map(ranked);
+    return { current: ranked(current), choices: rankCandidates(settings.goal, ranked(current), others).slice(0, OPTIONS_COUNT) };
+  }
+
+  // Put a layout on the canvas, with its measured lines when it has them.
+  function apply(entry, { live = false, recordHistory = true } = {}) {
+    applying = true;
+    try {
+      applyCompactResult(diagram, entry, { lines: entry.measurement?.lines || null, recordHistory });
+    } finally {
+      applying = false;
+    }
+    afterApply?.(entry, { live });
+  }
+
   function end(j) {
     if (job === j) job = null;
     clearInterval(ticker);
     ticker = null;
-    if (j.kind === 'search') {
-      j.session.nextSeed = j.firstSeed + j.finished;
-      j.session.elapsed += performance.now() - j.startedAt;
-    }
+    if (j.kind === 'improve') j.session.elapsed += performance.now() - j.startedAt;
   }
 
   // stop what is running, keeping whatever it found
@@ -441,10 +398,10 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     return j;
   }
 
-  function begin(j, message, on, { keepNote = false } = {}) {
+  function begin(j, message, on) {
     job = j;
-    j.startedAt = j.startedAt || performance.now();
-    if (!keepNote) note = null;
+    j.startedAt = performance.now();
+    note = null;
     picker.el.hidden = true;
     ui.el.hidden = false;
     j.handle = runJob(message, {
@@ -460,15 +417,22 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
       fail(message) {
         if (job !== j) return;
         end(j);
-        if (j.kind === 'measure') j.session.lines = 'estimate';
-        setNote(j.kind === 'arrange' ? `Could not arrange the tables: ${message}`
-          : j.kind === 'measure' ? `Could not measure the real lines: ${message}`
-          : j.kind === 'refine' ? `Refine stopped on an error: ${message}`
-          : `The search stopped on an error: ${message}`);
+        setNote(j.kind === 'arrange' ? `Could not arrange the tables: ${message}` : `Improve stopped on an error: ${message}`);
         render();
       },
     });
-    ticker = setInterval(render, 250);
+    ticker = setInterval(tick, 250);
+    render();
+  }
+
+  // Four times a second: Improve stops once nothing better has turned up for as
+  // long as Patience says, counted from the last layout it put on the canvas.
+  function tick() {
+    const j = job;
+    if (j?.kind === 'improve' && j.betterAt != null && performance.now() - j.betterAt >= patience().ms) {
+      stop({ gaveUp: true });
+      return;
+    }
     render();
   }
 
@@ -494,226 +458,139 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
       },
       done() {
         if (!j.result) return;
-        // it stays among the candidates, in case another layout is applied later
         session = newSession(key);
-        session.top = keepBest([], j.result, KEEP);
-        session.nextSeed = 1;
         apply(j.result);
         onArranged?.(j.result);
       },
     });
   }
 
-  // Search and Keep searching: the same lists carry on while the schema is the same.
-  function search() {
+  // Improve, and Improve again: it carries on from where the last run stopped.
+  function improve() {
     if (job || !settings) return;
     const { input, key } = readInput();
     if (!session || session.key !== key) session = newSession(key);
     const s = session;
-    const j = {
-      kind: 'search', key, session: s, base: canvasEntry(),
-      firstSeed: s.nextSeed, finished: 0, before: s.attempts, startedAt: performance.now(),
+    const signature = canvasSignature();
+    const start = {
+      positions: diagram.model.tables.map(t => [t.key, t.x, t.y]),
+      groupBoxes: (diagram.annotations || []).filter(a => a.type === 'group').map(b => ({ ...b, tables: [...(b.tables || [])] })),
+      orientation: diagram.orientation || 'LR',
+      // found already: those lines, which can be better than routing it from scratch
+      measurement: s.found.get(signature)?.measurement || null,
+      settled: s.settled.has(signature),
     };
-    begin(j, { kind: 'search', input, options: { firstSeed: j.firstSeed, budgetMs: SEARCH_LIMIT_MS, keepTop: KEEP } }, {
-      step(m) {
-        j.finished = m.attempts;
-        s.attempts = j.before + m.attempts;
-        if (m.top) s.top = mergeTop(s.top, m.top, KEEP);
-        if (m.front) s.front = mergeTop(s.front, m.front, FRONT, { front: true });
-      },
-      done() {
-        setNote(`Stopped at the ${SEARCH_LIMIT_MS / 60000}-minute limit. Keep searching carries on.`);
-      },
-    });
-  }
-
-  // measure `layouts` with the real lines, keeping every measurement as it comes
-  function measure(layouts) {
-    const { input, key } = readInput();
-    if (!session || session.key !== key) return;
-    const s = session;
-    const j = { kind: 'measure', key, session: s, total: layouts.length, measured: 0 };
-    begin(j, { kind: 'measure', input, layouts: layouts.map(e => ({ signature: e.signature, positions: e.positions })) }, {
-      step(m) {
-        if (m.type !== 'measured') return;
-        s.real.set(m.signature, m.measurement);
-        j.measured++;
-      },
-      done() {},
-    }, { keepNote: true });
-  }
-
-  // Refine: the layout on the canvas and, after a search, the best two others,
-  // each swap judged by the real lines. From here on the panel compares by them.
-  function refine() {
-    if (job || !settings) return;
-    const { input, key } = readInput();
-    if (!session || session.key !== key) session = newSession(key);
-    const s = session;
-    const base = canvasEntry();
-    const others = standing().ranked.slice(0, REFINE_STARTS - 1);
-    s.lines = 'real';
-    s.asked = true;
-    const starts = [
-      {
-        signature: base.signature, positions: base.positions, orientation: diagram.orientation || 'LR',
-        groupBoxes: (diagram.annotations || []).filter(a => a.type === 'group'),
-      },
-      ...others.map(c => ({ signature: c.signature, positions: c.positions, groupBoxes: c.groupBoxes, orientation: c.orientation || 'LR' })),
-    ].map(start => ({
-      ...start,
-      groupBoxes: start.groupBoxes.map(b => ({ ...b, tables: [...(b.tables || [])] })),
-      // measured already: those lines, which can be better than routing from scratch
-      measurement: s.real.get(start.signature) || null,
-      settled: s.settled.has(start.signature),
-    }));
     const j = {
-      kind: 'refine', key, session: s, base, starts: starts.length,
-      index: 0, round: 0, phase: 'measuring', evaluated: 0, total: 0,
-      baseReal: null, best: null, bestReal: null,
+      kind: 'improve', key, session: s,
+      phase: 'measuring', round: 0, evaluated: 0, total: 0, triesBefore: s.tries,
+      onCanvas: signature,  // what Improve last put on the canvas
+      recorded: false,      // the undo step back to where it started is taken
+      chains: new Map(),    // chain -> the layout it reported last
+      betterAt: null,       // when it last put a better layout on the canvas
     };
-    begin(j, { kind: 'refine', input, starts }, {
+    begin(j, { kind: 'improve', input, start, options: { firstSeed: s.nextSeed } }, {
       step(m) {
-        if (m.type === 'measured') {
-          s.real.set(m.signature, m.measurement);
-          if (m.index === 0) j.baseReal = m.measurement;
-        } else if (m.type === 'best') {
-          const { measurement, ...entry } = m.result;
-          j.best = entry;
-          j.bestReal = measurement;
+        if (m.type === 'best') {
+          j.betterAt = performance.now();
+          track(j, m);
+          if (!s.baseline) s.baseline = m.result;
+          show(j, m.result);
+        } else if (m.type === 'candidate') {
+          track(j, m);
         } else if (m.type === 'settled') {
-          for (const signature of m.signatures) s.settled.add(signature);
+          for (const sig of m.signatures) s.settled.add(sig);
+          track(j, m);
         } else if (m.type === 'progress') {
-          Object.assign(j, { index: m.index, round: m.round, phase: m.phase, evaluated: m.evaluated, total: m.total });
+          Object.assign(j, { phase: m.phase, round: m.round, evaluated: m.evaluated, total: m.total });
+          s.nextSeed = m.seed;
+          s.tries = j.triesBefore + m.tries;
         }
       },
-      done() {
-        finishRefine(j, { stopped: false });
-      },
+      done() {},
     });
   }
 
-  // A layout Refine reached joins the candidates with the lines it reached it
-  // with, which are the ones it is drawn with once applied.
-  function keepRefined(s, entry, measurement) {
-    s.real.set(entry.signature, measurement);
-    s.refined = [entry, ...s.refined.filter(r => r.signature !== entry.signature)].slice(0, KEEP_REFINED);
-  }
-
-  // The best layout Refine reached goes on the canvas when it beats what is
-  // there, unless the canvas changed meanwhile.
-  function finishRefine(j, { stopped }) {
+  // Each layout refined is a chain of better and better layouts: the last one
+  // reported replaces the one before it, so what is kept to pick from is where
+  // each chain stands, or ended.
+  function track(j, m) {
     const s = j.session;
-    const best = j.best;
-    if (!best) {
-      setNote('Stopped refining before the lines were measured. Nothing moved.');
-      return;
-    }
-    const real = j.bestReal;
-    if (best.signature === j.base.signature) {
-      setNote(stopped ? 'Stopped refining: nothing better found yet.'
-        : 'Refined with the real lines: no swap of neighbouring tables improves them.', { aboutCanvas: true });
-      return;
-    }
-    keepRefined(s, best, real);
-    if (canvasSignature() !== j.base.signature) {
-      setNote('The diagram changed while refining, so nothing moved. The refined layout is under Compare.');
-      return;
-    }
-    apply(best);
-    setNote(`${stopped ? 'Stopped refining, applied the best so far' : 'Refined with the real lines'}: ` +
-      `${describeChange(j.baseReal.metrics, real.metrics)}. Ctrl+Z goes back.`, { aboutCanvas: true });
+    const before = j.chains.get(m.chain);
+    if (before && before !== m.result.signature) s.found.delete(before);
+    j.chains.set(m.chain, m.result.signature);
+    keep(s, m.result);
   }
 
-  function stop() {
+  // A better layout goes on the canvas as soon as it is found, lines included,
+  // without moving the view. The first one takes the undo step that goes back to
+  // where Improve started; the ones after it replace it.
+  function show(j, entry) {
+    if (canvasSignature() !== j.onCanvas) {
+      // moved meanwhile, by something that did not say so
+      halt();
+      setNote('Stopped: the diagram changed.');
+      render();
+      return;
+    }
+    // Improve again starts from what it left there, lines and all
+    if (entry.signature === j.session.drawn) return;
+    apply(entry, { live: true, recordHistory: !j.recorded });
+    j.recorded = true;
+    j.onCanvas = entry.signature;
+    j.session.drawn = entry.signature;
+  }
+
+  // Stop, pressed or, with `gaveUp`, once Patience ran out.
+  function stop({ gaveUp = false } = {}) {
     const j = halt();
     if (!j) return;
-    if (j.kind === 'arrange') setNote('Stopped before the arrangement finished. Nothing moved.');
-    else if (j.kind === 'measure') {
-      j.session.lines = 'estimate';
-      setNote('Stopped measuring: back to the estimate.');
-    } else if (j.kind === 'refine') finishRefine(j, { stopped: true });
-    else if (!j.finished) setNote('Stopped before a try finished.');
+    if (j.kind === 'arrange') {
+      setNote('Stopped before the arrangement finished. Nothing moved.');
+      render();
+      return;
+    }
+    const s = j.session;
+    const { current, choices } = options();
+    const since = s.baseline && current && s.baseline.signature !== current.signature
+      ? describeChange(s.baseline.measurement.metrics, current.metrics)
+      : null;
+    const tried = count(s.tries, 'layout', 'layouts');
+    const waited = `Stopped after ${patience().label} with nothing better`;
+    setNote(since
+      ? `${gaveUp ? `${waited}, ${tried} tried` : `Stopped after ${tried} tried`}: ${since}. Ctrl+Z goes back to where it started.`
+      : `${gaveUp ? `${waited} than this layout` : 'Stopped: nothing better than this layout yet'}. Improve carries on from here.`,
+    { aboutCanvas: true });
     render();
+    if (current && choices.length) openPicker(current, choices);
   }
 
   // What was found belongs to the schema it was found for: once that changes, a
-  // running job stops and the lists are dropped. Moving tables changes nothing.
+  // running job stops and what was found is dropped.
   function validate() {
     if ((!job && !session) || !settings) return;
     const { key } = readInput();
     if (job && job.key !== key) {
       const j = halt();
-      setNote(j.kind === 'arrange' ? 'Stopped: the diagram changed. Nothing moved.'
-        : j.kind === 'measure' ? 'Stopped measuring: the diagram changed.'
-        : j.kind === 'refine' ? 'Stopped refining: the diagram changed. Nothing moved.'
-        : 'Search stopped: the diagram changed.');
+      setNote(j.kind === 'arrange' ? 'Stopped: the diagram changed. Nothing moved.' : 'Stopped: the diagram changed.');
     }
     if (session && session.key !== key) session = null;
   }
 
-  function applyBest() {
-    validate();
-    if (job || !session) return render();
-    const st = standing();
-    const best = chooseBest(settings.goal, st.current, st.ranked);
-    if (best) {
-      apply(best);
-      setNote(`Applied: ${describeChange(st.current.metrics, best.metrics)}${st.real ? ', with the real lines' : ''}. Ctrl+Z goes back.`, { aboutCanvas: true });
-    }
-    render();
-  }
-
-  function compare() {
-    validate();
-    if (job || !session) return render();
-    const st = standing();
-    const choices = st.ranked.slice(0, OPTIONS_COUNT);
-    if (choices.length) openPicker(st, choices);
-    else render();
-  }
-
-  function answer(measureReal) {
-    if (!session) return;
-    session.asked = true;
-    session.lines = measureReal ? 'real' : 'estimate';
-    render();
-  }
-
   function workingText(j) {
-    const s = j.session;
     if (j.kind === 'arrange') return 'Arranging…';
-    if (j.kind === 'measure') {
-      return `Measuring real lines · ${j.measured} of ${j.total} · ${clock(performance.now() - j.startedAt)}`;
-    }
-    if (j.kind === 'refine') {
-      const which = j.starts > 1 ? `layout ${j.index + 1} of ${j.starts} · ` : '';
-      const doing = j.phase === 'measuring'
-        ? (j.round ? `round ${j.round + 1} · routing every line` : 'routing every line')
-        : `round ${j.round + 1} · ${nf.format(j.evaluated)} of ${count(j.total, 'swap', 'swaps')}`;
-      const real = j.bestReal;
-      const found = real && j.best.signature !== j.base.signature
-        ? `best: ${describeChange(j.baseReal.metrics, real.metrics)}`
-        : 'nothing better yet';
-      return `Refining with real lines · ${which}${doing} · ${found} · ${clock(performance.now() - j.startedAt)}`;
-    }
-    const best = s.top.find(r => r.signature !== j.base.signature);
-    const found = best && best.score < j.base.score - 0.5
-      ? `best: ${describeChange(j.base.metrics, best.metrics)}`
+    const s = j.session;
+    const time = clock(s.elapsed + performance.now() - j.startedAt);
+    const current = s.found.get(j.onCanvas);
+    const gain = s.baseline && current && s.baseline.signature !== current.signature
+      ? describeChange(s.baseline.measurement.metrics, current.measurement.metrics)
       : 'nothing better yet';
-    return `Searching · ${tries(s.attempts)} · ${clock(s.elapsed + performance.now() - j.startedAt)} · ${found}`;
-  }
-
-  function idleText(st, best) {
-    const prefix = st.real ? 'Real lines · ' : '';
-    if (best) {
-      const of = session.attempts ? `Best of ${tries(session.attempts)}` : 'Best found';
-      return `${prefix}${of}: ${describeChange(st.current.metrics, best.metrics)}`;
-    }
-    if (!session?.attempts) return prefix + metricsText(st.current.metrics);
-    return st.real
-      ? `Real lines · the current layout is the best of the ${count(st.ranked.length + 1, 'layout', 'layouts')} measured.`
-      : `The current layout is the best of ${tries(session.attempts)}.`;
+    const doing = j.phase === 'exploring' ? `trying other layouts (${nf.format(s.tries)} so far)`
+      : j.phase === 'measuring' ? 'drawing the real lines of a layout'
+      : `swapping neighbouring tables, round ${j.round + 1}: ${nf.format(j.evaluated)} of ${nf.format(j.total)}`;
+    // the last ten seconds of patience are counted down
+    const left = j.betterAt == null ? Infinity : patience().ms - (performance.now() - j.betterAt);
+    const ending = left <= 10e3 ? ` · stopping in ${Math.max(1, Math.ceil(left / 1000))} s unless it finds better` : '';
+    return `Improving · ${time} · ${gain} · ${doing}${ending}`;
   }
 
   function render() {
@@ -726,60 +603,40 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     ui.spinner.hidden = !running;
     ui.progress.hidden = !running;
     ui.stop.hidden = !running;
+    ui.improve.hidden = running;
     if (running) {
-      for (const b of [ui.apply, ui.compare, ui.search, ui.refine, ui.lines, ui.ask]) b.hidden = true;
+      ui.options.hidden = true;
       ui.status.textContent = workingText(job);
       return;
     }
     if (!settings) return;
-    const st = standing();
-    const best = chooseBest(settings.goal, st.current, st.ranked);
-    const searched = !!session?.attempts;
-    const hasOptions = searched && pool().length > 0;
-    ui.status.textContent = idleText(st, best);
-    ui.apply.hidden = !best;
-    ui.compare.hidden = !st.ranked.length;
-    ui.search.hidden = false;
-    ui.search.textContent = searched ? 'Keep searching' : 'Search';
-    // the button to press next stands out
-    ui.search.classList.toggle('primary', !best);
-    ui.search.classList.toggle('ghost', !!best);
-    // nothing to refine where every layout Refine would start from has been refined
-    ui.refine.hidden = [st.current, ...st.ranked.slice(0, REFINE_STARTS - 1)]
-      .every(e => session?.settled.has(e.signature));
-    // once there is something to compare, ask once; after that, a button switches
-    const asking = hasOptions && !session.asked;
-    ui.ask.hidden = !asking;
-    ui.lines.hidden = !hasOptions || asking;
-    ui.lines.textContent = session?.lines === 'real' ? 'Use the estimate' : 'Measure real lines';
-    // with real lines asked for, what gets compared is measured first
-    if (!asking && picker.el.hidden) {
-      const todo = unmeasured();
-      if (todo.length) measure(todo);
-    }
+    const { current, choices } = options();
+    ui.status.textContent = current
+      ? `Real lines · ${metricsText(current.metrics)}`
+      : patience().ms === Infinity
+        ? 'Improve looks for better layouts, drawn with the real 90° lines, until you stop it.'
+        : `Improve looks for better layouts, drawn with the real 90° lines, and stops after ${patience().label} without finding one.`;
+    ui.options.hidden = !choices.length;
   }
 
-  function openPicker(st, choices) {
-    const cur = st.current;
+  function openPicker(current, choices) {
     const cards = [
       {
-        name: 'Current', entry: null, metrics: cur.metrics,
+        name: 'Current', entry: null, metrics: current.metrics,
         layout: {
-          positions: cur.positions,
+          positions: current.positions,
           groups: (diagram.annotations || []).filter(a => a.type === 'group'),
-          routes: st.real ? cur.measurement?.routes : null,
+          routes: current.measurement.routes,
         },
       },
       ...choices.map((c, i) => ({
         name: `Option ${String.fromCharCode(65 + i)}`, entry: c, metrics: c.metrics,
-        layout: { positions: c.positions, groups: c.groupBoxes, routes: st.real ? c.measurement?.routes : null },
+        layout: { positions: c.positions, groups: c.groupBoxes, routes: c.measurement.routes },
       })),
     ];
-    const which = choices.length === 1 ? 'The best layout' : `The ${choices.length} best layouts`;
-    picker.desc.textContent = st.real
-      ? `${which} measured, beside the one you have. Lines are drawn and counted as the quick Optimal Route draws them; Lines > Optimal Route can polish them further.`
-      : `${which} found in ${tries(session.attempts)}, beside the one you have. ` +
-        'Lines are drawn straight, centre to centre, the way they are estimated, and the numbers come from the same estimate.';
+    const which = choices.length === 1 ? 'The best other layout' : `The ${choices.length} best other layouts`;
+    picker.desc.textContent = `${which} found, beside the one on the canvas. ` +
+      'Lines are drawn and counted as the quick Optimal Route draws them; Lines > Optimal Route can polish them further.';
     picker.list.replaceChildren();
     const drawings = [];
     for (const c of cards) {
@@ -790,7 +647,7 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
       const name = document.createElement('div');
       name.className = 'lo-name';
       name.textContent = c.name;
-      card.append(cv, name, metricsBlock(c.metrics, c.entry ? cur.metrics : null));
+      card.append(cv, name, metricsBlock(c.metrics, c.entry ? current.metrics : null));
       card.addEventListener('click', () => {
         picker.el.hidden = true;
         if (c.entry) {
@@ -798,7 +655,8 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
           validate();
           if (session && !job) {
             apply(c.entry);
-            setNote(`${c.name} applied: ${describeChange(cur.metrics, c.metrics)}. Ctrl+Z goes back.`, { aboutCanvas: true });
+            session.drawn = c.entry.signature;
+            setNote(`${c.name} applied: ${describeChange(current.metrics, c.metrics)}. Ctrl+Z goes back.`, { aboutCanvas: true });
           }
         }
         render();
@@ -810,6 +668,14 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     // drawn once the cards are laid out, so each canvas knows its size
     requestAnimationFrame(() => { for (const [cv, layout] of drawings) drawThumbnail(cv, layout, diagram); });
     picker.keep.focus();
+  }
+
+  function seeOptions() {
+    validate();
+    if (job) return render();
+    const { current, choices } = options();
+    if (current && choices.length) openPicker(current, choices);
+    else render();
   }
 
   /** Stop whatever runs and close the picker; `hide` puts the panel away too. */
@@ -824,14 +690,13 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     }
   }
 
-  ui.apply.addEventListener('click', applyBest);
-  ui.compare.addEventListener('click', compare);
-  ui.search.addEventListener('click', search);
-  ui.refine.addEventListener('click', refine);
-  ui.stop.addEventListener('click', stop);
-  ui.askYes.addEventListener('click', () => answer(true));
-  ui.askNo.addEventListener('click', () => answer(false));
-  ui.lines.addEventListener('click', () => answer(session?.lines !== 'real'));
+  ui.improve.addEventListener('click', improve);
+  ui.options.addEventListener('click', seeOptions);
+  ui.stop.addEventListener('click', () => stop());
+  ui.patience.addEventListener('change', () => {
+    try { localStorage.setItem(PATIENCE_KEY, ui.patience.value); } catch { /* private mode */ }
+    render();
+  });
   ui.close.addEventListener('click', () => cancel({ hide: true }));
   const closePicker = () => { picker.el.hidden = true; render(); };
   picker.close.addEventListener('click', closePicker);
@@ -845,14 +710,16 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     arrange,
     cancel,
     /**
-     * Something is about to change the diagram. A first arrangement still running
-     * would land on top of that change, so it stops; a search or a measurement
-     * never touches the diagram and carries on.
+     * Something is about to change the diagram. Whatever runs stops: a first
+     * arrangement would land on top of that change, and Improve would undo it
+     * with the next layout it puts on the canvas.
      */
     noteEdit() {
-      if (job?.kind !== 'arrange') return;
-      halt();
-      setNote('Stopped: the diagram changed. Nothing moved.');
+      if (applying || !job) return;
+      const j = halt();
+      setNote(j.kind === 'arrange'
+        ? 'Stopped: the diagram changed. Nothing moved.'
+        : 'Stopped: you changed the diagram. Improve carries on from here.');
       render();
     },
     /** The diagram has changed: check what was found still applies, and redraw the panel. */

@@ -152,17 +152,6 @@ export function keepBest(list, result, k) {
 }
 
 /**
- * Everything in `more` that belongs in the list: the `k` best by score, or, with
- * `front`, the layouts no other beats on both lines and crossings. Returns `list`
- * itself when nothing gets in.
- */
-export function mergeTop(list, more, k, { front = false } = {}) {
-  let out = list;
-  for (const result of more || []) out = front ? keepFront(out, result, k) : keepBest(out, result, k);
-  return out;
-}
-
-/**
  * A search that runs one try per step(), from `firstSeed` on, until it has made
  * `maxAttempts` tries or spent `budgetMs`. The budget is checked between tries,
  * so a try that has started always finishes. `keepTop` also keeps the best few
@@ -263,23 +252,11 @@ export function realLinesOf(d) {
 
 /**
  * A job as a series of steps, run the same in the worker and on the page:
- * `{ kind: 'search', input, options }` makes tries (compactSearch), and
- * `{ kind: 'measure', input, layouts: [{ signature, positions }] }` measures each
- * layout with the real lines. Returns { done(), step(), finish() }.
+ * `{ kind: 'search', input, options }` makes tries (compactSearch). Improve has a
+ * job of its own (compact-refine.js createImproveJob). Returns { done(), step(),
+ * finish() }.
  */
 export function createJob(message) {
-  if (message.kind === 'measure') {
-    let index = 0;
-    return {
-      done: () => index >= message.layouts.length,
-      step() {
-        const layout = message.layouts[index];
-        const measurement = measureRealLines(message.input, layout.positions);
-        return { type: 'measured', index: index++, signature: layout.signature, measurement };
-      },
-      finish: () => ({ type: 'done', measured: index }),
-    };
-  }
   const search = compactSearch(message.input, message.options);
   return {
     done: () => search.state.done,
@@ -292,10 +269,12 @@ export function createJob(message) {
  * Put a try's layout on the real diagram: the same changes the layout makes when
  * it runs there, so undo, saving and the group boxes behave exactly as after a
  * normal rearrange. `lines`, from measureRealLines, also puts the measured lines
- * on it, for a diagram that draws 90 degree lines.
+ * on it, drawn at 90 degrees as Optimal Route leaves a diagram. Without
+ * `recordHistory` there is no undo step, for a layout that replaces one put there
+ * moments ago by the same run.
  */
-export function applyCompactResult(diagram, result, { lines = null } = {}) {
-  diagram.onHistorySnapshot?.(diagram.getSnapshot());
+export function applyCompactResult(diagram, result, { lines = null, recordHistory = true } = {}) {
+  if (recordHistory) diagram.onHistorySnapshot?.(diagram.getSnapshot());
   diagram.edgeWaypoints.clear();
   diagram.edgeAnchors.clear();
   const byKey = new Map(diagram.model.tables.map(t => [t.key, t]));
@@ -308,6 +287,7 @@ export function applyCompactResult(diagram, result, { lines = null } = {}) {
     ? notes
     : [...notes, ...result.groupBoxes.map(b => ({ ...b, tables: [...b.tables] }))]);
   if (lines) {
+    if (diagram.edgeRouting !== 'ortho-sharp') diagram.edgeRouting = 'ortho-rounded';
     for (const [key, anchors] of lines.anchors) {
       diagram.edgeAnchors.set(key, { fromAnchor: { ...anchors.fromAnchor }, toAnchor: { ...anchors.toAnchor } });
       diagram.edgeRoutings?.delete(key);

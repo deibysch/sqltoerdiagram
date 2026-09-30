@@ -1,5 +1,7 @@
-// Refine, in the search panel of "Optimize for": neighbouring tables trade places
-// wherever the real lines come out better.
+// Improve, the one button of the panel of "Optimize for": it looks for a better
+// layout until it is stopped, judging every layout by the real lines. Its core is
+// refining: neighbouring tables trade places wherever the real lines come out
+// better.
 //
 // The layout and the search judge an arrangement by a cheap estimate, every line
 // straight from centre to centre. Between two whole arrangements it ranks them
@@ -35,16 +37,18 @@
 // against is pushed out of its way, inside its own group, as long as no group
 // box runs into another.
 //
-// It refines the layout on the canvas and, after a search, the best few others,
-// since a better start often refines into a better end. The swaps of a round are
-// independent of each other, so in a worker with cores to spare helpers judge
-// them (refine-parallel.js), with the same result as here.
+// It refines the layout on the canvas first, then explores: other starting points
+// judged by the estimate, the most promising measured and refined in turn, since
+// a better start often refines into a better end. That goes on until it is
+// stopped. The swaps of a round are independent of each other, so in a worker
+// with cores to spare helpers judge them (refine-parallel.js), with the same
+// result as here.
 
 import { getDiagramEdges, organizeLinesShortestPath } from './line-organizer.js';
 import { getTableAnchor, buildOrthogonalPoints, segmentIntersectsBox } from './routing.js';
 import { rankScore } from './layout-goals.js';
 import { collectGroupsCompact, compactLayoutMetrics, compactSpacing, fitGroupBox } from './group-layout-compact.js';
-import { diagramFrom, measureRealLines, realLinesOf } from './compact-search-core.js';
+import { diagramFrom, measureRealLines, realLinesOf, compactAttempt } from './compact-search-core.js';
 
 const MAX_ROUNDS = 8;
 const MAX_PUSHED = 8;        // tables a swap may push out of its way
@@ -53,8 +57,12 @@ const GROUP_CLEAR = 24;      // px a group box keeps from another group box
 const TABLE_CLEAR = 16;      // ... and from a table outside it
 const HIT_MARGIN = 8;        // a line this close to a table that moved is routed again
 // A refine has gained up to 23% from one start (35 tables in 6 groups), so a
-// start that measures further than this behind the best so far is only measured.
+// layout that measures further than this behind the best so far is only measured.
 const REACH = 1.3;
+// Other starting points tried by the estimate for each one measured: across
+// starting points the estimate ranks layouts about as the real lines do (rank
+// correlation 0.83 to 0.98), so the best of a few is the one worth measuring.
+const EXPLORE_BATCH = 4;
 
 const DIRECTIONS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 
@@ -364,36 +372,52 @@ function entryOf(ctx, state, orientation) {
 }
 
 /**
- * Refine, step by step. It yields what it cannot do itself: { type: 'route' },
- * Optimal Route over a whole layout, answered with measureRealLines(); and
- * { type: 'evaluate', state, moves }, answered with evaluateMove() of every move
- * against that state, in order. Everything else it yields is a report:
- * 'measured' when a start has been measured, 'best' when the best layout so far
- * changes, 'settled' once a start has been refined to the end (with the layout
- * it ended on, which refining again leaves as it is), and 'progress'. A start
- * marked `settled` is only measured.
+ * Improve, step by step, for as long as it is let run (or `maxTries` tries). It
+ * yields what it cannot do itself: { type: 'route' }, quick Optimal Route over a
+ * whole layout, answered with measureRealLines(); and { type: 'evaluate', state,
+ * moves }, answered with evaluateMove() of every move against that state, in
+ * order. Everything else it yields is a report: 'measured' when a layout has
+ * been measured; 'best' whenever the best layout so far changes (the first is
+ * `start` itself); 'candidate' whenever a layout being refined improves without
+ * becoming the best, since it may still be the one to pick; 'settled' once a
+ * layout has been refined to the end, with the layout it ended on as `result`;
+ * and 'progress'. 'best', 'candidate' and 'settled' carry the `chain` they come
+ * from, one per layout refined: each replaces the one before it in its chain.
+ *
+ * It refines `start` first, then explores: EXPLORE_BATCH other starting points
+ * (seeds, from `firstSeed` on) judged by the estimate, the most promising of them
+ * measured and, unless it measures too far behind, refined; and again. A layout
+ * marked `settled` is only measured, since refining it again finds nothing.
  */
-export function* refineSteps(ctx, starts, { maxRounds = MAX_ROUNDS } = {}) {
+export function* improveSteps(ctx, start, { firstSeed = 1, maxTries = Infinity, maxRounds = MAX_ROUNDS } = {}) {
   let best = null;
-  const report = (state, orientation) => ({ type: 'best', result: entryOf(ctx, state, orientation) });
+  let tries = 0;
+  let seed = firstSeed;
+  let chains = 0;
+  const seen = new Set();
 
-  for (let index = 0; index < starts.length; index++) {
-    const start = startFrom(ctx, starts[index]);
-    // A start measured already keeps those lines: a layout Refine reached can have
+  function* improveFrom(layout) {
+    const chain = chains++;
+    const from = startFrom(ctx, layout);
+    // the best so far, or else a layout still worth picking
+    const report = (state) => {
+      const type = !best || state.score < best.score - 0.5 ? 'best' : 'candidate';
+      if (type === 'best') best = state;
+      return { type, chain, result: entryOf(ctx, state, from.orientation) };
+    };
+    seen.add(from.signature);
+    // A layout measured already keeps those lines: one Improve reached can have
     // better ones than routing it from scratch gives.
-    let measurement = starts[index].measurement;
+    let measurement = layout.measurement;
     if (!measurement) {
-      yield { type: 'progress', index, round: 0, phase: 'measuring', evaluated: 0, total: 0 };
-      measurement = yield { type: 'route', positions: start.positions };
+      yield { type: 'progress', phase: 'measuring', round: 0, evaluated: 0, total: 0, tries, seed };
+      measurement = yield { type: 'route', positions: from.positions };
     }
-    let state = stateFrom(ctx, start, measurement);
-    yield { type: 'measured', index, signature: start.signature, measurement };
-    if (!best || state.score < best.score - 0.5) {
-      best = state;
-      yield report(state, start.orientation);
-    }
-    // settled: refined before to the end, and refining is the same every time
-    if (starts[index].settled || state.score > best.score * REACH) continue;
+    let state = stateFrom(ctx, from, measurement);
+    yield { type: 'measured', signature: from.signature, measurement };
+    if (best && state.score > best.score * REACH) return;
+    yield report(state);
+    if (layout.settled) return;
 
     for (let round = 0; round < maxRounds; round++) {
       let accepted = 0;
@@ -401,7 +425,7 @@ export function* refineSteps(ctx, starts, { maxRounds = MAX_ROUNDS } = {}) {
       for (;;) {
         const moves = pairs.map(p => placeSwap(ctx, state, p)).filter(Boolean);
         if (!moves.length) break;
-        const results = yield { type: 'evaluate', state, moves, index, round };
+        const results = yield { type: 'evaluate', state, moves, round, tries, seed };
         const improving = results
           .map((r, i) => [r, i])
           .filter(([r]) => r.score < state.score - 0.5)
@@ -410,16 +434,30 @@ export function* refineSteps(ctx, starts, { maxRounds = MAX_ROUNDS } = {}) {
         const [result, i] = improving[0];
         state = applyMove(ctx, state, moves[i], result);
         accepted++;
-        if (state.score < best.score - 0.5) {
-          best = state;
-          yield report(state, start.orientation);
-        }
+        yield report(state);
         // the other improving swaps, placed and judged again from here
         pairs = improving.slice(1).map(([, k]) => moves[k].pair);
       }
       if (!accepted) break;
     }
-    yield { type: 'settled', signatures: [start.signature, signatureOf(state.positions)] };
+    yield {
+      type: 'settled',
+      chain,
+      signatures: [from.signature, signatureOf(state.positions)],
+      result: entryOf(ctx, state, from.orientation),
+    };
+  }
+
+  yield* improveFrom(start);
+  while (tries < maxTries) {
+    let pick = null;
+    for (let k = 0; k < EXPLORE_BATCH && tries < maxTries; k++) {
+      const attempt = compactAttempt(ctx.input, seed++);
+      tries++;
+      yield { type: 'progress', phase: 'exploring', round: 0, evaluated: 0, total: 0, tries, seed };
+      if (!seen.has(attempt.signature) && (!pick || attempt.score < pick.score)) pick = attempt;
+    }
+    if (pick) yield* improveFrom({ positions: pick.positions, groupBoxes: pick.groupBoxes, orientation: 'LR' });
   }
 }
 
@@ -436,33 +474,34 @@ export function localJudge(ctx) {
 const then = (value, f) => (value && typeof value.then === 'function' ? value.then(f) : f(value));
 
 /**
- * A refine job, driven like the others of the search (compact-search-core.js
- * createJob): `{ kind: 'refine', input, starts, options }`, with `starts` the
- * layouts to refine, first the one on the canvas. `makeJudge(ctx)` gives what
- * judges the moves and routes the layouts (localJudge, or helpers on other cores
- * from refine-parallel.js), and a step judges as many moves at a time as it has
- * cores. A step returns a report, or a promise of one when the judge works
- * elsewhere.
+ * An improve job, driven like the others of the search (compact-search-core.js
+ * createJob): `{ kind: 'improve', input, start, options }`, with `start` the
+ * layout on the canvas and `options` those of improveSteps. `makeJudge(ctx)`
+ * gives what judges the moves and routes the layouts (localJudge, or helpers on
+ * other cores from refine-parallel.js), and a step judges as many moves at a time
+ * as it has cores. A step returns a report, or a promise of one when the judge
+ * works elsewhere.
  */
-export function createRefineJob(message, makeJudge = localJudge) {
+export function createImproveJob(message, makeJudge = localJudge) {
   const ctx = refineContext(message.input);
   const judge = makeJudge(ctx);
-  const steps = refineSteps(ctx, message.starts || [], message.options);
+  const steps = improveSteps(ctx, message.start, message.options);
   let next = steps.next();
   let batch = null;
-  let where = { index: 0, round: 0 };
+  let where = { round: 0, tries: 0, seed: message.options?.firstSeed ?? 1 };
+  const progress = (phase, evaluated = 0, total = 0) => ({ type: 'progress', phase, ...where, evaluated, total });
 
   const judgeSome = () => {
     const part = batch.moves.slice(batch.results.length, batch.results.length + judge.size * 3);
     return then(judge.evaluate(batch.state, part), (results) => {
       batch.results.push(...results);
-      const progress = { type: 'progress', ...where, phase: 'swapping', evaluated: batch.results.length, total: batch.moves.length };
+      const report = progress('swapping', batch.results.length, batch.moves.length);
       if (batch.results.length >= batch.moves.length) {
         const done = batch.results;
         batch = null;
         next = steps.next(done);
       }
-      return progress;
+      return report;
     });
   };
 
@@ -472,17 +511,17 @@ export function createRefineJob(message, makeJudge = localJudge) {
       if (batch) return judgeSome();
       const request = next.value;
       if (request.type === 'evaluate') {
-        where = { index: request.index, round: request.round };
+        where = { round: request.round, tries: request.tries, seed: request.seed };
         batch = { state: request.state, moves: request.moves, results: [] };
         return judgeSome();
       }
       if (request.type === 'route') {
         return then(judge.route(request.positions), (measurement) => {
           next = steps.next(measurement);
-          return { type: 'progress', ...where, phase: 'measuring', evaluated: 0, total: 0 };
+          return progress('measuring');
         });
       }
-      if (request.type === 'progress') where = { index: request.index, round: request.round };
+      if (request.type === 'progress') where = { round: request.round, tries: request.tries, seed: request.seed };
       next = steps.next();
       return request;
     },

@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { arrangeGroupsCompact, compactLayoutMetrics } from '../src/group-layout-compact.js';
 import {
-  compactInput, compactInputKey, compactAttempt, compactSearch, keepBest, mergeTop, applyCompactResult,
-  polishGoalFor, measureRealLines, createJob,
+  compactInput, compactInputKey, compactAttempt, compactSearch, keepBest, applyCompactResult,
+  polishGoalFor, measureRealLines,
 } from '../src/compact-search-core.js';
 import { rankScore, resolveShape, improvesBoth } from '../src/layout-goals.js';
 import { spCountCrossings, organizeLinesShortestPath } from '../src/line-organizer.js';
@@ -199,7 +199,7 @@ test('without groups, applying a try leaves no group box behind', () => {
 
 // --- the real lines ---------------------------------------------------------
 
-test('a layout is measured with the quick Optimal Route, the one Refine judges by', () => {
+test('a layout is measured with the quick Optimal Route, the one Improve judges by', () => {
   // nine tables in a grid, two relations each at random (the seeded grid of
   // optimal_route.test.mjs): dense enough that the full Optimal Route draws other
   // lines than the quick one
@@ -253,23 +253,20 @@ test('applying a layout with its measured lines puts those lines on the diagram'
   const someKey = real.lines.anchors[0][0];
   d.edgeRoutings.set(someKey, 'curved');
 
+  d.edgeRouting = 'curved';
+
   applyCompactResult(d, r, { lines: real.lines });
   assert.strictEqual(d.edgeAnchors.size, real.lines.anchors.length);
   assert.deepStrictEqual(d.edgeAnchors.get(someKey), real.lines.anchors[0][1]);
   assert.strictEqual(d.edgeWaypoints.size, real.lines.waypoints.length);
   assert.ok(!d.edgeRoutings.has(someKey), 'a measured line takes the diagram-wide style, as Optimal Route leaves it');
-});
+  assert.strictEqual(d.edgeRouting, 'ortho-rounded', 'drawn at 90 degrees, as they were measured');
+  assert.strictEqual(d.snapshots, 1);
 
-test('a measuring job measures each layout in turn', () => {
-  const d = measured(schema(12, 0, 6));
-  const input = compactInput(d, SETTINGS);
-  const layouts = [0, 1].map(s => compactAttempt(input, s)).map(r => ({ signature: r.signature, positions: r.positions }));
-  const job = createJob({ kind: 'measure', input, layouts });
-  const reports = [];
-  while (!job.done()) reports.push(job.step());
-  assert.deepStrictEqual(reports.map(m => [m.type, m.index, m.signature]), layouts.map((l, i) => ['measured', i, l.signature]));
-  assert.deepStrictEqual(reports[1].measurement, measureRealLines(input, layouts[1].positions));
-  assert.deepStrictEqual(job.finish(), { type: 'done', measured: 2 });
+  d.edgeRouting = 'ortho-sharp';
+  applyCompactResult(d, compactAttempt(input, 3), { lines: measureRealLines(input, compactAttempt(input, 3).positions).lines, recordHistory: false });
+  assert.strictEqual(d.edgeRouting, 'ortho-sharp', 'sharp corners are still 90 degrees');
+  assert.strictEqual(d.snapshots, 1, 'no undo step asked for, none taken');
 });
 
 // --- the search -------------------------------------------------------------
@@ -321,15 +318,6 @@ test('the best few are kept once each, lowest score first', () => {
   const same = keepBest(top, r('e', 10), 3);
   assert.strictEqual(same, top, 'a try that does not make it leaves the list as it was');
   assert.deepStrictEqual(keepBest([], r('a', 1), 0), [], 'nothing kept when nothing is asked for');
-});
-
-test('Keep searching adds to what earlier searches found: the best of both, once each', () => {
-  const r = (signature, score) => ({ signature, score });
-  const earlier = [r('a', 2), r('b', 5), r('c', 7)];
-  const merged = mergeTop(earlier, [r('d', 1), r('b', 5), r('e', 6)], 3);
-  assert.deepStrictEqual(merged.map(x => x.signature), ['d', 'a', 'b']);
-  assert.strictEqual(mergeTop(earlier, [r('f', 9)], 3), earlier, 'nothing better leaves the list as it was');
-  assert.strictEqual(mergeTop(earlier, null, 3), earlier);
 });
 
 // --- when what was found still applies ---------------------------------------
