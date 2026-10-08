@@ -29,7 +29,8 @@ const zoomLabel = $('zoom-reset');
 const hlEl = $('hl');
 
 const diagram = new Diagram(canvas);
-diagram.onZoom = (s) => { zoomLabel.textContent = Math.round(s * 100) + '%'; };
+// below 10%, with a decimal: far out on a big diagram, 0% and 1% are a long way apart
+diagram.onZoom = (s) => { zoomLabel.textContent = (s < 0.0995 ? +(s * 100).toFixed(1) : Math.round(s * 100)) + '%'; };
 window.__dbdiga = diagram;   // debug handle
 let visualEditor = null;     // created after setup; refreshed on every model change
 

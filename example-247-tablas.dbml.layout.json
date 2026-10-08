@@ -1,0 +1,2335 @@
+{
+  "version": 1,
+  "diagramLevel": "physical",
+  "edgeColorMode": "multi",
+  "edgeRouting": "ortho-rounded",
+  "orientation": "LR",
+  "tables": {
+    "acq_entity": {
+      "x": 18967,
+      "y": 13240
+    },
+    "acq_entity_address": {
+      "x": 19319,
+      "y": 14358
+    },
+    "aux_ca_cuotas_bkp": {
+      "x": 17373,
+      "y": 14020
+    },
+    "aux_cuota_pendientes": {
+      "x": 17767,
+      "y": 14007
+    },
+    "ca_atm_bisa": {
+      "x": 23676,
+      "y": -1184
+    },
+    "ca_atm_nf_bisa": {
+      "x": 23676,
+      "y": 1360
+    },
+    "ca_bin_adq": {
+      "x": 23694,
+      "y": 3878
+    },
+    "ca_bin_pos_atm_adq": {
+      "x": 23740,
+      "y": 4160
+    },
+    "ca_bin_procesadores": {
+      "x": 23694,
+      "y": 4312
+    },
+    "ca_categoria_transaccion": {
+      "x": 23694,
+      "y": 4620
+    },
+    "ca_comisiones_nf": {
+      "x": 23722,
+      "y": 4850
+    },
+    "ca_conf_archivo_atm": {
+      "x": 23704,
+      "y": 5158
+    },
+    "ca_config_correcciones": {
+      "x": 23715,
+      "y": 5362
+    },
+    "ca_config_dia_captura": {
+      "x": 23694,
+      "y": 5566
+    },
+    "ca_controversias": {
+      "x": 23690,
+      "y": 5796
+    },
+    "ca_controversias_txs": {
+      "x": 23248,
+      "y": 5718
+    },
+    "ca_cuotas": {
+      "x": 23675,
+      "y": 6286
+    },
+    "ca_cuotas_totales": {
+      "x": 23679,
+      "y": 7192
+    },
+    "ca_cybersource_tc33a": {
+      "x": 23676,
+      "y": 7812
+    },
+    "ca_cybersource_transacciones": {
+      "x": 23672,
+      "y": 8198
+    },
+    "ca_estado_proceso": {
+      "x": 23723,
+      "y": 9624
+    },
+    "ca_iata_csi": {
+      "x": 23676,
+      "y": 9750
+    },
+    "ca_iata_transacciones": {
+      "x": 23676,
+      "y": 10084
+    },
+    "ca_ica": {
+      "x": 23694,
+      "y": 10912
+    },
+    "ca_lotes": {
+      "x": 23729,
+      "y": 11220
+    },
+    "ca_marca_destino": {
+      "x": 23694,
+      "y": 12256
+    },
+    "ca_marcas": {
+      "x": 23694,
+      "y": 14406
+    },
+    "ca_pos_batch_forzoso": {
+      "x": 23680,
+      "y": 12590
+    },
+    "ca_proceso_detalle": {
+      "x": 23705,
+      "y": 14636
+    },
+    "ca_procesos": {
+      "x": 23676,
+      "y": 15126
+    },
+    "ca_procesos_hora": {
+      "x": 23729,
+      "y": 15824
+    },
+    "ca_procesos_sql": {
+      "x": 23726,
+      "y": 15976
+    },
+    "ca_productos": {
+      "x": 23694,
+      "y": 16666
+    },
+    "ca_terminales_virtuales": {
+      "x": 23694,
+      "y": 16180
+    },
+    "ca_tipos_captura": {
+      "x": 23709,
+      "y": 16488
+    },
+    "ca_tipos_fondos": {
+      "x": 23694,
+      "y": 17204
+    },
+    "ca_tipos_fondos_emisores": {
+      "x": 23694,
+      "y": 17434
+    },
+    "ca_tipos_locales": {
+      "x": 23694,
+      "y": 16948
+    },
+    "ca_tipos_terminales_virtuales": {
+      "x": 23694,
+      "y": 17664
+    },
+    "ca_tipos_transaccion": {
+      "x": 23694,
+      "y": 17894
+    },
+    "ca_transacciones": {
+      "x": 23245,
+      "y": 18239
+    },
+    "ca_transacciones_discover": {
+      "x": 23252,
+      "y": 12038
+    },
+    "ca_transacciones_faltantes": {
+      "x": 23690,
+      "y": 20902
+    },
+    "ca_transacciones_mastercard": {
+      "x": 23252,
+      "y": 13178
+    },
+    "ca_transacciones_nf": {
+      "x": 23672,
+      "y": 24720
+    },
+    "ca_transacciones_propietaria": {
+      "x": 23679,
+      "y": 18306
+    },
+    "ca_transacciones_visa": {
+      "x": 23252,
+      "y": 20835
+    },
+    "ca_transacciones_visa_rechazos": {
+      "x": 23694,
+      "y": 26848
+    },
+    "ca_txs_tardias_hist": {
+      "x": 23690,
+      "y": 27208
+    },
+    "cf_facturas": {
+      "x": 18176,
+      "y": 14267
+    },
+    "cf_procesos": {
+      "x": 18482,
+      "y": 14267
+    },
+    "cl_cierre_comercios": {
+      "x": 3319,
+      "y": 14332
+    },
+    "cl_dias_no_habiles": {
+      "x": 3676,
+      "y": 14345
+    },
+    "cl_liquidacion_consolidado": {
+      "x": 4033,
+      "y": 14072
+    },
+    "cl_posteo_detalle": {
+      "x": 4381,
+      "y": 14020
+    },
+    "cl_posteo_fallido": {
+      "x": 4738,
+      "y": 14176
+    },
+    "cl_procesos": {
+      "x": 5095,
+      "y": 14228
+    },
+    "co_acuerdos_particulares": {
+      "x": 24866,
+      "y": 10364
+    },
+    "co_acuerdos_por_defectos": {
+      "x": 24547,
+      "y": 10153
+    },
+    "co_agencias": {
+      "x": 25726,
+      "y": 11874
+    },
+    "co_aux_com_dif": {
+      "x": 25737,
+      "y": 12104
+    },
+    "co_aux_com_no_migrados": {
+      "x": 25726,
+      "y": 12256
+    },
+    "co_cheque": {
+      "x": 25694,
+      "y": 11462
+    },
+    "co_comercios": {
+      "x": 25672,
+      "y": 12356
+    },
+    "co_contactos": {
+      "x": 24938,
+      "y": 10160
+    },
+    "co_contactos_medios": {
+      "x": 24978,
+      "y": 9943
+    },
+    "co_direcciones": {
+      "x": 24186,
+      "y": 11288
+    },
+    "co_ejecutivos": {
+      "x": 25743,
+      "y": 13054
+    },
+    "co_estados_transicion": {
+      "x": 25742,
+      "y": 13258
+    },
+    "co_grupos_e_commerce": {
+      "x": 25726,
+      "y": 13384
+    },
+    "co_hist_acuerdos_particulares": {
+      "x": 25708,
+      "y": 13536
+    },
+    "co_hist_cheque": {
+      "x": 25702,
+      "y": 14130
+    },
+    "co_hist_cuentas_comercio": {
+      "x": 25687,
+      "y": 14620
+    },
+    "co_hist_estados_comercios": {
+      "x": 25726,
+      "y": 15370
+    },
+    "co_hist_estados_puntos_venta": {
+      "x": 25714,
+      "y": 15574
+    },
+    "co_hist_estados_sucursales": {
+      "x": 25315,
+      "y": 16064
+    },
+    "co_hist_monedas_liquidacion": {
+      "x": 25711,
+      "y": 15856
+    },
+    "co_hist_secciones": {
+      "x": 25705,
+      "y": 16398
+    },
+    "co_iata_aerolineas": {
+      "x": 24930,
+      "y": 11964
+    },
+    "co_master_address": {
+      "x": 25740,
+      "y": 16784
+    },
+    "co_mcc": {
+      "x": 25723,
+      "y": 17166
+    },
+    "co_modelo_tecnologia": {
+      "x": 25726,
+      "y": 16988
+    },
+    "co_monedas_liquidacion": {
+      "x": 24536,
+      "y": 12656
+    },
+    "co_motivos_operacion": {
+      "x": 24956,
+      "y": 12819
+    },
+    "comu_adquirentes": {
+      "x": 26232,
+      "y": 10739
+    },
+    "comu_agencias": {
+      "x": 26240,
+      "y": 11381
+    },
+    "comu_bancos": {
+      "x": 26226,
+      "y": 11021
+    },
+    "comu_bancos_cashback": {
+      "x": 26671,
+      "y": 12121
+    },
+    "comu_consultas": {
+      "x": 26254,
+      "y": 11841
+    },
+    "comu_cuentas_adquirentes": {
+      "x": 26239,
+      "y": 11585
+    },
+    "comu_departamentos": {
+      "x": 26226,
+      "y": 12911
+    },
+    "comu_estados": {
+      "x": 26237,
+      "y": 13991
+    },
+    "comu_fechas": {
+      "x": 26658,
+      "y": 12740
+    },
+    "comu_grupo_eliminacion": {
+      "x": 26214,
+      "y": 12223
+    },
+    "comu_grupo_eliminacion_rel": {
+      "x": 26239,
+      "y": 11993
+    },
+    "comu_historico": {
+      "x": 26186,
+      "y": 13115
+    },
+    "co_multicomercio": {
+      "x": 25694,
+      "y": 17318
+    },
+    "co_multicomercio_hist": {
+      "x": 25740,
+      "y": 17600
+    },
+    "comu_marcas_tasa_cambio": {
+      "x": 26607,
+      "y": 13512
+    },
+    "comu_monedas": {
+      "x": 26680,
+      "y": 16997
+    },
+    "comu_municipios": {
+      "x": 26240,
+      "y": 12555
+    },
+    "comu_paises": {
+      "x": 26229,
+      "y": 14117
+    },
+    "comu_parametros": {
+      "x": 26230,
+      "y": 14347
+    },
+    "comu_parametros_marcas": {
+      "x": 26208,
+      "y": 14707
+    },
+    "comu_proceso_eliminacion": {
+      "x": 26616,
+      "y": 12286
+    },
+    "comu_process_batch_control": {
+      "x": 26229,
+      "y": 15249
+    },
+    "comu_process_file": {
+      "x": 26236,
+      "y": 15583
+    },
+    "comu_provincias": {
+      "x": 26243,
+      "y": 12746
+    },
+    "comu_report_template": {
+      "x": 26222,
+      "y": 16151
+    },
+    "comu_seguimiento_procesos": {
+      "x": 26208,
+      "y": 13475
+    },
+    "comu_seguimiento_sub_procesos": {
+      "x": 27010,
+      "y": 14039
+    },
+    "comu_tasas_cambio": {
+      "x": 26223,
+      "y": 16537
+    },
+    "comu_tipos_procesos": {
+      "x": 26226,
+      "y": 16997
+    },
+    "comu_tipos_sub_procesos": {
+      "x": 26240,
+      "y": 16806
+    },
+    "comu_vistas_parametros": {
+      "x": 26237,
+      "y": 17175
+    },
+    "co_nombre_archivo_cca": {
+      "x": 25737,
+      "y": 17882
+    },
+    "co_plaza_ciudad_cca": {
+      "x": 25737,
+      "y": 18034
+    },
+    "co_puntos_de_ventas": {
+      "x": 25694,
+      "y": 18186
+    },
+    "co_reportes_comercio": {
+      "x": 25694,
+      "y": 18598
+    },
+    "co_secciones": {
+      "x": 25285,
+      "y": 12819
+    },
+    "co_secciones_sucursales": {
+      "x": 24898,
+      "y": 12194
+    },
+    "co_sucursales_ecommerce": {
+      "x": 24573,
+      "y": 11392
+    },
+    "co_sync_cca_hist": {
+      "x": 25310,
+      "y": 19513
+    },
+    "co_tecnologias": {
+      "x": 25694,
+      "y": 19344
+    },
+    "co_terminales": {
+      "x": 25694,
+      "y": 19062
+    },
+    "co_terminales_modelos": {
+      "x": 25739,
+      "y": 19964
+    },
+    "co_terminal_id": {
+      "x": 25768,
+      "y": 20220
+    },
+    "dci_acq_chip_detail": {
+      "x": 16086,
+      "y": 8080
+    },
+    "dci_acq_recap": {
+      "x": 15684,
+      "y": 9112
+    },
+    "dci_acq_recap_control": {
+      "x": 15691,
+      "y": 9862
+    },
+    "dci_acq_recap_settlement": {
+      "x": 15630,
+      "y": 10040
+    },
+    "dci_acq_recap_suspend_rejected": {
+      "x": 15655,
+      "y": 11128
+    },
+    "dci_acq_suspend_rejected_record": {
+      "x": 15657,
+      "y": 11670
+    },
+    "dci_acq_transaction": {
+      "x": 15649,
+      "y": 7140
+    },
+    "dci_charge_type": {
+      "x": 15666,
+      "y": 12212
+    },
+    "dci_currency_code": {
+      "x": 15660,
+      "y": 12494
+    },
+    "dci_cycle_range": {
+      "x": 15649,
+      "y": 12906
+    },
+    "dci_dispute_detail": {
+      "x": 15634,
+      "y": 13604
+    },
+    "dci_dispute_original_detail": {
+      "x": 15634,
+      "y": 14822
+    },
+    "dci_exchange_rate": {
+      "x": 15670,
+      "y": 15936
+    },
+    "dci_fee_detail": {
+      "x": 15627,
+      "y": 16244
+    },
+    "dci_geo_code": {
+      "x": 15649,
+      "y": 17384
+    },
+    "dci_iic": {
+      "x": 15631,
+      "y": 17874
+    },
+    "dci_imr_merchant": {
+      "x": 15627,
+      "y": 18260
+    },
+    "dci_intes": {
+      "x": 15666,
+      "y": 19426
+    },
+    "dci_mcc": {
+      "x": 15663,
+      "y": 19786
+    },
+    "dci_pta_rate": {
+      "x": 15684,
+      "y": 20250
+    },
+    "dci_type_charge": {
+      "x": 15635,
+      "y": 20532
+    },
+    "dl_eliminacion_procesos_detalle": {
+      "x": 16536,
+      "y": 13045
+    },
+    "dl_hist_comu_procesos_marcas": {
+      "x": 16909,
+      "y": 13149
+    },
+    "dl_hist_confir_diners": {
+      "x": 16529,
+      "y": 13661
+    },
+    "dl_hist_confir_mastercard": {
+      "x": 16529,
+      "y": 13839
+    },
+    "dl_hist_confir_visa": {
+      "x": 16529,
+      "y": 14017
+    },
+    "dl_hist_incoming_mastercard": {
+      "x": 16529,
+      "y": 14195
+    },
+    "dl_hist_incoming_mds": {
+      "x": 16529,
+      "y": 14373
+    },
+    "dl_hist_incoming_propietaria": {
+      "x": 16529,
+      "y": 14551
+    },
+    "dl_hist_incoming_visa": {
+      "x": 16529,
+      "y": 14729
+    },
+    "dl_hist_liquidaciones_comercio": {
+      "x": 16529,
+      "y": 14907
+    },
+    "dl_hist_liquidaciones_marcas": {
+      "x": 16529,
+      "y": 15085
+    },
+    "dl_hist_outgoing_dinner": {
+      "x": 16529,
+      "y": 15289
+    },
+    "dl_hist_outgoing_mastercard": {
+      "x": 16529,
+      "y": 15493
+    },
+    "dl_hist_outgoing_visa": {
+      "x": 16529,
+      "y": 15697
+    },
+    "dl_procesos_eliminados": {
+      "x": 16529,
+      "y": 13444
+    },
+    "facrep_pswd": {
+      "x": 21483,
+      "y": 14384
+    },
+    "mail_adjuntos": {
+      "x": 19747,
+      "y": 14269
+    },
+    "mail_correo": {
+      "x": 19772,
+      "y": 14421
+    },
+    "master_address": {
+      "x": 20624,
+      "y": 14137
+    },
+    "mc_acq_bin_service": {
+      "x": 22741,
+      "y": 9964
+    },
+    "mc_acquirer_bin": {
+      "x": 22773,
+      "y": 10298
+    },
+    "mc_bus_service_enforcement": {
+      "x": 22741,
+      "y": 10762
+    },
+    "mc_cab_program": {
+      "x": 22763,
+      "y": 11122
+    },
+    "mc_card_product": {
+      "x": 22763,
+      "y": 11456
+    },
+    "mc_cargos_fee": {
+      "x": 22756,
+      "y": 11790
+    },
+    "mc_default_bus_service": {
+      "x": 22741,
+      "y": 12644
+    },
+    "mc_exchange_rate": {
+      "x": 22777,
+      "y": 13056
+    },
+    "mc_intchg_amount": {
+      "x": 22763,
+      "y": 13364
+    },
+    "mc_intchg_fee_groups": {
+      "x": 22749,
+      "y": 13750
+    },
+    "mc_ipm_transaction": {
+      "x": 22734,
+      "y": 14396
+    },
+    "mc_ird_product_lnk": {
+      "x": 22759,
+      "y": 16368
+    },
+    "mc_iss_acc_range_cp": {
+      "x": 22741,
+      "y": 16754
+    },
+    "mc_issue_account_range": {
+      "x": 22741,
+      "y": 17166
+    },
+    "mc_linkser_ird_policy": {
+      "x": 22741,
+      "y": 17734
+    },
+    "mc_mcc": {
+      "x": 22755,
+      "y": 18276
+    },
+    "mc_mds_settlement_control": {
+      "x": 22745,
+      "y": 19464
+    },
+    "mc_mds_sial_pending": {
+      "x": 22756,
+      "y": 20006
+    },
+    "mc_tabla_rango_cuentas": {
+      "x": 22745,
+      "y": 18584
+    },
+    "mc_tabla_rango_cuentas_bol": {
+      "x": 22745,
+      "y": 20418
+    },
+    "mc_tabla_rango_cuentas_hist": {
+      "x": 22746,
+      "y": 22256
+    },
+    "mc_timeliness_code": {
+      "x": 22749,
+      "y": 23188
+    },
+    "mc_t464_settlement_summary": {
+      "x": 22735,
+      "y": 21298
+    },
+    "mc_t464_transaction": {
+      "x": 22304,
+      "y": 20462
+    },
+    "pro_baseii_inc": {
+      "x": 11500,
+      "y": 14267
+    },
+    "pro_baseii_inc_archivo": {
+      "x": 11857,
+      "y": 14280
+    },
+    "pro_fee_aplicados": {
+      "x": 12214,
+      "y": 14267
+    },
+    "pro_transacciones_incoming": {
+      "x": 12571,
+      "y": 13981
+    },
+    "qr_cuentas_participantes": {
+      "x": 13042,
+      "y": 14319
+    },
+    "qr_pago_consolidado": {
+      "x": 13321,
+      "y": 14124
+    },
+    "qr_pago_detalle": {
+      "x": 13685,
+      "y": 14137
+    },
+    "qr_participantes": {
+      "x": 14042,
+      "y": 14371
+    },
+    "reportes_config": {
+      "x": 20189,
+      "y": 14293
+    },
+    "rutas_visa_settlemetn": {
+      "x": 21911,
+      "y": 14319
+    },
+    "sin_parametrizacion_periodo": {
+      "x": 9677,
+      "y": 14345
+    },
+    "sin_transacciones_enviadas": {
+      "x": 9986,
+      "y": 14267
+    },
+    "sin_transacciones_enviadas_det": {
+      "x": 10309,
+      "y": 14189
+    },
+    "sin_transacciones_estados": {
+      "x": 10687,
+      "y": 14397
+    },
+    "sin_transacciones_rev_det": {
+      "x": 10986,
+      "y": 14267
+    },
+    "staging_match": {
+      "x": 21054,
+      "y": 14345
+    },
+    "st_settlement_adjustments": {
+      "x": 14455,
+      "y": 14189
+    },
+    "st_settlement_issuer_acquirer": {
+      "x": 14776,
+      "y": 14085
+    },
+    "st_settlement_transaction": {
+      "x": 15148,
+      "y": 13799
+    },
+    "tb_capt_comercio_pos": {
+      "x": -2288,
+      "y": 14410
+    },
+    "tb_capt_matriz_pos": {
+      "x": -2017,
+      "y": 14410
+    },
+    "tb_cca_comercios": {
+      "x": -1696,
+      "y": 13500
+    },
+    "tb_cca_equipos": {
+      "x": -1365,
+      "y": 14293
+    },
+    "tb_cca_liqche": {
+      "x": -1077,
+      "y": 14267
+    },
+    "tb_cca_metodo_pago": {
+      "x": -739,
+      "y": 14228
+    },
+    "tb_comercios_excepcionales": {
+      "x": -437,
+      "y": 14397
+    },
+    "tb_nofactmatriz": {
+      "x": -137,
+      "y": 14371
+    },
+    "tb_param_comercio_matriz": {
+      "x": 191,
+      "y": 14397
+    },
+    "tb_qr_comercios_comision": {
+      "x": 512,
+      "y": 14384
+    },
+    "tj_bancos_emisores": {
+      "x": 7778,
+      "y": 14293
+    },
+    "tj_bines_emisores": {
+      "x": 8135,
+      "y": 14254
+    },
+    "tj_sucursales_emisores": {
+      "x": 8492,
+      "y": 14345
+    },
+    "tj_tarjetas_emisores": {
+      "x": 8849,
+      "y": 14254
+    },
+    "tj_tipos_tarjetas_emisores": {
+      "x": 9206,
+      "y": 14306
+    },
+    "vi_ardef": {
+      "x": 27473,
+      "y": 5192
+    },
+    "vi_ardef_bol": {
+      "x": 27473,
+      "y": 6410
+    },
+    "vi_ardef_historico": {
+      "x": 27473,
+      "y": 7628
+    },
+    "vi_autorizaciones_incoming": {
+      "x": 27487,
+      "y": 8898
+    },
+    "vi_baseii_inc": {
+      "x": 27495,
+      "y": 9596
+    },
+    "vi_baseii_inc_archivo": {
+      "x": 27495,
+      "y": 10008
+    },
+    "vi_baseii_out": {
+      "x": 27495,
+      "y": 10342
+    },
+    "vi_baseii_out_archivo": {
+      "x": 27495,
+      "y": 10962
+    },
+    "vi_bin_propietaria_nal": {
+      "x": 27537,
+      "y": 11270
+    },
+    "vi_cargos_fee": {
+      "x": 27488,
+      "y": 11448
+    },
+    "vi_config_liq_archivos": {
+      "x": 27534,
+      "y": 12224
+    },
+    "vi_cuadre_confirmacion": {
+      "x": 27491,
+      "y": 13226
+    },
+    "vi_cuadre_liquidacion": {
+      "x": 27505,
+      "y": 16114
+    },
+    "vi_cuadre_pvi_archivo": {
+      "x": 27858,
+      "y": 12944
+    },
+    "vi_cuadre_pvi_detalle": {
+      "x": 27474,
+      "y": 12827
+    },
+    "vi_enriq_procesos": {
+      "x": 27562,
+      "y": 12532
+    },
+    "vi_ep100a_archivo": {
+      "x": 27491,
+      "y": 13638
+    },
+    "vi_ep100a_transaccion": {
+      "x": 27918,
+      "y": 13512
+    },
+    "vi_ep110_archivo": {
+      "x": 27884,
+      "y": 15575
+    },
+    "vi_ep110_resumen": {
+      "x": 28252,
+      "y": 14485
+    },
+    "vi_ep_204a": {
+      "x": 27495,
+      "y": 14926
+    },
+    "vi_ep210e_archivo": {
+      "x": 27501,
+      "y": 13946
+    },
+    "vi_ep210e_transaccion_fin": {
+      "x": 27910,
+      "y": 14213
+    },
+    "vi_ep210e_transaccion_no_fin": {
+      "x": 27935,
+      "y": 13994
+    },
+    "vi_ep_221e": {
+      "x": 27495,
+      "y": 14488
+    },
+    "vi_fee_aplicados": {
+      "x": 27495,
+      "y": 16578
+    },
+    "vi_fee_motivos": {
+      "x": 27506,
+      "y": 16990
+    },
+    "vi_liquidaciones_adq": {
+      "x": 27473,
+      "y": 17194
+    },
+    "vi_liquidaciones_emi": {
+      "x": 27473,
+      "y": 18438
+    },
+    "vi_parametros": {
+      "x": 27495,
+      "y": 19760
+    },
+    "vi_tipo_bandera": {
+      "x": 27530,
+      "y": 20224
+    },
+    "vi_tipo_origen": {
+      "x": 27903,
+      "y": 14612
+    },
+    "vi_tipo_outgoing": {
+      "x": 27505,
+      "y": 15728
+    },
+    "vi_tipo_tc": {
+      "x": 27505,
+      "y": 20428
+    },
+    "vi_tipo_transaccion": {
+      "x": 28305,
+      "y": 14301
+    },
+    "vi_transacciones_incoming": {
+      "x": 27495,
+      "y": 20632
+    },
+    "vi_vao_conciliacion": {
+      "x": 27494,
+      "y": 21590
+    },
+    "vi_vss_parametros": {
+      "x": 27509,
+      "y": 21950
+    },
+    "vz_autorizacion": {
+      "x": 5580,
+      "y": 14072
+    },
+    "vz_consolidado": {
+      "x": 5937,
+      "y": 14306
+    },
+    "vz_detalle": {
+      "x": 6294,
+      "y": 14267
+    },
+    "vz_estado": {
+      "x": 6651,
+      "y": 14358
+    },
+    "vz_proceso_secuencia": {
+      "x": 7008,
+      "y": 14241
+    },
+    "vz_respuesta": {
+      "x": 7365,
+      "y": 14410
+    },
+    "co_sucursales": {
+      "x": 24890,
+      "y": 11396
+    },
+    "co_cuentas_comercio": {
+      "x": 24898,
+      "y": 10854
+    }
+  },
+  "groups": {
+    "ACQ": {
+      "color": "#FF6B6B",
+      "note": "",
+      "tables": [
+        "acq_entity",
+        "acq_entity_address"
+      ]
+    },
+    "AUX": {
+      "color": "#FFA94D",
+      "note": "",
+      "tables": [
+        "aux_ca_cuotas_bkp",
+        "aux_cuota_pendientes"
+      ]
+    },
+    "CA": {
+      "color": "#FFD43B",
+      "note": "",
+      "tables": [
+        "ca_atm_bisa",
+        "ca_atm_nf_bisa",
+        "ca_bin_adq",
+        "ca_bin_pos_atm_adq",
+        "ca_bin_procesadores",
+        "ca_categoria_transaccion",
+        "ca_comisiones_nf",
+        "ca_conf_archivo_atm",
+        "ca_config_correcciones",
+        "ca_config_dia_captura",
+        "ca_controversias",
+        "ca_controversias_txs",
+        "ca_cuotas",
+        "ca_cuotas_totales",
+        "ca_cybersource_tc33a",
+        "ca_cybersource_transacciones",
+        "ca_estado_proceso",
+        "ca_iata_csi",
+        "ca_iata_transacciones",
+        "ca_ica",
+        "ca_lotes",
+        "ca_marca_destino",
+        "ca_marcas",
+        "ca_pos_batch_forzoso",
+        "ca_proceso_detalle",
+        "ca_procesos",
+        "ca_procesos_hora",
+        "ca_procesos_sql",
+        "ca_productos",
+        "ca_terminales_virtuales",
+        "ca_tipos_captura",
+        "ca_tipos_fondos",
+        "ca_tipos_fondos_emisores",
+        "ca_tipos_locales",
+        "ca_tipos_terminales_virtuales",
+        "ca_tipos_transaccion",
+        "ca_transacciones",
+        "ca_transacciones_discover",
+        "ca_transacciones_faltantes",
+        "ca_transacciones_mastercard",
+        "ca_transacciones_nf",
+        "ca_transacciones_propietaria",
+        "ca_transacciones_visa",
+        "ca_transacciones_visa_rechazos",
+        "ca_txs_tardias_hist"
+      ]
+    },
+    "CF": {
+      "color": "#69DB7C",
+      "note": "",
+      "tables": [
+        "cf_facturas",
+        "cf_procesos"
+      ]
+    },
+    "CL": {
+      "color": "#38D9A9",
+      "note": "",
+      "tables": [
+        "cl_cierre_comercios",
+        "cl_dias_no_habiles",
+        "cl_liquidacion_consolidado",
+        "cl_posteo_detalle",
+        "cl_posteo_fallido",
+        "cl_procesos"
+      ]
+    },
+    "CO": {
+      "color": "#20C997",
+      "note": "",
+      "tables": [
+        "co_acuerdos_particulares",
+        "co_acuerdos_por_defectos",
+        "co_agencias",
+        "co_aux_com_dif",
+        "co_aux_com_no_migrados",
+        "co_cheque",
+        "co_comercios",
+        "co_contactos",
+        "co_contactos_medios",
+        "co_cuentas_comercio",
+        "co_direcciones",
+        "co_ejecutivos",
+        "co_estados_transicion",
+        "co_grupos_e_commerce",
+        "co_hist_acuerdos_particulares",
+        "co_hist_cheque",
+        "co_hist_cuentas_comercio",
+        "co_hist_estados_comercios",
+        "co_hist_estados_puntos_venta",
+        "co_hist_estados_sucursales",
+        "co_hist_monedas_liquidacion",
+        "co_hist_secciones",
+        "co_iata_aerolineas",
+        "co_master_address",
+        "co_mcc",
+        "co_modelo_tecnologia",
+        "co_monedas_liquidacion",
+        "co_motivos_operacion",
+        "co_multicomercio",
+        "co_multicomercio_hist",
+        "co_nombre_archivo_cca",
+        "co_plaza_ciudad_cca",
+        "co_puntos_de_ventas",
+        "co_reportes_comercio",
+        "co_secciones",
+        "co_secciones_sucursales",
+        "co_sucursales",
+        "co_sucursales_ecommerce",
+        "co_sync_cca_hist",
+        "co_tecnologias",
+        "co_terminales",
+        "co_terminales_modelos",
+        "co_terminal_id"
+      ]
+    },
+    "COMU": {
+      "color": "#339AF0",
+      "note": "",
+      "tables": [
+        "comu_adquirentes",
+        "comu_agencias",
+        "comu_bancos",
+        "comu_bancos_cashback",
+        "comu_consultas",
+        "comu_cuentas_adquirentes",
+        "comu_departamentos",
+        "comu_estados",
+        "comu_fechas",
+        "comu_grupo_eliminacion",
+        "comu_grupo_eliminacion_rel",
+        "comu_historico",
+        "comu_marcas_tasa_cambio",
+        "comu_monedas",
+        "comu_municipios",
+        "comu_paises",
+        "comu_parametros",
+        "comu_parametros_marcas",
+        "comu_proceso_eliminacion",
+        "comu_process_batch_control",
+        "comu_process_file",
+        "comu_provincias",
+        "comu_report_template",
+        "comu_seguimiento_procesos",
+        "comu_seguimiento_sub_procesos",
+        "comu_tasas_cambio",
+        "comu_tipos_procesos",
+        "comu_tipos_sub_procesos",
+        "comu_vistas_parametros"
+      ]
+    },
+    "DCI": {
+      "color": "#4DABF7",
+      "note": "",
+      "tables": [
+        "dci_acq_chip_detail",
+        "dci_acq_recap",
+        "dci_acq_recap_control",
+        "dci_acq_recap_settlement",
+        "dci_acq_recap_suspend_rejected",
+        "dci_acq_suspend_rejected_record",
+        "dci_acq_transaction",
+        "dci_charge_type",
+        "dci_currency_code",
+        "dci_cycle_range",
+        "dci_dispute_detail",
+        "dci_dispute_original_detail",
+        "dci_exchange_rate",
+        "dci_fee_detail",
+        "dci_geo_code",
+        "dci_iic",
+        "dci_imr_merchant",
+        "dci_intes",
+        "dci_mcc",
+        "dci_pta_rate",
+        "dci_type_charge"
+      ]
+    },
+    "DL": {
+      "color": "#845EF7",
+      "note": "",
+      "tables": [
+        "dl_eliminacion_procesos_detalle",
+        "dl_hist_comu_procesos_marcas",
+        "dl_hist_confir_diners",
+        "dl_hist_confir_mastercard",
+        "dl_hist_confir_visa",
+        "dl_hist_incoming_mastercard",
+        "dl_hist_incoming_mds",
+        "dl_hist_incoming_propietaria",
+        "dl_hist_incoming_visa",
+        "dl_hist_liquidaciones_comercio",
+        "dl_hist_liquidaciones_marcas",
+        "dl_hist_outgoing_dinner",
+        "dl_hist_outgoing_mastercard",
+        "dl_hist_outgoing_visa",
+        "dl_procesos_eliminados"
+      ]
+    },
+    "FACREP": {
+      "color": "#5F3DC4",
+      "note": "",
+      "tables": [
+        "facrep_pswd"
+      ]
+    },
+    "MAIL": {
+      "color": "#BE4BDB",
+      "note": "",
+      "tables": [
+        "mail_adjuntos",
+        "mail_correo"
+      ]
+    },
+    "MASTER": {
+      "color": "#D6336C",
+      "note": "",
+      "tables": [
+        "master_address"
+      ]
+    },
+    "MC": {
+      "color": "#F06595",
+      "note": "",
+      "tables": [
+        "mc_acq_bin_service",
+        "mc_acquirer_bin",
+        "mc_bus_service_enforcement",
+        "mc_cab_program",
+        "mc_card_product",
+        "mc_cargos_fee",
+        "mc_default_bus_service",
+        "mc_exchange_rate",
+        "mc_intchg_amount",
+        "mc_intchg_fee_groups",
+        "mc_ipm_transaction",
+        "mc_ird_product_lnk",
+        "mc_iss_acc_range_cp",
+        "mc_issue_account_range",
+        "mc_linkser_ird_policy",
+        "mc_mcc",
+        "mc_mds_settlement_control",
+        "mc_mds_sial_pending",
+        "mc_tabla_rango_cuentas",
+        "mc_tabla_rango_cuentas_bol",
+        "mc_tabla_rango_cuentas_hist",
+        "mc_timeliness_code",
+        "mc_t464_settlement_summary",
+        "mc_t464_transaction"
+      ]
+    },
+    "PRO": {
+      "color": "#FF8787",
+      "note": "",
+      "tables": [
+        "pro_baseii_inc",
+        "pro_baseii_inc_archivo",
+        "pro_fee_aplicados",
+        "pro_transacciones_incoming"
+      ]
+    },
+    "QR": {
+      "color": "#FA5252",
+      "note": "",
+      "tables": [
+        "qr_cuentas_participantes",
+        "qr_pago_consolidado",
+        "qr_pago_detalle",
+        "qr_participantes"
+      ]
+    },
+    "REPORTES": {
+      "color": "#E8590C",
+      "note": "",
+      "tables": [
+        "reportes_config"
+      ]
+    },
+    "RUTAS": {
+      "color": "#F76707",
+      "note": "",
+      "tables": [
+        "rutas_visa_settlemetn"
+      ]
+    },
+    "SIN": {
+      "color": "#74B816",
+      "note": "",
+      "tables": [
+        "sin_parametrizacion_periodo",
+        "sin_transacciones_enviadas",
+        "sin_transacciones_enviadas_det",
+        "sin_transacciones_estados",
+        "sin_transacciones_rev_det"
+      ]
+    },
+    "STAGING": {
+      "color": "#82C91E",
+      "note": "",
+      "tables": [
+        "staging_match"
+      ]
+    },
+    "ST": {
+      "color": "#A9E34B",
+      "note": "",
+      "tables": [
+        "st_settlement_adjustments",
+        "st_settlement_issuer_acquirer",
+        "st_settlement_transaction"
+      ]
+    },
+    "TB": {
+      "color": "#15AABF",
+      "note": "",
+      "tables": [
+        "tb_capt_comercio_pos",
+        "tb_capt_matriz_pos",
+        "tb_cca_comercios",
+        "tb_cca_equipos",
+        "tb_cca_liqche",
+        "tb_cca_metodo_pago",
+        "tb_comercios_excepcionales",
+        "tb_nofactmatriz",
+        "tb_param_comercio_matriz",
+        "tb_qr_comercios_comision"
+      ]
+    },
+    "TJ": {
+      "color": "#1098AD",
+      "note": "",
+      "tables": [
+        "tj_bancos_emisores",
+        "tj_bines_emisores",
+        "tj_sucursales_emisores",
+        "tj_tarjetas_emisores",
+        "tj_tipos_tarjetas_emisores"
+      ]
+    },
+    "VI": {
+      "color": "#1971C2",
+      "note": "",
+      "tables": [
+        "vi_ardef",
+        "vi_ardef_bol",
+        "vi_ardef_historico",
+        "vi_autorizaciones_incoming",
+        "vi_baseii_inc",
+        "vi_baseii_inc_archivo",
+        "vi_baseii_out",
+        "vi_baseii_out_archivo",
+        "vi_bin_propietaria_nal",
+        "vi_cargos_fee",
+        "vi_config_liq_archivos",
+        "vi_cuadre_confirmacion",
+        "vi_cuadre_liquidacion",
+        "vi_cuadre_pvi_archivo",
+        "vi_cuadre_pvi_detalle",
+        "vi_enriq_procesos",
+        "vi_ep100a_archivo",
+        "vi_ep100a_transaccion",
+        "vi_ep110_archivo",
+        "vi_ep110_resumen",
+        "vi_ep_204a",
+        "vi_ep210e_archivo",
+        "vi_ep210e_transaccion_fin",
+        "vi_ep210e_transaccion_no_fin",
+        "vi_ep_221e",
+        "vi_fee_aplicados",
+        "vi_fee_motivos",
+        "vi_liquidaciones_adq",
+        "vi_liquidaciones_emi",
+        "vi_parametros",
+        "vi_tipo_bandera",
+        "vi_tipo_origen",
+        "vi_tipo_outgoing",
+        "vi_tipo_tc",
+        "vi_tipo_transaccion",
+        "vi_transacciones_incoming",
+        "vi_vao_conciliacion",
+        "vi_vss_parametros"
+      ]
+    },
+    "VZ": {
+      "color": "#1864AB",
+      "note": "",
+      "tables": [
+        "vz_autorizacion",
+        "vz_consolidado",
+        "vz_detalle",
+        "vz_estado",
+        "vz_proceso_secuencia",
+        "vz_respuesta"
+      ]
+    }
+  },
+  "connections": {
+    "ca_transacciones_discover.sis_fecha_registro->ca_transacciones.sis_fecha_registro": {
+      "points": [
+        {
+          "x": 23621,
+          "y": 13128
+        },
+        {
+          "x": 23621,
+          "y": 18259
+        }
+      ],
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.990909090909091
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.00782472613458529
+      }
+    },
+    "co_contactos.comercio->co_sucursales.comercio": {
+      "points": [
+        {
+          "x": 24850,
+          "y": 10314
+        },
+        {
+          "x": 24850,
+          "y": 11416
+        }
+      ],
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.9390243902439024
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.03787878787878788
+      }
+    },
+    "co_ejecutivos.departamento->comu_departamentos.departamento": {
+      "points": [
+        {
+          "x": 26210,
+          "y": 13074
+        },
+        {
+          "x": 26210,
+          "y": 13065
+        }
+      ],
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.12195121951219512
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.9390243902439024
+      }
+    },
+    "comu_seguimiento_procesos.id_marca->ca_marcas.marca": {
+      "points": [
+        {
+          "x": 26014,
+          "y": 13915
+        },
+        {
+          "x": 26014,
+          "y": 14114
+        },
+        {
+          "x": 24042,
+          "y": 14114
+        },
+        {
+          "x": 24042,
+          "y": 14426
+        }
+      ],
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.9777777777777777
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.10526315789473684
+      }
+    },
+    "comu_seguimiento_sub_procesos.id_proceso->comu_seguimiento_procesos.id": {
+      "points": [
+        {
+          "x": 27026,
+          "y": 14030
+        },
+        {
+          "x": 26520,
+          "y": 14030
+        },
+        {
+          "x": 26520,
+          "y": 13915
+        }
+      ],
+      "fromAnchor": {
+        "side": "top",
+        "offset": 0.05177993527508091
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.9777777777777777
+      }
+    },
+    "co_sucursales.comercio->co_comercios.comercio": {
+      "points": [
+        {
+          "x": 25688,
+          "y": 11914
+        }
+      ],
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.9810606060606061
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.044444444444444446
+      }
+    },
+    "mc_mds_sial_pending.id_t464_transaction->mc_t464_transaction.id_t464_transaction": {
+      "points": [
+        {
+          "x": 22648,
+          "y": 20368
+        }
+      ],
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.9731182795698925
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.9555555555555556
+      }
+    },
+    "vi_cuadre_confirmacion.id_subproceso->comu_seguimiento_sub_procesos.id": {
+      "points": [
+        {
+          "x": 27303,
+          "y": 13588
+        }
+      ],
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.9731182795698925
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.948220064724919
+      }
+    },
+    "vi_cuadre_pvi_archivo.id_subproceso->comu_seguimiento_sub_procesos.id": {
+      "points": [
+        {
+          "x": 27874,
+          "y": 13622
+        },
+        {
+          "x": 27335,
+          "y": 13622
+        },
+        {
+          "x": 27335,
+          "y": 14059
+        }
+      ],
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.044444444444444446
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.057803468208092484
+      }
+    },
+    "vi_ep100a_archivo.id_subproceso->comu_seguimiento_sub_procesos.id": {
+      "points": [
+        {
+          "x": 27457,
+          "y": 13896
+        },
+        {
+          "x": 27457,
+          "y": 14121
+        }
+      ],
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.9626865671641791
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.23699421965317918
+      }
+    },
+    "vi_ep_204a.id_subproceso->comu_seguimiento_sub_procesos.id": {
+      "points": [
+        {
+          "x": 27165,
+          "y": 14946
+        }
+      ],
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.0398406374501992
+      },
+      "toAnchor": {
+        "side": "bottom",
+        "offset": 0.5016181229773463
+      }
+    },
+    "vi_ep_221e.id_proceso->comu_seguimiento_sub_procesos.id": {
+      "points": [
+        {
+          "x": 27303,
+          "y": 14508
+        }
+      ],
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.05025125628140704
+      },
+      "toAnchor": {
+        "side": "bottom",
+        "offset": 0.948220064724919
+      }
+    },
+    "vi_fee_aplicados.sis_producto->ca_productos.producto": {
+      "points": [
+        {
+          "x": 25980,
+          "y": 16795
+        },
+        {
+          "x": 25980,
+          "y": 16768
+        }
+      ],
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.5833333333333334
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.4214876033057851
+      }
+    },
+    "vi_fee_aplicados.sis_tipo_local->ca_tipos_locales.tipo_local": {
+      "points": [
+        {
+          "x": 26565,
+          "y": 16924
+        },
+        {
+          "x": 26565,
+          "y": 17151
+        },
+        {
+          "x": 25998,
+          "y": 17151
+        },
+        {
+          "x": 25998,
+          "y": 17151
+        }
+      ],
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.9301075268817204
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.9351851851851852
+      }
+    },
+    "co_acuerdos_particulares.comercio->co_sucursales.comercio": {
+      "points": [
+        {
+          "x": 24882,
+          "y": 11380
+        },
+        {
+          "x": 24906,
+          "y": 11380
+        }
+      ],
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.050473186119873815
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.04923076923076923
+      }
+    },
+    "co_monedas_liquidacion.comercio->co_sucursales.comercio": {
+      "points": [
+        {
+          "x": 24837,
+          "y": 11914
+        }
+      ],
+      "fromAnchor": {
+        "side": "top",
+        "offset": 0.9495268138801262
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.9810606060606061
+      }
+    },
+    "co_secciones_sucursales.cod_seccion->co_secciones.cod_seccion": {
+      "points": [
+        {
+          "x": 25301,
+          "y": 12400
+        }
+      ],
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.9537037037037037
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.050473186119873815
+      }
+    },
+    "vi_ep110_resumen.id_ep110_archivo->vi_ep110_archivo.id_ep110": {
+      "points": [
+        {
+          "x": 28165,
+          "y": 14795
+        }
+      ],
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.96875
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.9461279461279462
+      }
+    },
+    "vi_fee_aplicados.moneda->comu_monedas.moneda": {
+      "points": [
+        {
+          "x": 26917,
+          "y": 16940
+        }
+      ],
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.9731182795698925
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.9367588932806324
+      }
+    },
+    "co_cuentas_comercio.banco->comu_agencias.codigo_banco": {
+      "points": [
+        {
+          "x": 26210,
+          "y": 11346
+        },
+        {
+          "x": 26210,
+          "y": 11401
+        }
+      ],
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.9800796812749004
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.12195121951219512
+      }
+    },
+    "ca_controversias_txs.id_controversia->ca_controversias.id": {
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.5
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.5
+      }
+    },
+    "ca_transacciones_mastercard.sis_fecha_registro->ca_transacciones.sis_fecha_registro": {
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.953757225433526
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.9361111111111111
+      }
+    },
+    "ca_transacciones_propietaria.sis_fecha_registro->ca_transacciones.sis_fecha_registro": {
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.01818181818181818
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.03403755868544601
+      }
+    },
+    "ca_transacciones_visa.sis_fecha_registro->ca_transacciones.sis_fecha_registro": {
+      "fromAnchor": {
+        "side": "top",
+        "offset": 0.046242774566473986
+      },
+      "toAnchor": {
+        "side": "bottom",
+        "offset": 0.06388888888888888
+      }
+    },
+    "co_cheque.banco->comu_agencias.codigo_banco": {
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.17204301075268819
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.8841463414634146
+      }
+    },
+    "co_cheque.comercio->co_sucursales.comercio": {
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.5
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.4772727272727273
+      }
+    },
+    "co_comercios.ejecutivo_comercial->co_ejecutivos.ejecutivo": {
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.24166666666666667
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.0730593607305936
+      }
+    },
+    "co_contactos_medios.comercio->co_contactos.comercio": {
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.06751054852320675
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.23529411764705882
+      }
+    },
+    "co_cuentas_comercio.comercio->co_sucursales.comercio": {
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.3028391167192429
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.32
+      }
+    },
+    "co_direcciones.comercio->co_sucursales.comercio": {
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.8928571428571429
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.6003787878787878
+      }
+    },
+    "co_iata_aerolineas.comercio->co_sucursales.comercio": {
+      "fromAnchor": {
+        "side": "top",
+        "offset": 0.48616600790513836
+      },
+      "toAnchor": {
+        "side": "bottom",
+        "offset": 0.5015384615384615
+      }
+    },
+    "co_monedas_liquidacion.motivo_operacion_id->co_motivos_operacion.id_motivo": {
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.6658291457286433
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.9107142857142857
+      }
+    },
+    "comu_grupo_eliminacion_rel.id_grupo_relacionado->comu_grupo_eliminacion.id_grupo_eliminacion": {
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.0749063670411985
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.14754098360655737
+      }
+    },
+    "comu_grupo_eliminacion_rel.id_grupo_eliminacion->comu_grupo_eliminacion.id_grupo_eliminacion": {
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.4756554307116105
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.49836065573770494
+      }
+    },
+    "comu_municipios.cod_provincia->comu_provincias.cod_provincia": {
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.8774703557312253
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.8656126482213439
+      }
+    },
+    "comu_proceso_eliminacion.id_grupo_eliminacion->comu_grupo_eliminacion.id_grupo_eliminacion": {
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.2231404958677686
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.5416666666666666
+      }
+    },
+    "comu_process_file.id_parent_file->comu_process_file.id_file": {
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.03787878787878788
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.03787878787878788
+      }
+    },
+    "comu_provincias.cod_departamento->comu_departamentos.departamento": {
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.09881422924901186
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.1494661921708185
+      }
+    },
+    "comu_seguimiento_procesos.id_estado->comu_estados.id": {
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.872852233676976
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.8687258687258688
+      }
+    },
+    "comu_seguimiento_sub_procesos.id_estado->comu_estados.id": {
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.057803468208092484
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.7906976744186046
+      }
+    },
+    "comu_tipos_sub_procesos.id_proceso->comu_tipos_procesos.id": {
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.7896440129449838
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.9181494661921709
+      }
+    },
+    "co_secciones.comercio->co_comercios.comercio": {
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.06802721088435375
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.7340425531914894
+      }
+    },
+    "co_secciones_sucursales.comercio->co_sucursales.comercio": {
+      "fromAnchor": {
+        "side": "top",
+        "offset": 0.9495268138801262
+      },
+      "toAnchor": {
+        "side": "bottom",
+        "offset": 0.9507692307692308
+      }
+    },
+    "co_sucursales_ecommerce.comercio->co_sucursales.comercio": {
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.9552238805970149
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.4772727272727273
+      }
+    },
+    "co_terminales.cod_tecnologia->co_tecnologias.cod_tecnologia": {
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.886435331230284
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.886435331230284
+      }
+    },
+    "dci_acq_chip_detail.id_transaction->dci_acq_transaction.id_transaction": {
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.1827354260089686
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.5709109730848861
+      }
+    },
+    "dci_acq_transaction.id_recap->dci_acq_recap.id_recap": {
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.16037735849056603
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.06477732793522267
+      }
+    },
+    "dl_eliminacion_procesos_detalle.id_lote_eliminacion->dl_procesos_eliminados.id_lote_eliminacion": {
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.05405405405405406
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.07419354838709677
+      }
+    },
+    "mc_ipm_transaction.root_transaction_id->mc_ipm_transaction.ipm_transaction_id": {
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.010351966873706004
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.010351966873706004
+      }
+    },
+    "mc_mds_settlement_control.sis_fecha_registro->ca_transacciones.sis_fecha_registro": {
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.6812749003984063
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.6130672926447575
+      }
+    },
+    "mc_mds_sial_pending.sis_fecha_registro->ca_transacciones.sis_fecha_registro": {
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.45161290322580644
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.7570422535211268
+      }
+    },
+    "mc_t464_transaction.id_settlement_summary->mc_t464_settlement_summary.id_settlement_summary": {
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.7745215311004785
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.5
+      }
+    },
+    "vi_cuadre_liquidacion.id_tipo_outgoing->vi_tipo_outgoing.id": {
+      "fromAnchor": {
+        "side": "top",
+        "offset": 0.06734006734006734
+      },
+      "toAnchor": {
+        "side": "bottom",
+        "offset": 0.08928571428571429
+      }
+    },
+    "vi_cuadre_pvi_detalle.id_pvi_archivo->vi_cuadre_pvi_archivo.id": {
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.7315789473684211
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.041666666666666664
+      }
+    },
+    "vi_ep100a_transaccion.id_ep100a->vi_ep100a_archivo.id_ep100a": {
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.6184971098265896
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.3283582089552239
+      }
+    },
+    "vi_ep110_archivo.id_tipo_outgoing->vi_tipo_outgoing.id": {
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.3234323432343234
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.5
+      }
+    },
+    "vi_ep110_resumen.tipo_origen_id->vi_tipo_origen.id_tipo_origen": {
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.459375
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.23255813953488372
+      }
+    },
+    "vi_ep110_resumen.tipo_transaccion_id->vi_tipo_transaccion.id_tipo_transaccion": {
+      "fromAnchor": {
+        "side": "top",
+        "offset": 0.20783132530120482
+      },
+      "toAnchor": {
+        "side": "bottom",
+        "offset": 0.05387205387205387
+      }
+    },
+    "vi_ep210e_archivo.id_subproceso->comu_seguimiento_sub_procesos.id": {
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.4641434262948207
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.4046242774566474
+      }
+    },
+    "vi_ep210e_transaccion_fin.tipo_origen_id->vi_tipo_origen.id_tipo_origen": {
+      "fromAnchor": {
+        "side": "bottom",
+        "offset": 0.389937106918239
+      },
+      "toAnchor": {
+        "side": "top",
+        "offset": 0.5019157088122606
+      }
+    },
+    "vi_ep210e_transaccion_fin.tipo_transaccion_id->vi_tipo_transaccion.id_tipo_transaccion": {
+      "fromAnchor": {
+        "side": "right",
+        "offset": 0.6570247933884298
+      },
+      "toAnchor": {
+        "side": "left",
+        "offset": 0.8255813953488372
+      }
+    },
+    "vi_ep210e_transaccion_fin.id_ep210->vi_ep210e_archivo.id_ep210e": {
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.08264462809917356
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.5717131474103586
+      }
+    },
+    "vi_ep210e_transaccion_no_fin.id_ep210->vi_ep210e_archivo.id_ep210e": {
+      "fromAnchor": {
+        "side": "left",
+        "offset": 0.3333333333333333
+      },
+      "toAnchor": {
+        "side": "right",
+        "offset": 0.18725099601593626
+      }
+    }
+  },
+  "camera": {
+    "x": -93,
+    "y": -581,
+    "scale": 0.08
+  }
+}

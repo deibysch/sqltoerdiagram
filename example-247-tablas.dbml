@@ -1,0 +1,5695 @@
+Table "ACQ_ENTITY" {
+  "INSTITUTION_ID" varchar2(10BYTE)
+  "ENTITY_ID" varchar2(30BYTE)
+  "ENTITY_LEVEL" "number(2,0)"
+  "ENTITY_NAME" varchar2(50BYTE)
+  "ENTITY_DBA_NAME" varchar2(50BYTE)
+  "ENTITY_ABA_NR" varchar2(9BYTE)
+  "SETTL_PLAN_ID" "number(12,0)"
+  "ENTITY_STATUS" char(1BYTE)
+  "PARENT_ENTITY_ID" varchar2(30BYTE)
+  "ALLW_ID" "number(12,0)"
+  "EXTERNAL_ENTITY_ID" varchar2(30BYTE)
+  "CAL_ACTIVITY_ID" varchar2(15BYTE)
+  "CREATION_DATE" date
+  "EXP_START_DATE" date
+  "ACTUAL_START_DATE" date
+  "TERMINATION_DATE" date
+  "ALW_NON_QUAL_UPGRD" char(1BYTE)
+  "NON_QUAL_IND" char(1BYTE)
+  "ALW_RECLASS_UPGRD" char(1BYTE)
+  "ON_HOLD_IND" char(1BYTE)
+  "ON_HOLD_SETTL_PLAN" "number(12,0)"
+  "HOT_MERCHANT_FLAG" char(1BYTE)
+  "TAX_EXEMPT_IND" char(1BYTE)
+  "RSRV_FUND_STATUS" char(1BYTE)
+  "RSRV_TO_BE_MET" "number(26,8)"
+  "RSRV_PERCENTAGE" "number(26,8)"
+  "COMPANY_TYPE" varchar2(5BYTE)
+  "VAT_REG_NR" varchar2(20BYTE)
+  "SETTL_AGT_NR" varchar2(4BYTE)
+  "TZ_DIFF" char(3BYTE)
+  "PROCESSING_TYPE" varchar2(5BYTE)
+  "BILLING_TYPE" char(2BYTE)
+  "TAX_ID" varchar2(20BYTE)
+  "RECLASS_IND" char(1BYTE)
+  "LAST_TRANS_CL_DATE" date
+  "AUTH_BY_LOC_IND" char(1BYTE)
+  "DAYS_TO_HOLD" "number(3,0)"
+  "PFOLIOSALE_ACQ_BIN" varchar2(6BYTE)
+  "MERCH_REF_NBR" varchar2(20BYTE)
+  "TIN_TYPE" char(1BYTE)
+  "OOB_DATE" date
+  "OWNERSHIP_CHG_DATE" date
+  "INFO_REFUSAL_IND" char(1BYTE)
+  "MPS_ID" "number(12,0)"
+  "BUSINESS_OWNERTYPE" "number(2,0)"
+  "OTHER_TYPE1" char(1BYTE)
+  "OTHER_TYPE2" "number(2,0)"
+  "ALT_TAX_ID" varchar2(15BYTE)
+  "DUN_NBR" varchar2(30BYTE)
+  "MERCH_DNN_ID" "number(3,0)"
+  "MERCH_DNN_PREFIX" "number(2,0)"
+  "DNN_INVOICE_NBR" varchar2(8BYTE)
+  "INVOICE_BATCH" "number(3,0)"
+  "INVOICE_SUB_CD" "number(2,0)"
+  "PC_ID" char(11BYTE)
+  "CAP_NBR" varchar2(10BYTE)
+  "ESTABLISH_ALPHA_ID" varchar2(4BYTE)
+  "RECAP_REF_NBR" varchar2(8BYTE)
+  "CHARACTER_SET_IND" varchar2(3BYTE)
+  "LOC_LANG_MERCHDESC" varchar2(96BYTE)
+  "MERCH_VOL_IND" char(2BYTE)
+  "RISK_ID_IND" char(1BYTE)
+  "PRESTIGIOUS_PR_IND" char(1BYTE)
+  "PROGRAM_REGISTR_ID" varchar2(6BYTE)
+  "IATA_CD" varchar2(3BYTE)
+  "TRAVEL_AGENCY_CD" varchar2(8BYTE)
+  "TRAVEL_AGENCY_NAME" varchar2(25BYTE)
+  "MERCH_VERIFI_VALUE" varchar2(10BYTE)
+  "OIL_CO_BRAND_NAME" varchar2(9BYTE)
+  "DEFAULT_MCC" varchar2(5BYTE)
+  "LANGUAGE_CODE" varchar2(3BYTE)
+  "COMPANY_ID" varchar2(30BYTE)
+  "ACCT_PPLAN_ID" varchar2(25BYTE)
+  "DEF_POSTING_ENTITY" varchar2(25BYTE)
+  "SETUP_STAGE" char(1BYTE)
+  "SETUP_COMPLETE_IND" char(1BYTE)
+  "SELLER_ID" varchar2(20BYTE)
+  "DISC_QUAL_IND" char(1BYTE)
+  "AMMF_ID" "number(15,0)"
+  "DINERS_INTL_ESTAB_CODE" "number(4,0)"
+  "DINERS_CHARGE_TYPE" "number(3,0)"
+  "VISA_MVV_VPP" varchar2(10BYTE)
+  "VISA_MVV_MSF" varchar2(10BYTE)
+  "VISA_MVV_VDS" varchar2(10BYTE)
+  "ROUTING_DATA" varchar2(50BYTE)
+  "MERCHANT_REFERENCE" varchar2(200BYTE)
+  "SHARED_KEY" varchar2(200BYTE)
+  "PROFILE_ID" varchar2(200BYTE)
+  "CAPTURE_TYPE" char(1BYTE)
+  "BATCH_CLOSE_TIME" varchar2(70BYTE)
+  "MER_BUS_PROC_FLG" char(1BYTE)
+  "CED_MAPPING" varchar2(8BYTE)
+}
+
+Table "ACQ_ENTITY_ADDRESS" {
+  "INSTITUTION_ID" varchar2(10BYTE)
+  "ENTITY_ID" varchar2(30BYTE)
+  "ADDRESS_ROLE" varchar2(20BYTE)
+  "EFFECTIVE_DATE" date
+  "ADDRESS_ID" "number(12,0)"
+  "CED_MAPPING" varchar2(8BYTE)
+}
+
+Table "AUX_CA_CUOTAS_BKP" {
+  "FECHA_PRESENTACION" date
+  "NUMERO_CUOTA" "number(2,0)"
+  "CANTIDAD_CUOTAS" "number(2,0)"
+  "SIS_FECHA_REGISTRO_ORI" date
+  "SIS_LOTE_REGISTRO_ORI" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO_ORI" "number(38,0)"
+  "FECHA_LOCAL" date
+  "COMERCIO" varchar2(15BYTE)
+  "TERMINAL" varchar2(8BYTE)
+  "TARJETA" varchar2(19BYTE)
+  "MONEDA" "number(38,0)"
+  "MONTO" "number(26,6)"
+  "AUTORIZACION" varchar2(6BYTE)
+  "HORA_LOCAL" "number(38,0)"
+  "ORIGTRACE" "number(38,0)"
+  "MICROFIL" varchar2(23BYTE)
+  "SIS_FECHA_CAPTURA_CUOTA" date
+  "SIS_LIQUIDACION_CUOTA" date
+  "SIS_LIQUIDADA_CUOTA" date
+  "MONTO_TOTAL" "number(26,6)"
+  "PAGADO" "number(1,0)"
+  "CHIP_INDEX" char(20BYTE)
+  "SITE_ID" "number(38,0)"
+  "NUMERO_REFERNCIA" char(12BYTE)
+  "SIS_USUARIO_CREACION" varchar2(20BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(20BYTE)
+  "SIS_FECHA_MODIFICACION" date
+  "SIS_LOTE_CAPTURA_CUOTA" "number(38,0)"
+  "SIS_SECUENCIA_CAPTURA_CUOTA" "number(38,0)"
+  "ADELANTADA" "number(1,0)"
+  "MIGRADA" "number(1,0)"
+}
+
+Table "AUX_CUOTA_PENDIENTES" {
+  "C_FECHA_PRES" char(7BYTE)
+  "C_CARD_KEY" char(19BYTE)
+  "C_AUTORIZACION" char(6BYTE)
+  "C_MONTO" char(9BYTE)
+  "C_MONEDA" char(3BYTE)
+  "C_FECHA_PROG" char(7BYTE)
+  "C_FLAG" char(1BYTE)
+  "C_NRO_CUOTA" char(2BYTE)
+  "C_TOTAL_CUOTAS" char(2BYTE)
+  "C_MONTO_ORIG" char(9BYTE)
+  "C_FECHA_TX" char(7BYTE)
+  "C_MRCH" char(7BYTE)
+  "C_TIME" char(6BYTE)
+  "C_EXPYYMM" char(4BYTE)
+  "C_LOTE_CAPTURA" char(6BYTE)
+  "C_LOTE_SAL" char(6BYTE)
+  "C_LOTE_SALS_ORIG" char(5BYTE)
+  "C_LOTE_SQN_SALS" char(3BYTE)
+  "C_TXTYPE" char(2BYTE)
+  "C_SQN_SALS_NEW" char(3BYTE)
+  "C_MRCH_FEE" char(4BYTE)
+  "C_MONTO_CUENTA" char(9BYTE)
+  "C_MONEDA_CUENTA" char(3BYTE)
+  "C_FLAG_COMP" char(1BYTE)
+  "C_MRCH_ASG" char(7BYTE)
+  "C_COMP_DATE" char(7BYTE)
+  "C_COMP_BANK" char(4BYTE)
+  "C_BANK" char(1BYTE)
+  "C_COMP_USER" char(5BYTE)
+  "C_MICRO_FILM" char(23BYTE)
+  "C_FLAG_CMS" char(1BYTE)
+  "C_FILLER" char(20BYTE)
+  "FECHA_CARGA" date
+}
+
+Table "CA_ATM_BISA" {
+  "SIS_FECHA_CAPTURA" date
+  "ESTADO_CAPTURA" "number(2,0)"
+  "MSGTYPE" "number(*,0)"
+  "PAN" char(19BYTE)
+  "PCODE" "number(*,0)"
+  "AMOUNT" "number(26,8)"
+  "TRANDATE" date
+  "TRANTIME" "number(*,0)"
+  "SETTLEMENT_RATE" "number(26,8)"
+  "ORIGTRACE" "number(*,0)"
+  "LOCAL_TIME" "number(*,0)"
+  "LOCAL_DATE" date
+  "SETTLEMENT_DATE" date
+  "CAP_DATE" date
+  "MERCHANT_TYPE" "number(*,0)"
+  "ACQ_COUNTRY" "number(*,0)"
+  "POS_ENTRY_CODE" "number(38,0)"
+  "CARD_SEQNO" "number(*,0)"
+  "POS_CONDITION_CODE" "number(38,0)"
+  "MEMBER_ID" char(11BYTE)
+  "F_ID" char(11BYTE)
+  "REFNUM" char(12BYTE)
+  "AUTHNUM" char(6BYTE)
+  "RESPCODE" "number(*,0)"
+  "TERMID" char(8BYTE)
+  "TERMLOC" varchar2(15BYTE)
+  "TERMLOC_REAL" char(25BYTE)
+  "ENTITYID" varchar2(30BYTE)
+  "ISS_ENTITYID" varchar2(30BYTE)
+  "ACCEPTORNAME" char(40BYTE)
+  "ACQ_CURRENCY_CODE" "number(*,0)"
+  "CHIP_INDEX" char(20BYTE)
+  "SITE_ID" "number(*,0)"
+  "ACQUIRER" char(10BYTE)
+  "ISSUER" char(10BYTE)
+  "MARCA" "number(38,0)"
+  "ADDRESPONSE" char(25BYTE)
+  "ACCTNUM" char(65BYTE)
+  "ACQUIRER_DATA" varchar2(128BYTE)
+  "ISSUER_DATA" varchar2(128BYTE)
+  "REASON_CODE" "number(*,0)"
+  "BATCH_ID" "number(*,0)"
+  "DEVICE_FEE" "number(26,8)"
+  "CASH_BACK" "number(26,8)"
+  "TXNSRC" varchar2(10BYTE)
+  "TXNDEST" varchar2(10BYTE)
+  "TIPO_LOCAL" "number(38,0)"
+  "TIPO_FONDO" "number(38,0)"
+  "PRODUCTO" "number(38,0)"
+  "TRANS_ID" char(15BYTE)
+  "TERM_TXN_DATE" date
+  "TERM_TYPE" "number(*,0)"
+  "TERM_ENTRY_CAP" "number(*,0)"
+  "CHIP_COND_CODE" "number(*,0)"
+  "CARD_AUTH_REL_IND" "number(*,0)"
+  "MSG_REASON_CODE" "number(*,0)"
+  "CRYPTO_VERSION" "number(*,0)"
+  "CRYPTO_TXN_TYPE" "number(*,0)"
+  "TERM_COUNTRY_CODE" "number(*,0)"
+  "CRYPTO_CURR_CODE" "number(*,0)"
+  "NEG_FILE_VERSION" "number(*,0)"
+  "CRYPTO_AMOUNT" "number(26,8)"
+  "SRV_RESTRICT_CODE" char(3BYTE)
+  "TERM_CAP_PROFILE" char(6BYTE)
+  "TVR" char(10BYTE)
+  "UNPREDICTABLE_NUM" char(8BYTE)
+  "TERM_SER_NUM" char(8BYTE)
+  "CVR" char(6BYTE)
+  "ISSUER_DISCRE_DATA" char(32BYTE)
+  "CRYPTOGRAM" char(16BYTE)
+  "APP_TXN_COUNTER" char(4BYTE)
+  "APP_ICHG_PROFILE" char(4BYTE)
+  "ISSUER_SCRIPT_RES" char(40BYTE)
+  "ISSUER_APP_DATA" char(64BYTE)
+  "BITMAP" "number(*,0)"
+  "ISSUER_AUTH_DATA" char(32BYTE)
+  "FIELD1" varchar2(512BYTE)
+  "FIELD2" varchar2(512BYTE)
+  "FIELD3" varchar2(512BYTE)
+  "BINFIELD1" raw(2000)
+  "ALPHARESPONSECODE" char(3BYTE)
+  "VALID_CD" char(4BYTE)
+  "MVV" char(10BYTE)
+  "INVOICE_NUMBER" char(6BYTE)
+  "FPI" char(3BYTE)
+  "SHCERROR" "number(38,0)"
+  "TIPO_TRANSACCION" varchar2(50BYTE)
+  "NOMBRE_ARCHIVO" varchar2(50BYTE)
+  "CABECERA_ARCHIVO" varchar2(50BYTE)
+  "LINEA" varchar2(130BYTE)
+  "SIS_USUARIO_CREACION" varchar2(100BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(100BYTE)
+  "SIS_FECHA_MODIFICACION" date
+  "ADD_REFERENCE" varchar2(10BYTE)
+}
+
+Table "CA_ATM_NF_BISA" {
+  "SIS_FECHA_CAPTURA" date
+  "ESTADO_CAPTURA" "number(2,0)"
+  "MSGTYPE" "number(*,0)"
+  "PAN" char(19BYTE)
+  "PCODE" "number(*,0)"
+  "AMOUNT" "number(26,8)"
+  "TRANDATE" date
+  "TRANTIME" "number(*,0)"
+  "SETTLEMENT_RATE" "number(26,8)"
+  "ORIGTRACE" "number(*,0)"
+  "LOCAL_TIME" "number(*,0)"
+  "LOCAL_DATE" date
+  "SETTLEMENT_DATE" date
+  "CAP_DATE" date
+  "MERCHANT_TYPE" "number(*,0)"
+  "ACQ_COUNTRY" "number(*,0)"
+  "POS_ENTRY_CODE" "number(38,0)"
+  "CARD_SEQNO" "number(*,0)"
+  "POS_CONDITION_CODE" "number(38,0)"
+  "MEMBER_ID" char(11BYTE)
+  "F_ID" char(11BYTE)
+  "REFNUM" char(12BYTE)
+  "AUTHNUM" char(6BYTE)
+  "RESPCODE" "number(*,0)"
+  "TERMID" char(8BYTE)
+  "TERMLOC" varchar2(15BYTE)
+  "TERMLOC_REAL" char(25BYTE)
+  "ENTITYID" varchar2(30BYTE)
+  "ISS_ENTITYID" varchar2(30BYTE)
+  "ACCEPTORNAME" char(40BYTE)
+  "ACQ_CURRENCY_CODE" "number(*,0)"
+  "CHIP_INDEX" char(20BYTE)
+  "SITE_ID" "number(*,0)"
+  "ACQUIRER" char(10BYTE)
+  "ISSUER" char(10BYTE)
+  "MARCA" "number(38,0)"
+  "ADDRESPONSE" char(25BYTE)
+  "ACCTNUM" char(65BYTE)
+  "ACQUIRER_DATA" varchar2(128BYTE)
+  "ISSUER_DATA" varchar2(128BYTE)
+  "REASON_CODE" "number(*,0)"
+  "BATCH_ID" "number(*,0)"
+  "DEVICE_FEE" "number(26,8)"
+  "CASH_BACK" "number(26,8)"
+  "TXNSRC" varchar2(10BYTE)
+  "TXNDEST" varchar2(10BYTE)
+  "TIPO_LOCAL" "number(38,0)"
+  "TIPO_FONDO" "number(38,0)"
+  "PRODUCTO" "number(38,0)"
+  "TRANS_ID" char(15BYTE)
+  "TERM_TXN_DATE" date
+  "TERM_TYPE" "number(*,0)"
+  "TERM_ENTRY_CAP" "number(*,0)"
+  "CHIP_COND_CODE" "number(*,0)"
+  "CARD_AUTH_REL_IND" "number(*,0)"
+  "MSG_REASON_CODE" "number(*,0)"
+  "CRYPTO_VERSION" "number(*,0)"
+  "CRYPTO_TXN_TYPE" "number(*,0)"
+  "TERM_COUNTRY_CODE" "number(*,0)"
+  "CRYPTO_CURR_CODE" "number(*,0)"
+  "NEG_FILE_VERSION" "number(*,0)"
+  "CRYPTO_AMOUNT" "number(26,8)"
+  "SRV_RESTRICT_CODE" char(3BYTE)
+  "TERM_CAP_PROFILE" char(6BYTE)
+  "TVR" char(10BYTE)
+  "UNPREDICTABLE_NUM" char(8BYTE)
+  "TERM_SER_NUM" char(8BYTE)
+  "CVR" char(6BYTE)
+  "ISSUER_DISCRE_DATA" char(32BYTE)
+  "CRYPTOGRAM" char(16BYTE)
+  "APP_TXN_COUNTER" char(4BYTE)
+  "APP_ICHG_PROFILE" char(4BYTE)
+  "ISSUER_SCRIPT_RES" char(40BYTE)
+  "ISSUER_APP_DATA" char(64BYTE)
+  "BITMAP" "number(*,0)"
+  "ISSUER_AUTH_DATA" char(32BYTE)
+  "FIELD1" varchar2(512BYTE)
+  "FIELD2" varchar2(512BYTE)
+  "FIELD3" varchar2(512BYTE)
+  "BINFIELD1" raw(2000)
+  "ALPHARESPONSECODE" char(3BYTE)
+  "VALID_CD" char(4BYTE)
+  "MVV" char(10BYTE)
+  "INVOICE_NUMBER" char(6BYTE)
+  "FPI" char(3BYTE)
+  "SHCERROR" "number(38,0)"
+  "TIPO_TRANSACCION" varchar2(50BYTE)
+  "NOMBRE_ARCHIVO" varchar2(50BYTE)
+  "CABECERA_ARCHIVO" varchar2(50BYTE)
+  "LINEA" varchar2(130BYTE)
+  "SIS_USUARIO_CREACION" varchar2(100BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(100BYTE)
+  "SIS_FECHA_MODIFICACION" date
+}
+
+Table "CA_BIN_ADQ" {
+  "BIN" varchar2(6BYTE)
+  "MARCA" "number(38,0)"
+  "TIPO_TRANSACCION" "number(38,0)"
+  "BANCO_ADQ" "number(38,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CA_BIN_POS_ATM_ADQ" {
+  "BANCO_ADQ" number
+  "BIN_POS" varchar2(20BYTE)
+  "BIN_ATM" varchar2(20BYTE)
+}
+
+Table "CA_BIN_PROCESADORES" {
+  "BIN" varchar2(6BYTE)
+  "MARCA" "number(38,0)"
+  "TIPO_LOCAL" "number(38,0)"
+  "CODIGO_PAIS_ALFA" varchar2(3BYTE)
+  "CODIGO_PAIS_NUMERICO" varchar2(3BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CA_CATEGORIA_TRANSACCION" {
+  "CATEGORIA_TRANSACCION" "number(38,0)"
+  "DESCRIPCION" varchar2(200BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CA_COMISIONES_NF" {
+  "ID" number
+  "EMISOR" number
+  "DESCRIPCION" varchar2(100BYTE)
+  "RUBRO" number
+  "TIPO_FONDO" number
+  "MONTO_COMISION" "number(10,2)"
+  "MONEDA_COMISION" number
+  "FECHA_ESTADO" number
+  "ESTADO" number
+}
+
+Table "CA_CONF_ARCHIVO_ATM" {
+  "CODIGO_BANCO" "number(38,0)"
+  "CODIGO_AGENCIA" "number(38,0)"
+  "ABREVIACION" varchar2(50BYTE)
+  "CODIGO_DEPARTAMENTO" "number(38,0)"
+  "ACTIVO" "number(38,0)"
+}
+
+Table "CA_CONFIG_CORRECCIONES" {
+  "CODIGO_RECHAZO" varchar2(10BYTE)
+  "COLUMNA_OBJ" varchar2(30BYTE)
+  "COLUMNA_CA" varchar2(30BYTE)
+  "DESCRIPCION" varchar2(200BYTE)
+  "TIPO_DATO" varchar2(100BYTE)
+}
+
+Table "CA_CONFIG_DIA_CAPTURA" {
+  "DIA" varchar2(10BYTE)
+  "PRESENTACION" varchar2(10BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CA_CONTROVERSIAS" {
+  "ID" number
+  "UUID" varchar2(36BYTE)
+  "ID_MARCA" "number(2,0)"
+  "ID_PRODUCTO" "number(2,0)"
+  "TARJETA" varchar2(19BYTE)
+  "SOLICITANTE" varchar2(100BYTE)
+  "TIPO_REVERSA" varchar2(50BYTE)
+  "BANCO_RECEPTOR" number
+  "MONTO_REVERSA" "number(18,2)"
+  "MONEDA" "number(5,0)"
+  "ESTADO_PROCESO" "number(2,0)"
+  "FECHA_PRESENTACION" date
+  "FECHA_CREACION" date
+  "USUARIO_CREACION" varchar2(100BYTE)
+  "FECHA_MODIFICACION" date
+  "USUARIO_MODIFICACION" varchar2(100BYTE)
+}
+
+Table "CA_CONTROVERSIAS_TXS" {
+  "ID" number
+  "ID_CONTROVERSIA" number
+  "FECHA_REGISTRO_ORIGINAL" date
+  "LOTE_REGISTRO_ORIGINAL" "number(38,0)"
+  "SECUENCIA_REGISTRO_ORIGINAL" "number(38,0)"
+  "FECHA_REGISTRO_CTG" date
+  "LOTE_REGISTRO_CTG" "number(38,0)"
+  "SECUENCIA_REGISTRO_CTG" "number(38,0)"
+  "TIPO_TRANSACCION" "number(2,0)"
+  "MONTO_ORIGINAL" "number(26,8)"
+  "MONTO_NUEVO" "number(26,8)"
+  "COMISION" "number(1,0)"
+  "ORIGEN" char(1BYTE)
+  "ID_MARCA" number
+  "FECHA_PRESENTACION_ORIGINAL" date
+  "MTI" "number(4,0)"
+  "CODIGO_USO" "number(3,0)"
+  "CODIGO_RAZON" "number(4,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CA_CUOTAS" {
+  "FECHA_PRESENTACION" date
+  "NUMERO_CUOTA" "number(2,0)"
+  "CANTIDAD_CUOTAS" "number(2,0)"
+  "SIS_FECHA_REGISTRO_ORI" date
+  "SIS_LOTE_REGISTRO_ORI" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO_ORI" "number(38,0)"
+  "FECHA_LOCAL" date
+  "COMERCIO" varchar2(15BYTE)
+  "TERMINAL" varchar2(8BYTE)
+  "TARJETA" varchar2(19BYTE)
+  "MONEDA" "number(38,0)"
+  "MONTO" "number(26,6)"
+  "AUTORIZACION" varchar2(6BYTE)
+  "HORA_LOCAL" "number(38,0)"
+  "ORIGTRACE" "number(38,0)"
+  "MICROFIL" varchar2(23BYTE)
+  "SIS_FECHA_CAPTURA_CUOTA" date
+  "SIS_LIQUIDACION_CUOTA" date
+  "SIS_LIQUIDADA_CUOTA" date
+  "MONTO_TOTAL" "number(26,6)"
+  "PAGADO" "number(1,0)"
+  "CHIP_INDEX" char(20BYTE)
+  "SITE_ID" "number(38,0)"
+  "NUMERO_REFERNCIA" char(12BYTE)
+  "SIS_USUARIO_CREACION" varchar2(20BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(20BYTE)
+  "SIS_FECHA_MODIFICACION" date
+  "SIS_LOTE_CAPTURA_CUOTA" "number(38,0)"
+  "SIS_SECUENCIA_CAPTURA_CUOTA" "number(38,0)"
+  "ADELANTADA" "number(1,0)"
+  "MIGRADA" "number(1,0)"
+}
+
+Table "CA_CUOTAS_TOTALES" {
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "FECHA_LOCAL" date
+  "HORA_LOCAL" "number(38,0)"
+  "TARJETA" varchar2(19BYTE)
+  "MONTO" "number(26,6)"
+  "MONEDA" "number(38,0)"
+  "COMERCIO" varchar2(15BYTE)
+  "TERMINAL" varchar2(8BYTE)
+  "AUTORIZACION" varchar2(6BYTE)
+  "CANTIDAD_CUOTAS" "number(2,0)"
+  "MICROFIL" varchar2(23BYTE)
+  "CHIP_INDEX" char(20BYTE)
+  "SITE_ID" "number(38,0)"
+  "ORIGRACE" "number(38,0)"
+  "NUMERO_REFERNCIA" char(12BYTE)
+  "SIS_USUARIO_CREACION" varchar2(20BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(20BYTE)
+  "SIS_FECHA_MODIFICACION" date
+}
+
+Table "CA_CYBERSOURCE_TC33A" {
+  "TRANSACCION" "number(38,0)"
+  "FECHA_CAPTURA" "number(8,0)"
+  "FECHA_REGISTRO" "number(8,0)"
+  "ESTADO" "number(1,0)"
+  "TC" varchar2(2BYTE)
+  "CP" varchar2(4BYTE)
+  "TCR" varchar2(2BYTE)
+  "LINEA" varchar2(168BYTE)
+  "SIS_USUARIO_CREACION" varchar2(100BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(100BYTE)
+  "SIS_FECHA_MODIFICACION" date
+}
+
+Table "CA_CYBERSOURCE_TRANSACCIONES" {
+  "TRANSACCION" "number(38,0)"
+  "FECHA_CAPTURA" "number(8,0)"
+  "FECHA_REGISTRO" "number(8,0)"
+  "FECHA_LOCAL" "number(8,0)"
+  "HORA_LOCAL" varchar2(20BYTE)
+  "COMERCIO" varchar2(15BYTE)
+  "TERMINAL" varchar2(8BYTE)
+  "TARJETA" varchar2(19BYTE)
+  "MONEDA" "number(38,0)"
+  "MONTO" "number(26,6)"
+  "NUMERO_AUTORIZACION" varchar2(6BYTE)
+  "PAIS" varchar2(3BYTE)
+  "NOMBRE_COMERCIO" varchar2(40BYTE)
+  "MCC" "number(4,0)"
+  "POS_ENTRY_CODE" varchar2(2BYTE)
+  "POS_CONDITION_CODE" varchar2(2BYTE)
+  "PCODE" varchar2(6BYTE)
+  "CASH_BACK" "number(26,8)"
+  "NUMERO_REFERENCIA" varchar2(12BYTE)
+  "ISSUER" varchar2(10BYTE)
+  "ACQUIRER" varchar2(10BYTE)
+  "REASON_CODE" varchar2(4BYTE)
+  "MARCA" varchar2(2BYTE)
+  "ACTION_CODE" varchar2(20BYTE)
+  "PROCESADO" "number(2,0)"
+  "SIS_USUARIO_CREACION" varchar2(100BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(100BYTE)
+  "SIS_FECHA_MODIFICACION" date
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" number
+  "SIS_SECUENCIA_REGISTRO" number
+  "AUTH_CHAR_IND" varchar2(5BYTE)
+  "PURCHASE_ID_FORMAT" varchar2(5BYTE)
+  "PURCHASE_ID" varchar2(30BYTE)
+  "POS_ENVIRONMENT" varchar2(5BYTE)
+  "ID_TRANSACCION" varchar2(20BYTE)
+  "COD_VALIDACION" varchar2(10BYTE)
+  "MONTO_TOTAL_AUTORIZADO" number
+  "TELEFONO_COMERCIO" varchar2(20BYTE)
+  "ID_PRODUCTO" varchar2(5BYTE)
+  "ID_PROGRAMA" varchar2(10BYTE)
+  "TOKEN_PAN" varchar2(20BYTE)
+  "COD_CVV2" varchar2(5BYTE)
+  "POS_TERMINAL_CAPABILITY" varchar2(5BYTE)
+  "CARDHOLDER_ID_METHOD" varchar2(5BYTE)
+  "MAIL_PHONE_ELECTRONIC" varchar2(5BYTE)
+  "SERVICE_DEVELOPMENT_FIELD" varchar2(5BYTE)
+  "AVS_RESPONSE_CODE" varchar2(5BYTE)
+  "AUTHORIZATION_SOURCE_CODE" varchar2(5BYTE)
+  "AUTHORIZATION_RESPONSE_CODE" varchar2(5BYTE)
+  "TOKEN_ASSURANCE_METHOD" varchar2(5BYTE)
+}
+
+Table "CA_ESTADO_PROCESO" {
+  "ID" "number(38,0)"
+  "DESCRIPCION" varchar2(200BYTE)
+}
+
+Table "CA_IATA_CSI" {
+  "TRANSACCION" "number(38,0)"
+  "FECHA_CAPTURA" "number(8,0)"
+  "ESTADO" "number(1,0)"
+  "IDENTIFICADOR" varchar2(3BYTE)
+  "NOMBRE_ARCHIVO" varchar2(256BYTE)
+  "LINEA" varchar2(256BYTE)
+  "SIS_USUARIO_CREACION" varchar2(100BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(100BYTE)
+  "SIS_FECHA_MODIFICACION" date
+}
+
+Table "CA_IATA_TRANSACCIONES" {
+  "TRANSACCION" "number(38,0)"
+  "FECHA_CAPTURA" "number(8,0)"
+  "FECHA_LOCAL" "number(8,0)"
+  "HORA_LOCAL" varchar2(20BYTE)
+  "COMERCIO" varchar2(15BYTE)
+  "TERMINAL" varchar2(8BYTE)
+  "TARJETA" varchar2(19BYTE)
+  "MONEDA" "number(38,0)"
+  "MONTO" "number(26,6)"
+  "NUMERO_AUTORIZACION" varchar2(6BYTE)
+  "PAIS" varchar2(3BYTE)
+  "NOMBRE_COMERCIO" varchar2(40BYTE)
+  "MCC" "number(4,0)"
+  "POS_ENTRY_CODE" varchar2(2BYTE)
+  "POS_CONDITION_CODE" varchar2(2BYTE)
+  "PCODE" varchar2(6BYTE)
+  "CASH_BACK" "number(26,8)"
+  "NUMERO_REFERENCIA" varchar2(12BYTE)
+  "ISSUER" varchar2(10BYTE)
+  "ACQUIRER" varchar2(10BYTE)
+  "REASON_CODE" varchar2(4BYTE)
+  "MARCA" varchar2(2BYTE)
+  "TIPO_TRANSACCION" varchar2(2BYTE)
+  "PROCESADO" "number(2,0)"
+  "SIS_USUARIO_CREACION" varchar2(100BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(100BYTE)
+  "SIS_FECHA_MODIFICACION" date
+  "NOMBRE_ARCHIVO" varchar2(200BYTE)
+}
+
+Table "CA_ICA" {
+  "MEMBER_ID" varchar2(11BYTE)
+  "MARCA" "number(38,0)"
+  "TIPO_LOCAL" "number(38,0)"
+  "CODIGO_ALFA_PAIS" varchar2(3BYTE)
+  "CODIGO_NUMERICO_PAIS" varchar2(3BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CA_LOTES" {
+  "ID" number
+  "BATCH_ID" "number(38,0)"
+  "POS_BATCH_IDX" char(16BYTE)
+  "SITE_ID" "number(38,0)"
+  "TERMID" char(8BYTE)
+  "TERMLOC" varchar2(30BYTE)
+  "CLOSE_FLAG" char(1BYTE)
+  "OPEN_DATE" date
+  "OPEN_TIME" "number(6,0)"
+  "CLOSE_DATE" date
+  "CLOSE_TIME" "number(6,0)"
+  "CURRENCY_CODE" char(3BYTE)
+  "STATUS" varchar2(20BYTE)
+  "PROCESO_ID" number
+  "PR_FECHA_REGISTRO" date
+  "DBC_NUM_DB" "number(38,0)"
+  "DBC_NUM_ADJ" "number(38,0)"
+  "CRC_NUM_DB" "number(38,0)"
+  "CRC_NUM_ADJ" "number(38,0)"
+  "DBC_AMT_DB" "number(26,8)"
+  "DBC_AMT_ADJ" "number(26,8)"
+  "CRC_AMT_DB" "number(26,8)"
+  "CRC_AMT_ADJ" "number(26,8)"
+  "DBC_NUM_DBG" "number(38,0)"
+  "DBC_NUM_ADJG" "number(38,0)"
+  "CRC_NUM_DBG" "number(38,0)"
+  "CRC_NUM_ADJG" "number(38,0)"
+  "DBC_AMT_DBG" "number(26,8)"
+  "DBC_AMT_ADJG" "number(26,8)"
+  "CRC_AMT_DBG" "number(26,8)"
+  "CRC_AMT_ADJG" "number(26,8)"
+  "NUM_TX_QR" "number(26,8)"
+  "AMT_TX_QR" "number(26,8)"
+  "CANT_SIAL" "number(38,0)"
+  "AMT_SIAL" "number(26,8)"
+  "FECHA_INICIAL_PR" date
+  "FECHA_FINAL_PR" date
+}
+
+Table "CA_MARCA_DESTINO" {
+  "DESTINO" varchar2(10BYTE)
+  "MARCA" "number(38,0)"
+  "TIPO_LOCAL" "number(38,0)"
+  "TIPO_FONDO" "number(38,0)"
+  "PRODUCTO" "number(38,0)"
+  "ISSUER" char(10BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CA_MARCAS" {
+  "MARCA" "number(38,0)"
+  "DESCRIPCION" varchar2(50BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CA_POS_BATCH_FORZOSO" {
+  "POS_BATCH_IDX" char(16BYTE)
+  "INSTITUTION_ID" varchar2(10BYTE)
+  "ENTITY_ID" varchar2(30BYTE)
+  "TERM_RECORD_SEQ" "number(15,0)"
+  "TERMID" char(8BYTE)
+  "BATCH_ID" "number(*,0)"
+  "ORIG_BATCH_ID" "number(*,0)"
+  "TBATCH_ID" char(8BYTE)
+  "CAPTURE_TYPE" char(1BYTE)
+  "CLOSE_FLAG" char(1BYTE)
+  "EXTRACT_FLAG" char(1BYTE)
+  "OPEN_DATE" date
+  "OPEN_TIME" "number(6,0)"
+  "CLOSE_DATE" date
+  "CLOSE_TIME" "number(6,0)"
+  "DBC_NUM_DB" "number(*,0)"
+  "DBC_AMT_DB" "number(26,8)"
+  "DBC_NUM_CR" "number(*,0)"
+  "DBC_AMT_CR" "number(26,8)"
+  "DBC_NUM_ADJ" "number(*,0)"
+  "DBC_AMT_ADJ" "number(26,8)"
+  "DBC_AMT_NET" "number(26,8)"
+  "DBC_NUM_DBG" "number(*,0)"
+  "DBC_AMT_DBG" "number(26,8)"
+  "DBC_NUM_CRG" "number(*,0)"
+  "DBC_AMT_CRG" "number(26,8)"
+  "DBC_NUM_ADJG" "number(*,0)"
+  "DBC_AMT_ADJG" "number(26,8)"
+  "DBC_AMT_NETG" "number(26,8)"
+  "CRC_NUM_DB" "number(*,0)"
+  "CRC_AMT_DB" "number(26,8)"
+  "CRC_NUM_CR" "number(*,0)"
+  "CRC_AMT_CR" "number(26,8)"
+  "CRC_NUM_ADJ" "number(*,0)"
+  "CRC_AMT_ADJ" "number(26,8)"
+  "CRC_AMT_NET" "number(26,8)"
+  "CRC_NUM_DBG" "number(*,0)"
+  "CRC_AMT_DBG" "number(26,8)"
+  "CRC_NUM_CRG" "number(*,0)"
+  "CRC_AMT_CRG" "number(26,8)"
+  "CRC_NUM_ADJG" "number(*,0)"
+  "CRC_AMT_ADJG" "number(26,8)"
+  "CRC_AMT_NETG" "number(26,8)"
+  "CASHBACK_AMTG" "number(26,8)"
+  "HASH_AMTG" "number(26,8)"
+  "DEPOSIT_AMTG" "number(26,8)"
+  "DEPOSIT_SIGN" char(2BYTE)
+  "RECORD_CNT" "number(9,0)"
+  "ACQUIRER" char(10BYTE)
+  "AGENT_NR" "number(6,0)"
+  "CHAIN_NR" "number(6,0)"
+  "TERM_ID_NR" char(8BYTE)
+  "BLOCK_IND" char(1BYTE)
+  "CURRENCY_CODE" char(3BYTE)
+  "ADDRESS_ID" "number(12,0)"
+  "MER_LOC_NR" char(5BYTE)
+  "TRAV_AGENCY_NAME" varchar2(25BYTE)
+  "TRAV_AGENCY_CD" varchar2(8BYTE)
+  "TRANS_CNT" "number(4,0)"
+  "MERCH_ENTITY_ID" varchar2(30BYTE)
+  "SITE_ID" "number(*,0)"
+  "CLOSE_SITE_ID" "number(*,0)"
+  "SCHLD_CLOSE_TIME" "number(4,0)"
+  "SIS_USUARIO_CREACION" varchar2(20BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(20BYTE)
+  "SIS_FECHA_MODIFICACION" date
+}
+
+Table "CA_PROCESO_DETALLE" {
+  "ID" "number(38,0)"
+  "FECHA_INICIAL" date
+  "FECHA_FINAL" date
+  "TIPO_PROCESO" number
+  "FECHA_REGISTRO" date
+  "TOTAL_TXS" "number(38,0)"
+  "TOTAL_LOTES" "number(38,0)"
+  "LOTES_CUADRADOS" "number(38,0)"
+  "LOTES_OBSERVADOS" "number(38,0)"
+  "TOTAL_MONTO" "number(38,2)"
+  "MONTO_CUADRADO" "number(38,2)"
+  "MONTO_OBSERVADO" "number(38,2)"
+  "TXS_CUADRADAS" "number(38,0)"
+  "TXS_OBSERVADAS" "number(38,0)"
+  "FECHA_CREACION" date
+  "USUARIO_CREACION" varchar2(100BYTE)
+}
+
+Table "CA_PROCESOS" {
+  "ID" "number(38,0)"
+  "NOMBRE" varchar2(100BYTE)
+  "FECHA_INICIAL" date
+  "HORA_INICIAL" number
+  "FECHA_FINAL" date
+  "HORA_FINAL" number
+  "USUARIO" varchar2(20BYTE)
+  "ESTADO" "number(1,0)"
+  "FECHA_REGISTRO_INICIAL" date
+  "HORA_REGISTRO_INICIAL" "number(6,0)"
+  "FECHA_REGISTRO_FINAL" date
+  "HORA_REGISTRO_FINAL" "number(6,0)"
+  "CONTADOR" "number(1,0)"
+  "CANTIDAD" "number(38,0)"
+  "TOTAL" "number(38,0)"
+  "TIPO_CAPTURA" varchar2(100BYTE)
+  "FECHA_REGISTRO" date
+  "NOMBRE_ARCHIVO" varchar2(4000BYTE)
+  "CODIGO_RESPUESTA" "number(38,0)"
+  "DESCRIPCION_RESPUESTA" varchar2(4000BYTE)
+  "SIS_USUARIO_REGISTRO" varchar2(100BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(100BYTE)
+  "SIS_FECHA_MODIFICACION" date
+}
+
+Table "CA_PROCESOS_HORA" {
+  "ID" "number(38,0)"
+  "HORA_INICIAL" "number(38,0)"
+  "HORA_FINAL" number
+}
+
+Table "CA_PROCESOS_SQL" {
+  "ID_PROCESO" "number(38,0)"
+  "SQL" varchar2(4000BYTE)
+  "ID_CONEXION" varchar2(50BYTE)
+  "ORDEN" "number(26,6)"
+  "TIPO" "number(38,0)"
+}
+
+Table "CA_PRODUCTOS" {
+  "PRODUCTO" "number(38,0)"
+  "DESCRIPCION" varchar2(50BYTE)
+  "MARCA" varchar2(38BYTE)
+  "TIPO_FONDO" "number(38,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CA_TERMINALES_VIRTUALES" {
+  "TERMINAL" varchar2(8BYTE)
+  "ESTADO" "number(38,0)"
+  "DESCRIPCION" varchar2(50BYTE)
+  "TIPO_TERMINAL" "number(38,0)"
+  "VOZ" "number(38,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CA_TIPOS_CAPTURA" {
+  "TIPO_CAPTURA" "number(38,0)"
+  "DESCRIPCION" varchar2(100BYTE)
+  "TIPO" "number(38,0)"
+  "NOMBRE_ARCHIVO" varchar2(4000BYTE)
+}
+
+Table "CA_TIPOS_FONDOS" {
+  "TIPO_FONDO" "number(38,0)"
+  "DESCRIPCION" varchar2(50BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CA_TIPOS_FONDOS_EMISORES" {
+  "TIPO_FONDO" "number(38,0)"
+  "DESCRIPCION" varchar2(100BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CA_TIPOS_LOCALES" {
+  "TIPO_LOCAL" "number(38,0)"
+  "DESCRIPCION" varchar2(50BYTE)
+  "ABR" varchar2(1BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CA_TIPOS_TERMINALES_VIRTUALES" {
+  "TIPO_TERMINAL_VIRTUAL" "number(38,0)"
+  "DESCRIPCION" varchar2(200BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CA_TIPOS_TRANSACCION" {
+  "TIPO_TRANSACCION" number
+  "DESCRIPCION" varchar2(100BYTE)
+  "TIPO_TX_CCA" varchar2(2BYTE)
+  "TIPO_BII_CCA" varchar2(1BYTE)
+  "CATEGORIA" "number(38,0)"
+  "MULTIPLICAR" "number(1,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "REVERSA" "number(2,0)"
+  "REVERSA_CCA" "number(2,0)"
+  "CONTRACARGO" "number(2,0)"
+}
+
+Table "CA_TRANSACCIONES" {
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "SIS_MARCA" "number(38,0)"
+  "SIS_PRODUCTO" "number(38,0)"
+  "FECHA_LOCAL" date
+  "HORA_LOCAL" "number(38,0)"
+  "COMERCIO" varchar2(15BYTE)
+  "TERMINAL" varchar2(8BYTE)
+  "TARJETA" varchar2(19BYTE)
+  "MONEDA" "number(38,0)"
+  "MONTO" "number(26,6)"
+  "NUMERO_AUTORIZACION" varchar2(6BYTE)
+  "PAIS" "number(38,0)"
+  "NOMBRE_COMERCIO" varchar2(41BYTE)
+  "MGSTYPE" "number(38,0)"
+  "SIS_SECUENCIA_MARCA" "number(38,0)"
+  "SIS_MICROFIL" varchar2(23BYTE)
+  "SIS_BANCO_ADQ" "number(4,0)"
+  "SIS_SUCURSAL_ADQ" "number(5,0)"
+  "SIS_CUENTA_ADQ" varchar2(30BYTE)
+  "SIS_BANCO_EMI" "number(4,0)"
+  "SIS_SUCURSAL_EMI" "number(5,0)"
+  "MCC" "number(38,0)"
+  "POS_ENTRY_CODE" "number(38,0)"
+  "POS_CONDITION_CODE" "number(38,0)"
+  "PCODE" "number(38,0)"
+  "SIS_TIPO_LOCAL" "number(38,0)"
+  "SIS_TIPO_FONDO" "number(38,0)"
+  "SIS_PORCENTAJE_RETENCION_COMERCIO" "number(10,7)"
+  "SIS_RETENCION_COMERCIO" "number(26,6)"
+  "SIS_BIN_TOKEN" "number(38,0)"
+  "TARJETA_DESTOKEN" char(19BYTE)
+  "CHIP_INDEX" char(20BYTE)
+  "SITE_ID" "number(38,0)"
+  "CHIP_INDEX_DESTOKEN" char(20BYTE)
+  "SITE_ID_DESTOKEN" "number(38,0)"
+  "CASH_BACK" "number(26,8)"
+  "CARD_SEQNO" "number(38,0)"
+  "SIS_TIPO_CAPTURA" "number(38,0)"
+  "DEVICE_FEE" "number(26,8)"
+  "ORIGTRACE" "number(38,0)"
+  "NUMERO_REFERENCIA" varchar2(12BYTE)
+  "FECHA_TRANSACCION" date
+  "HORA_TRANSACCION" "number(38,0)"
+  "FECHA_CAPTURA" date
+  "FECHA_LIQUIDACION" date
+  "TASA_LIQUIDACION" "number(26,8)"
+  "MEMBER_ID" char(11BYTE)
+  "F_ID" char(11BYTE)
+  "LOTE" "number(38,0)"
+  "ISSUER" char(10BYTE)
+  "ACQUIRER" char(10BYTE)
+  "REASON_CODE" "number(38,0)"
+  "ADDRESPONSE" char(25BYTE)
+  "ACCTNUM" char(65BYTE)
+  "SIS_FECHA_LIQUIDACION" date
+  "SIS_FECHA_LIQUIDADA" date
+  "COMERCIO_REAL" char(25BYTE)
+  "TXNSRC" varchar2(10BYTE)
+  "TXNDEST" varchar2(10BYTE)
+  "SIS_METODO" varchar2(100BYTE)
+  "RESPCODE" "number(38,0)"
+  "TRANS_ID" char(30BYTE)
+  "ALPHARESPONSECODE" char(3BYTE)
+  "ENTITYID" varchar2(30BYTE)
+  "VALID_CD" char(4BYTE)
+  "MVV" char(10BYTE)
+  "INVOICE_NUMBER" char(6BYTE)
+  "FPI" char(3BYTE)
+  "SIS_TIPO_TRANSACCION" "number(38,0)"
+  "SHCERROR" "number(38,0)"
+  "SIS_ESTADO_BIN" "number(2,0)"
+  "SIS_ESTADO_ADQ" "number(2,0)"
+  "SIS_ESTADO_EMI" "number(2,0)"
+  "SIS_ESTADO_MICROFIL" "number(2,0)"
+  "CUOTA" "number(2,0)"
+  "SIS_FECHA_CAPTURA_INICIAL" date
+  "SIS_FECHA_CAPTURA_FINAL" date
+  "SIS_USUARIO_CREACION" varchar2(20BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(20BYTE)
+  "SIS_FECHA_MODIFICACION" date
+  "OUTGOING" "number(1,0)"
+  "ENVIADO" "number(1,0)"
+  "POS_BATCH_IDX" char(16BYTE)
+  "POS_TRANS_IDX_T" char(16BYTE)
+  "CLOSE_FLAG" char(1BYTE)
+  "OPEN_DATE" date
+  "OPEN_TIME" "number(6,0)"
+  "CLOSE_DATE" date
+  "CLOSE_TIME" "number(6,0)"
+  "SIS_ESTADO" "number(38,0)"
+  "ESTADO_POSTEO" "number(2,0)"
+  "PROCESS_BATCH_ID" "number(19,0)"
+  "LOAD_STATUS" varchar2(10BYTE)
+  "FECHA_PRESENTACION" date
+}
+
+Table "CA_TRANSACCIONES_DISCOVER" {
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "SIS_MARCA" "number(38,0)"
+  "SIS_PRODUCTO" "number(38,0)"
+  "TARJETA" char(19BYTE)
+  "COMERCIO" varchar2(15BYTE)
+  "TERM_TXN_DATE" date
+  "TERM_TYPE" "number(38,0)"
+  "TERM_ENTRY_CAP" "number(38,0)"
+  "CHIP_COND_CODE" "number(38,0)"
+  "CARD_AUTH_REL_IND" "number(38,0)"
+  "MSG_REASON_CODE" "number(38,0)"
+  "CRYPTO_VERSION" "number(38,0)"
+  "CRYPTO_TXN_TYPE" "number(38,0)"
+  "TERM_COUNTRY_CODE" "number(38,0)"
+  "CRYPTO_CURR_CODE" "number(38,0)"
+  "NEG_FILE_VERSION" "number(38,0)"
+  "CRYPTO_AMOUNT" "number(26,8)"
+  "SRV_RESTRICT_CODE" char(3BYTE)
+  "TERM_CAP_PROFILE" char(6BYTE)
+  "TVR" char(10BYTE)
+  "UNPREDICTABLE_NUM" char(8BYTE)
+  "TERM_SER_NUM" char(8BYTE)
+  "CVR" char(6BYTE)
+  "ISSUER_DISCRE_DATA" char(32BYTE)
+  "CRYPTOGRAM" char(16BYTE)
+  "APP_TXN_COUNTER" char(4BYTE)
+  "APP_ICHG_PROFILE" char(4BYTE)
+  "ISSUER_SCRIPT_RES" char(40BYTE)
+  "ISSUER_APP_DATA" char(64BYTE)
+  "CHIP_BITMAP" "number(38,0)"
+  "ISSUER_AUTH_DATA" char(32BYTE)
+  "FIELD1" varchar2(512BYTE)
+  "FIELD2" varchar2(512BYTE)
+  "FIELD3" varchar2(512BYTE)
+  "BINFIELD1" raw(2000)
+  "SIS_USUARIO_CREACION" varchar2(20BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(20BYTE)
+  "SIS_FECHA_MODIFICACION" date
+}
+
+Table "CA_TRANSACCIONES_FALTANTES" {
+  "MSGTYPE" "number(38,0)"
+  "FLIPPED_MSGTYPE" "number(38,0)"
+  "PAN" char(19BYTE)
+  "MASK_PAN" char(19BYTE)
+  "PCODE" "number(38,0)"
+  "TXNTYPE" "number(38,0)"
+  "AMOUNT" "number(26,8)"
+  "AVAL_BALANCE" "number(26,8)"
+  "AMOUNT_EQUIV" "number(26,8)"
+  "CASH_BACK" "number(26,8)"
+  "ISS_CONV_RATE" "number(26,8)"
+  "ISS_CURRENCY_CODE" "number(38,0)"
+  "ISS_CONV_DATE" date
+  "ACQ_CONV_RATE" "number(26,8)"
+  "ACQ_CURRENCY_CODE" "number(38,0)"
+  "ACQ_CONV_DATE" date
+  "TRA_AMOUNT" "number(26,8)"
+  "TRA_CONV_RATE" "number(26,8)"
+  "TRA_CURRENCY_CODE" "number(38,0)"
+  "TRA_CONV_DATE" date
+  "FEE" "number(26,8)"
+  "NEW_FEE" "number(26,8)"
+  "NEW_AMOUNT" "number(26,8)"
+  "NEW_SETL_AMOUNT" "number(26,8)"
+  "SETTLEMENT_FEE" "number(26,8)"
+  "SETTLEMENT_RATE" "number(26,8)"
+  "SETTLEMENT_CODE" "number(38,0)"
+  "SETTLEMENT_AMOUNT" "number(26,8)"
+  "TRANDATE" date
+  "TRANTIME" "number(38,0)"
+  "TRACE" "number(38,0)"
+  "LOCAL_TIME" "number(38,0)"
+  "LOCAL_DATE" date
+  "SETTLEMENT_DATE" date
+  "CAP_DATE" date
+  "POS_ENTRY_CODE" "number(38,0)"
+  "POS_CONDITION_CODE" "number(38,0)"
+  "POS_PIN_CAP_CODE" char(1BYTE)
+  "POS_CAP_CODE" "number(38,0)"
+  "LIFE_CYCLE" "number(38,0)"
+  "ACQUIRER" char(10BYTE)
+  "ISSUER" char(10BYTE)
+  "TRANSFEREE" char(10BYTE)
+  "ORIGINATOR" char(10BYTE)
+  "MEMBER_ID" char(11BYTE)
+  "F_ID" char(11BYTE)
+  "TXNSRC" varchar2(10BYTE)
+  "TXNDEST" varchar2(10BYTE)
+  "ALTERNATEACQUIRER" char(10BYTE)
+  "ENTITYID" varchar2(30BYTE)
+  "ISS_ENTITYID" varchar2(30BYTE)
+  "CARDPRODUCT" char(10BYTE)
+  "MVV" char(10BYTE)
+  "INVOICE_NUMBER" char(6BYTE)
+  "TRANS_ID" char(15BYTE)
+  "FPI" char(3BYTE)
+  "TXN_START_TIME" "number(38,0)"
+  "TXN_END_TIME" "number(38,0)"
+  "DEVICE_CAP" "number(38,0)"
+  "RESPCODE" "number(38,0)"
+  "REASON_CODE" "number(38,0)"
+  "REVCODE" "number(38,0)"
+  "SHCERROR" "number(38,0)"
+  "SAF" "number(38,0)"
+  "ORIGMSG" "number(38,0)"
+  "ORIGFLIPPEDMSG" "number(38,0)"
+  "ORIGTRACE" "number(38,0)"
+  "ORIGDATE" date
+  "ORIGTIME" "number(38,0)"
+  "MERCHANT_TYPE" "number(38,0)"
+  "ACQ_COUNTRY" "number(38,0)"
+  "REFNUM" char(12BYTE)
+  "AUTHNUM" char(6BYTE)
+  "TERMID" char(8BYTE)
+  "ACCEPTORNAME" char(40BYTE)
+  "TERMLOC" char(25BYTE)
+  "ADDRESPONSE" char(25BYTE)
+  "ACCTNUM" char(65BYTE)
+  "BRANCH" "number(38,0)"
+  "SERIAL_1" "number(38,0)"
+  "SERIAL_2" "number(38,0)"
+  "STOREID" "number(38,0)"
+  "LANE" "number(38,0)"
+  "TERMINAL_TRACE" "number(38,0)"
+  "CHECKER_ID" "number(38,0)"
+  "SUPERVISOR" "number(38,0)"
+  "SHIFT_NUMBER" "number(38,0)"
+  "BATCH_ID" "number(38,0)"
+  "DEVICE_DEVCAP" "number(38,0)"
+  "SHC_DEVCAP" "number(38,0)"
+  "FORMATTER_DEVCAP" "number(38,0)"
+  "AUTH_DEVCAP" "number(38,0)"
+  "FILLER1" varchar2(50BYTE)
+  "FILLER2" varchar2(50BYTE)
+  "FILLER3" varchar2(50BYTE)
+  "FILLER4" varchar2(50BYTE)
+  "ISSUER_DATA" varchar2(128BYTE)
+  "ACQUIRER_DATA" varchar2(128BYTE)
+  "NEW_AMOUNT_EQUIV" "number(26,8)"
+  "ACQ_AVAL_BALANCE" "number(26,8)"
+  "ACQ_LEDGER_BALANCE" "number(26,8)"
+  "SETL_AVAL_BALANCE" "number(26,8)"
+  "SETL_LEDGER_BALANCE" "number(26,8)"
+  "AVAL_BALANCE_TYPE" "number(38,0)"
+  "LEDGER_BALANCE_TYPE" "number(38,0)"
+  "NEW_SETL_FEE" "number(26,8)"
+  "TXN_AMOUNT" "number(26,8)"
+  "TXN_NEW_AMOUNT" "number(26,8)"
+  "TXN_CURRENCY_CODE" "number(38,0)"
+  "TXN_CONV_RATE" "number(26,8)"
+  "TXN_CONV_DATE" date
+  "CH_AMOUNT" "number(26,8)"
+  "CH_NEW_AMOUNT" "number(26,8)"
+  "CH_CURRENCY_CODE" "number(38,0)"
+  "CH_CONV_RATE" "number(26,8)"
+  "CH_CONV_DATE" date
+  "LEDGER_BALANCE" "number(26,8)"
+  "SLOT_NUM" "number(38,0)"
+  "DEVICE_FEE" "number(26,8)"
+  "SHC_DATA_BUFFER" raw(2000)
+  "CARD_SEQNO" "number(38,0)"
+  "ALPHARESPONSECODE" char(3BYTE)
+  "CHIP_TYPE" char(1BYTE)
+  "CHIP_INDEX" char(20BYTE)
+  "PROCESSOR_BUSDAY" date
+  "SEQ_TRACE_NO" "number(38,0)"
+  "SEG_REQ" raw(2000)
+  "SEG_RESP" raw(2000)
+  "SITE_ID" "number(38,0)"
+  "VERSION" "number(38,0)"
+  "SRC_NODE" "number(38,0)"
+  "DEST_NODE" "number(38,0)"
+  "STATUS" varchar2(50BYTE)
+  "DESCRIPTION" varchar2(255CHAR)
+  "MSG330" "number(28,6)"
+  "USUARIO_MODIFICACION" varchar2(100BYTE)
+  "FECHA_MODIFICACION" date
+  "FECHA_CAPTURA" date
+  "POS_BATCH_IDX" char(16BYTE)
+  "CLOSE_FLAG" char(1BYTE)
+  "OPEN_DATE" date
+  "OPEN_TIME" "number(6,0)"
+  "CLOSE_DATE" date
+  "CLOSE_TIME" "number(6,0)"
+}
+
+Table "CA_TRANSACCIONES_MASTERCARD" {
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "SIS_MARCA" "number(38,0)"
+  "SIS_PRODUCTO" "number(38,0)"
+  "TARJETA" char(19BYTE)
+  "COMERCIO" varchar2(15BYTE)
+  "TERM_TXN_DATE" date
+  "TERM_TYPE" "number(38,0)"
+  "TERM_ENTRY_CAP" "number(38,0)"
+  "CHIP_COND_CODE" "number(38,0)"
+  "CARD_AUTH_REL_IND" "number(38,0)"
+  "MSG_REASON_CODE" "number(38,0)"
+  "CRYPTO_VERSION" "number(38,0)"
+  "CRYPTO_TXN_TYPE" "number(38,0)"
+  "TERM_COUNTRY_CODE" "number(38,0)"
+  "CRYPTO_CURR_CODE" "number(38,0)"
+  "NEG_FILE_VERSION" "number(38,0)"
+  "CRYPTO_AMOUNT" "number(26,8)"
+  "SRV_RESTRICT_CODE" char(3BYTE)
+  "TERM_CAP_PROFILE" char(6BYTE)
+  "TVR" char(10BYTE)
+  "UNPREDICTABLE_NUM" char(8BYTE)
+  "TERM_SER_NUM" char(8BYTE)
+  "CVR" char(6BYTE)
+  "ISSUER_DISCRE_DATA" char(32BYTE)
+  "CRYPTOGRAM" char(16BYTE)
+  "APP_TXN_COUNTER" char(4BYTE)
+  "APP_ICHG_PROFILE" char(4BYTE)
+  "ISSUER_SCRIPT_RES" char(40BYTE)
+  "ISSUER_APP_DATA" char(64BYTE)
+  "CHIP_BITMAP" "number(38,0)"
+  "ISSUER_AUTH_DATA" char(32BYTE)
+  "FIELD1" varchar2(512BYTE)
+  "FIELD2" varchar2(512BYTE)
+  "FIELD3" varchar2(512BYTE)
+  "BINFIELD1" raw(2000)
+  "CODIGO" varchar2(1BYTE)
+  "RANGO_BAJO" varchar2(19BYTE)
+  "ID_PRODUCTO_GCMS" varchar2(3BYTE)
+  "RANGO_ALTO" varchar2(19BYTE)
+  "ID_PROGRAMA_TARJETA" varchar2(3BYTE)
+  "PRIORIDAD" varchar2(2BYTE)
+  "MEMBER_ID" varchar2(11BYTE)
+  "ENDPOINT" varchar2(7BYTE)
+  "CODIGO_ALFA_PAIS" varchar2(3BYTE)
+  "CODIGO_NUMERICO_PAIS" varchar2(3BYTE)
+  "REGION" varchar2(1BYTE)
+  "CLASE_PRODUCTO" varchar2(3BYTE)
+  "ID_LICENCIA_PRODUCTO" varchar2(3BYTE)
+  "SIS_ESTADO_T464" "number(38,0)"
+  "SIS_USUARIO_CREACION" varchar2(20BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(20BYTE)
+  "SIS_FECHA_MODIFICACION" date
+}
+
+Table "CA_TRANSACCIONES_NF" {
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "SIS_MARCA" "number(38,0)"
+  "SIS_PRODUCTO" "number(38,0)"
+  "FECHA_LOCAL" date
+  "HORA_LOCAL" "number(38,0)"
+  "COMERCIO" varchar2(15BYTE)
+  "TERMINAL" varchar2(8BYTE)
+  "TARJETA" varchar2(19BYTE)
+  "MONEDA" "number(38,0)"
+  "MONTO" "number(26,6)"
+  "NUMERO_AUTORIZACION" varchar2(6BYTE)
+  "PAIS" "number(38,0)"
+  "NOMBRE_COMERCIO" varchar2(40BYTE)
+  "MGSTYPE" "number(38,0)"
+  "SIS_SECUENCIA_MARCA" "number(38,0)"
+  "SIS_MICROFIL" varchar2(23BYTE)
+  "SIS_BANCO_ADQ" "number(4,0)"
+  "SIS_SUCURSAL_ADQ" "number(5,0)"
+  "SIS_CUENTA_ADQ" varchar2(30BYTE)
+  "SIS_BANCO_EMI" "number(4,0)"
+  "SIS_SUCURSAL_EMI" "number(5,0)"
+  "MCC" "number(38,0)"
+  "POS_ENTRY_CODE" "number(38,0)"
+  "POS_CONDITION_CODE" "number(38,0)"
+  "PCODE" "number(38,0)"
+  "SIS_TIPO_LOCAL" "number(38,0)"
+  "SIS_TIPO_FONDO" "number(38,0)"
+  "SIS_PORCENTAJE_RETENCION_COMERCIO" "number(10,7)"
+  "SIS_RETENCION_COMERCIO" "number(26,6)"
+  "SIS_BIN_TOKEN" "number(38,0)"
+  "TARJETA_DESTOKEN" char(19BYTE)
+  "CHIP_INDEX" char(20BYTE)
+  "SITE_ID" "number(38,0)"
+  "CHIP_INDEX_DESTOKEN" char(20BYTE)
+  "SITE_ID_DESTOKEN" "number(38,0)"
+  "CASH_BACK" "number(26,8)"
+  "CARD_SEQNO" "number(38,0)"
+  "SIS_TIPO_CAPTURA" "number(38,0)"
+  "DEVICE_FEE" "number(26,8)"
+  "ORIGTRACE" "number(38,0)"
+  "NUMERO_REFERENCIA" varchar2(12BYTE)
+  "FECHA_TRANSACCION" date
+  "HORA_TRANSACCION" "number(38,0)"
+  "FECHA_CAPTURA" date
+  "FECHA_LIQUIDACION" date
+  "TASA_LIQUIDACION" "number(26,8)"
+  "MEMBER_ID" char(11BYTE)
+  "F_ID" char(11BYTE)
+  "LOTE" "number(38,0)"
+  "ISSUER" char(10BYTE)
+  "ACQUIRER" char(10BYTE)
+  "REASON_CODE" "number(38,0)"
+  "ADDRESPONSE" char(25BYTE)
+  "ACCTNUM" char(65BYTE)
+  "SIS_FECHA_LIQUIDACION" date
+  "SIS_FECHA_LIQUIDADA" date
+  "COMERCIO_REAL" char(25BYTE)
+  "TXNSRC" varchar2(10BYTE)
+  "TXNDEST" varchar2(10BYTE)
+  "SIS_METODO" varchar2(100BYTE)
+  "RESPCODE" "number(38,0)"
+  "TRANS_ID" char(30BYTE)
+  "SIS_USUARIO" varchar2(20BYTE)
+  "ALPHARESPONSECODE" char(3BYTE)
+  "ENTITYID" varchar2(30BYTE)
+  "VALID_CD" char(4BYTE)
+  "MVV" char(10BYTE)
+  "INVOICE_NUMBER" char(6BYTE)
+  "FPI" char(3BYTE)
+  "SIS_TIPO_TRANSACCION" "number(38,0)"
+  "SHCERROR" "number(38,0)"
+  "SIS_FECHA_CAPTURA_INICIAL" date
+  "SIS_FECHA_CAPTURA_FINAL" date
+  "SIS_USUARIO_MODIFICACION" varchar2(20BYTE)
+  "SIS_FECHA_MODIFICACION" date
+  "PROCESS_BATCH_ID" "number(19,0)"
+  "LOAD_STATUS" varchar2(10BYTE)
+}
+
+Table "CA_TRANSACCIONES_PROPIETARIA" {
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "SIS_MARCA" "number(38,0)"
+  "SIS_PRODUCTO" "number(38,0)"
+  "TARJETA" char(19BYTE)
+  "COMERCIO" varchar2(15BYTE)
+  "TERM_TXN_DATE" date
+  "TERM_TYPE" "number(38,0)"
+  "TERM_ENTRY_CAP" "number(38,0)"
+  "CHIP_COND_CODE" "number(38,0)"
+  "CARD_AUTH_REL_IND" "number(38,0)"
+  "MSG_REASON_CODE" "number(38,0)"
+  "CRYPTO_VERSION" "number(38,0)"
+  "CRYPTO_TXN_TYPE" "number(38,0)"
+  "TERM_COUNTRY_CODE" "number(38,0)"
+  "CRYPTO_CURR_CODE" "number(38,0)"
+  "NEG_FILE_VERSION" "number(38,0)"
+  "CRYPTO_AMOUNT" "number(26,8)"
+  "SRV_RESTRICT_CODE" char(3BYTE)
+  "TERM_CAP_PROFILE" char(6BYTE)
+  "TVR" char(10BYTE)
+  "UNPREDICTABLE_NUM" char(8BYTE)
+  "TERM_SER_NUM" char(8BYTE)
+  "CVR" char(6BYTE)
+  "ISSUER_DISCRE_DATA" char(32BYTE)
+  "CRYPTOGRAM" char(16BYTE)
+  "APP_TXN_COUNTER" char(4BYTE)
+  "APP_ICHG_PROFILE" char(4BYTE)
+  "ISSUER_SCRIPT_RES" char(40BYTE)
+  "ISSUER_APP_DATA" char(64BYTE)
+  "CHIP_BITMAP" "number(38,0)"
+  "ISSUER_AUTH_DATA" char(32BYTE)
+  "FIELD1" varchar2(512BYTE)
+  "FIELD2" varchar2(512BYTE)
+  "FIELD3" varchar2(512BYTE)
+  "BINFIELD1" raw(2000)
+  "SIS_USUARIO_CREACION" varchar2(20BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(20BYTE)
+  "SIS_FECHA_MODIFICACION" date
+}
+
+Table "CA_TRANSACCIONES_VISA" {
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "SIS_MARCA" "number(38,0)"
+  "SIS_PRODUCTO" "number(38,0)"
+  "TARJETA" char(19BYTE)
+  "COMERCIO" varchar2(15BYTE)
+  "TERM_TXN_DATE" date
+  "TERM_TYPE" "number(38,0)"
+  "TERM_ENTRY_CAP" "number(38,0)"
+  "CHIP_COND_CODE" "number(38,0)"
+  "CARD_AUTH_REL_IND" "number(38,0)"
+  "MSG_REASON_CODE" "number(38,0)"
+  "CRYPTO_VERSION" "number(38,0)"
+  "CRYPTO_TXN_TYPE" "number(38,0)"
+  "TERM_COUNTRY_CODE" "number(38,0)"
+  "CRYPTO_CURR_CODE" "number(38,0)"
+  "NEG_FILE_VERSION" "number(38,0)"
+  "CRYPTO_AMOUNT" "number(26,8)"
+  "SRV_RESTRICT_CODE" char(3BYTE)
+  "TERM_CAP_PROFILE" char(6BYTE)
+  "TVR" char(10BYTE)
+  "UNPREDICTABLE_NUM" char(8BYTE)
+  "TERM_SER_NUM" char(8BYTE)
+  "CVR" char(6BYTE)
+  "ISSUER_DISCRE_DATA" char(32BYTE)
+  "CRYPTOGRAM" char(16BYTE)
+  "APP_TXN_COUNTER" char(4BYTE)
+  "APP_ICHG_PROFILE" char(4BYTE)
+  "ISSUER_SCRIPT_RES" char(40BYTE)
+  "ISSUER_APP_DATA" char(64BYTE)
+  "CHIP_BITMAP" "number(38,0)"
+  "ISSUER_AUTH_DATA" char(32BYTE)
+  "FIELD1" varchar2(512BYTE)
+  "FIELD2" varchar2(512BYTE)
+  "FIELD3" varchar2(512BYTE)
+  "BINFIELD1" raw(2000)
+  "BIN_BAJO" varchar2(9BYTE)
+  "BIN_ALTO" varchar2(9BYTE)
+  "BASEII_CIB" varchar2(6BYTE)
+  "ID_EMISOR" varchar2(6BYTE)
+  "DOMINIO" varchar2(1BYTE)
+  "REGION" varchar2(1BYTE)
+  "PAIS" varchar2(2BYTE)
+  "ID_PRODUCTO" varchar2(2BYTE)
+  "TIPO_FONDO_CUENTA" varchar2(1BYTE)
+  "INDICADOR_TOKEN" varchar2(1BYTE)
+  "SIS_USUARIO_CREACION" varchar2(20BYTE)
+  "SIS_FECHA_CREACION" date
+  "SIS_USUARIO_MODIFICACION" varchar2(20BYTE)
+  "SIS_FECHA_MODIFICACION" date
+  "FECHA_PRESENTACION" date
+  "CODIGO_RECHAZO" varchar2(10BYTE)
+  "DESCRIPCION_RECHAZO" varchar2(200BYTE)
+  "SOLUCION" varchar2(2000BYTE)
+  "ESTADO" "number(38,0)"
+}
+
+Table "CA_TRANSACCIONES_VISA_RECHAZOS" {
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" number
+  "SIS_SECUENCIA_REGISTRO" number
+  "CODIGO_RECHAZO" varchar2(10BYTE)
+  "DESCRIPCION_RECHAZO" varchar2(200BYTE)
+  "SOLUCION" varchar2(2000BYTE)
+  "CORREGIDO" "number(1,0)"
+  "ORIGEN" varchar2(10BYTE)
+  "USUARIO" varchar2(30BYTE)
+  "FECHA_OPER" timestamp(6)
+  "FECHA_PROCESO" date
+}
+
+Table "CA_TXS_TARDIAS_HIST" {
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "ESTADO" "number(1,0)"
+  "OUTGOING" "number(1,0)"
+  "DESCRIPCION" varchar2(500CHAR)
+  "USUARIO_MODIFICACION" varchar2(100CHAR)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CF_FACTURAS" {
+  "PERIODO" "number(6,0)"
+  "ADQUIRENTE" number
+  "COMERCIO" number
+  "SUCURSAL" number
+  "FECHA" date
+  "TIPO_DOCUMENTO" "number(3,0)"
+  "DOCUMENTO" varchar2(16BYTE)
+  "RAZON_SOCIAL" varchar2(200BYTE)
+  "MONTO" "number(26,2)"
+  "TIPO_CAMBIO" "number(8,2)"
+  "TASA_IVA" number
+  "DEBITO_FISCAL" "number(26,2)"
+  "FORMA_FACTURACION" number
+}
+
+Table "CF_PROCESOS" {
+  "PERIODO_CIERRE" number
+  "FECHA_CIERRE" date
+  "FECHA_INICIO_PERIODO" date
+  "FECHA_INICIO_PROCESO" date
+  "FECHA_FIN_PROCESO" date
+  "TIPO_CAMBIO" "number(8,2)"
+  "CANTIDAD_FACTURAS" number
+  "RESPUESTA_DESCRIPCION" varchar2(500BYTE)
+  "ESTADO" number
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+}
+
+Table "CL_CIERRE_COMERCIOS" {
+  "PERIODO" "number(6,0)"
+  "FECHA" date
+  "DESCRIPCION" varchar2(50BYTE)
+  "ESTADO" "number(1,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+}
+
+Table "CL_DIAS_NO_HABILES" {
+  "FECHA" date
+  "DESCRIPCION" varchar2(50BYTE)
+  "ESTADO" "number(1,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+}
+
+Table "CL_LIQUIDACION_CONSOLIDADO" {
+  "BANCO_ADQUIRENTE" number
+  "AGENCIA_ADQUIRENTE" number
+  "MARCA" number
+  "PRODUCTO" number
+  "TIPO_TRANSACCION" number
+  "FECHA_LIQUIDACION" date
+  "COMERCIO" number
+  "SUCURSAL" number
+  "PUNTO_VENTA" number
+  "FORMA_PAGO" number
+  "CENTRALIZADORA" number
+  "DIAS_PAGO" number
+  "GUBERNAMENTAL" "number(1,0)"
+  "MONTO" "number(*,2)"
+  "CARGO" "number(*,2)"
+  "ABONO" "number(*,2)"
+  "MONEDA_LIQ" "number(3,0)"
+  "CANTIDAD_TRANSACCIONES" number
+  "CANTIDAD_LOTES_TRANSACCIONES" number
+  "TIPO_PAGO" number
+  "BANCO_CUENTA" number
+  "AGENCIA_CUENTA" number
+  "TIPO_CUENTA" number
+  "NOMBRE_TITULAR" varchar2(100BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "NRO_CUENTA" varchar2(30BYTE)
+  "TASA_CAMBIO" number
+}
+
+Table "CL_POSTEO_DETALLE" {
+  "FECHA" date
+  "LOTE" number
+  "SECUENCIA" number
+  "FECHA_CAPTURA_CUOTA" date
+  "NUMERO_CUOTA" "number(2,0)"
+  "CANTIDAD_CUOTAS" "number(2,0)"
+  "COMERCIO" number
+  "SUCURSAL" number
+  "PUNTO_VENTA" number
+  "PRODUCTO" number
+  "TIPO_TRANSACCION" number
+  "TARJETA" varchar2(19BYTE)
+  "CODIGO_AUTORIZACION" varchar2(6BYTE)
+  "LOTE_SW" varchar2(38BYTE)
+  "MONEDA_TRANSACCION" "number(3,0)"
+  "MONEDA_LIQUIDACION" "number(3,0)"
+  "MONTO_TRANSACCION" "number(26,2)"
+  "PORCENTAJE_COMISION" "number(4,2)"
+  "COMISION" "number(26,2)"
+  "MONTO_NETO" "number(26,2)"
+  "CASH_BACK" "number(26,2)"
+  "ADQUIRENTE" number
+  "SUCURSAL_ADQUIRENTE" varchar2(20BYTE)
+  "FECHA_TRANSACCION" date
+  "FECHA_POSTEO" date
+  "FECHA_LIQUIDACION" date
+  "MICROFIL" varchar2(23BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+  "TERMINAL" varchar2(8BYTE)
+}
+
+Table "CL_POSTEO_FALLIDO" {
+  "FECHA" date
+  "LOTE" number
+  "SECUENCIA" number
+  "COMERCIO" number
+  "SUCURSAL" number
+  "PUNTO_VENTA" number
+  "TIPO_TRANSACCION" number
+  "TARJETA" varchar2(19BYTE)
+  "MONEDA" "number(3,0)"
+  "MONTO_TRANSACCION" "number(26,2)"
+  "ADQUIRENTE" number
+  "SUCURSAL_ADQUIRENTE" number
+  "MOTIVO" varchar2(200BYTE)
+  "FECHA_POSTEO_FALLIDO" date
+  "FECHA_POSTEO" date
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+  "TERMINAL" varchar2(8BYTE)
+}
+
+Table "CL_PROCESOS" {
+  "FECHA" date
+  "TIPO" number
+  "FECHA_INICIO_PROCESO" date
+  "FECHA_FIN_PROCESO" date
+  "COMERCIOS_POSTEADOS" number
+  "REGISTROS_POSTEADOS" number
+  "REGISTROS_NO_POSTEADOS" number
+  "TOTAL_LOTES" number
+  "LOTES_LIQUIDADOS" number
+  "RUTA" varchar2(500BYTE)
+  "RESPUESTA_DESCRIPCION" varchar2(500BYTE)
+  "ESTADO" number
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(100BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+}
+
+Table "CO_ACUERDOS_PARTICULARES" {
+  "COMERCIO" "number(15,0)"
+  "SUCURSAL" "number(15,0)"
+  "SERVICIO" "number(3,0)"
+  "PRODUCTO" number
+  "MONEDA" number
+  "COMISION" "number(4,2)"
+  "ACTIVO_SIEMPRE" "number(1,0)"
+  "DESDE" date
+  "HASTA" date
+  "ESTADO" "number(3,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+}
+
+Table "CO_ACUERDOS_POR_DEFECTOS" {
+  "RUBRO" number
+  "SUBRUBRO" number
+  "NOMBRE" varchar2(100BYTE)
+  "LIMITE_PISO" number
+  "COMISION" number
+  "MCC" number
+}
+
+Table "CO_AGENCIAS" {
+  "AGENCIA" "number(7,0)"
+  "CODIGO" varchar2(1BYTE)
+  "DESCRIPCION" varchar2(50BYTE)
+  "ALIAS" varchar2(50BYTE)
+  "DIRECCION" varchar2(50BYTE)
+  "CIUDAD" varchar2(50BYTE)
+}
+
+Table "CO_AUX_COM_DIF" {
+  "COMERCIO" varchar2(7BYTE)
+  "PRODUCTO" varchar2(20BYTE)
+  "COMISION" varchar2(20BYTE)
+}
+
+Table "CO_AUX_COM_NO_MIGRADOS" {
+  "COMERCIO_CCA" varchar2(7BYTE)
+}
+
+Table "CO_CHEQUE" {
+  "COMERCIO" "number(15,0)"
+  "SUCURSAL" "number(15,0)"
+  "MONEDA" "number(3,0)"
+  "MONEDA_LIQ" "number(3,0)"
+  "TIPO_SERVICIO" "number(3,0)"
+  "BANCO" number
+  "AGENCIA" number
+  "BENEFICIARIO" varchar2(100BYTE)
+  "ESTADO" "number(3,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+}
+
+Table "CO_COMERCIOS" {
+  "COMERCIO" "number(15,0)"
+  "TIPO_DOCUMENTO" "number(3,0)"
+  "DOCUMENTO" varchar2(16BYTE)
+  "NOMBRE_COMERCIAL" varchar2(200BYTE)
+  "RAZON_SOCIAL" varchar2(200BYTE)
+  "FORMA_REPORTE_LIQ" "number(3,0)"
+  "FORMA_FACTURACION" "number(3,0)"
+  "REPRESENTANTE_LEGAL" varchar2(200BYTE)
+  "CARGO_REPRESENTANTE_LEGAL" varchar2(200BYTE)
+  "EJECUTIVO_COMERCIAL" "number(6,0)"
+  "NUMERO_CONTRATO" varchar2(30BYTE)
+  "MIGRADO" "number(1,0)"
+  "GUBERNAMENTAL" "number(1,0)"
+  "ESTADO" "number(3,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+  "TIPO_PERSONA" "number(3,0)"
+  "TIPO_SOCIETARIO" "number(3,0)"
+  "CI_REPRESENTANTE_LEGAL" varchar2(16BYTE)
+  "REPRESENTANTE_LEGAL_2" varchar2(200BYTE)
+  "CI_REPRESENTANTE_LEGAL_2" varchar2(16BYTE)
+  "CARGO_REPRESENTANTE_LEGAL_2" varchar2(200BYTE)
+}
+
+Table "CO_CONTACTOS" {
+  "COMERCIO" number
+  "SUCURSAL" number
+  "NOMBRE" varchar2(100BYTE)
+  "CARGO" varchar2(50BYTE)
+  "PASSWORD" varchar2(100BYTE)
+}
+
+Table "CO_CONTACTOS_MEDIOS" {
+  "COD_CONTACTO_MEDIO" number
+  "COMERCIO" number
+  "SUCURSAL" number
+  "TIPO_MEDIO" number
+  "VALOR" varchar2(150BYTE)
+}
+
+Table "CO_DIRECCIONES" {
+  "COMERCIO" number
+  "SUCURSAL" number
+  "TIPO_DIRECCION" number
+  "CALLE" varchar2(150BYTE)
+  "NUMERO_PUERTA" number
+  "BARRIO" varchar2(50BYTE)
+  "MANZANA" number
+  "UV" number
+  "REFERENCIAS" varchar2(100BYTE)
+  "COD_PAIS" number
+  "COD_DEPARTAMENTO" number
+  "COD_PROVINCIA" number
+  "COD_MUNICIPIO" number
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+}
+
+Table "CO_EJECUTIVOS" {
+  "EJECUTIVO" "number(6,0)"
+  "NOMBRE" varchar2(50BYTE)
+  "CARGO" "number(3,0)"
+  "DEPARTAMENTO" number
+  "ACTIVO" "number(1,0)"
+}
+
+Table "CO_ESTADOS_TRANSICION" {
+  "ESTADO_ORIGEN" number
+  "ESTADO_DESTINO" number
+}
+
+Table "CO_GRUPOS_E_COMMERCE" {
+  "CODIGO_TIPO" "number(4,0)"
+  "DESCRIPCION" varchar2(50BYTE)
+  "CANAL" varchar2(20BYTE)
+}
+
+Table "CO_HIST_ACUERDOS_PARTICULARES" {
+  "COMERCIO" "number(15,0)"
+  "SUCURSAL" "number(15,0)"
+  "SERVICIO_PREV" "number(3,0)"
+  "SERVICIO" "number(3,0)"
+  "PRODUCTO_PREV" number
+  "PRODUCTO" number
+  "MONEDA_PREV" number
+  "MONEDA" number
+  "COMISION_PREV" "number(4,2)"
+  "COMISION" "number(4,2)"
+  "ACTIVO_SIEMPRE_PREV" "number(1,0)"
+  "ACTIVO_SIEMPRE" "number(1,0)"
+  "DESDE_PREV" date
+  "DESDE" date
+  "HASTA_PREV" date
+  "HASTA" date
+  "ESTADO_PREV" "number(3,0)"
+  "ESTADO" "number(3,0)"
+  "USUARIO" varchar2(20BYTE)
+  "FECHA" date
+}
+
+Table "CO_HIST_CHEQUE" {
+  "COMERCIO" "number(15,0)"
+  "SUCURSAL" "number(15,0)"
+  "MONEDA_PREV" "number(3,0)"
+  "MONEDA" "number(3,0)"
+  "MONEDA_LIQ_PREV" "number(3,0)"
+  "MONEDA_LIQ" "number(3,0)"
+  "TIPO_SERVICIO_PREV" "number(3,0)"
+  "TIPO_SERVICIO" "number(3,0)"
+  "BANCO_PREV" number
+  "BANCO" number
+  "AGENCIA_PREV" number
+  "AGENCIA" number
+  "BENEFICIARIO_PREV" varchar2(100BYTE)
+  "BENEFICIARIO" varchar2(100BYTE)
+  "USUARIO" varchar2(20BYTE)
+  "FECHA" date
+}
+
+Table "CO_HIST_CUENTAS_COMERCIO" {
+  "COMERCIO" "number(15,0)"
+  "SUCURSAL" "number(15,0)"
+  "MONEDA_PREV" "number(3,0)"
+  "MONEDA" "number(3,0)"
+  "MONEDA_LIQ_PREV" "number(3,0)"
+  "MONEDA_LIQ" "number(3,0)"
+  "TIPO_SERVICIO_PREV" "number(3,0)"
+  "TIPO_SERVICIO" "number(3,0)"
+  "BANCO_PREV" number
+  "BANCO" number
+  "AGENCIA_PREV" number
+  "AGENCIA" number
+  "TIPO_CUENTA_PPREV" "number(3,0)"
+  "TIPO_CUENTA" "number(3,0)"
+  "CUENTA_PREV" varchar2(30BYTE)
+  "CUENTA" varchar2(30BYTE)
+  "TIPO_DE_DOCUMENTO_PREV" "number(3,0)"
+  "TIPO_DE_DOCUMENTO" "number(3,0)"
+  "DOCUMENTO_PREV" varchar2(16BYTE)
+  "DOCUMENTO" varchar2(16BYTE)
+  "DOCUMENTO_EXPEDIDO_PREV" varchar2(2BYTE)
+  "DOCUMENTO_EXPEDIDO" varchar2(2BYTE)
+  "NOMBRE_TITULAR_PREV" varchar2(100BYTE)
+  "NOMBRE_TITULAR" varchar2(100BYTE)
+  "USUARIO" varchar2(20BYTE)
+  "FECHA" date
+}
+
+Table "CO_HIST_ESTADOS_COMERCIOS" {
+  "COMERCIO" "number(15,0)"
+  "COMENTARIO" varchar2(200BYTE)
+  "ESTADO" "number(3,0)"
+  "USUARIO" varchar2(20BYTE)
+  "FECHA" date
+}
+
+Table "CO_HIST_ESTADOS_PUNTOS_VENTA" {
+  "COMERCIO" "number(15,0)"
+  "SUCURSAL" "number(15,0)"
+  "PUNTO_VENTA" number
+  "COMENTARIO" varchar2(200BYTE)
+  "ESTADO" "number(3,0)"
+  "USUARIO" varchar2(20BYTE)
+  "FECHA" date
+}
+
+Table "CO_HIST_ESTADOS_SUCURSALES" {
+  "COMERCIO" "number(15,0)"
+  "SUCURSAL" "number(15,0)"
+  "COMENTARIO" varchar2(200BYTE)
+  "ESTADO" "number(3,0)"
+  "USUARIO" varchar2(20BYTE)
+  "FECHA" date
+}
+
+Table "CO_HIST_MONEDAS_LIQUIDACION" {
+  "COMERCIO" "number(15,0)"
+  "SUCURSAL" "number(15,0)"
+  "ADQUIRENTE_PREV" number
+  "ADQUIRENTE" number
+  "ADQUIRENTE_SUCURSAL_PREV" number
+  "ADQUIRENTE_SUCURSAL" number
+  "MONEDA_PREV" "number(3,0)"
+  "MONEDA" "number(3,0)"
+  "MONEDA_LIQ_PREV" "number(3,0)"
+  "MONEDA_LIQ" "number(3,0)"
+  "TIPO_PAGO_PREV" "number(3,0)"
+  "TIPO_PAGO" "number(3,0)"
+  "TIPO_SERVICIO_PREV" "number(3,0)"
+  "TIPO_SERVICIO" "number(3,0)"
+  "ESTADO_PREV" "number(3,0)"
+  "ESTADO" "number(3,0)"
+  "USUARIO" varchar2(20BYTE)
+  "FECHA" date
+}
+
+Table "CO_HIST_SECCIONES" {
+  "SECCION" number
+  "COMERCIO" number
+  "DESCRIPCION_PREV" varchar2(100BYTE)
+  "DESCRIPCION" varchar2(100BYTE)
+  "MCC_PREV" number
+  "MCC" number
+  "COMISION_PREV" "number(4,2)"
+  "COMISION" "number(4,2)"
+  "ESTADO_PREV" "number(3,0)"
+  "ESTADO" "number(3,0)"
+  "USUARIO" varchar2(20BYTE)
+  "FECHA" date
+}
+
+Table "CO_IATA_AEROLINEAS" {
+  "AEROLINEA" varchar2(5BYTE)
+  "COMERCIO" "number(15,0)"
+  "SUCURSAL" "number(15,0)"
+  "DESCRIPCION" varchar2(50BYTE)
+  "ABREVIACION" varchar2(5BYTE)
+  "ACTIVO" "number(1,0)"
+}
+
+Table "CO_MASTER_ADDRESS" {
+  "COMERCIO" number
+  "SUCURSAL" number
+  "PUNTO_VENTA" number
+  "ADDRESS" varchar2(50BYTE)
+  "FECHA_LAST_PAYMT" date
+}
+
+Table "CO_MCC" {
+  "MCC" number
+  "DESCRIPCION" varchar2(200BYTE)
+  "CATEGORIA" varchar2(100BYTE)
+}
+
+Table "CO_MODELO_TECNOLOGIA" {
+  "MODELO" number
+  "DESCRIPCION" varchar2(50BYTE)
+  "LLAVE" varchar2(200BYTE)
+  "LONGITUD_LLAVE" number
+}
+
+Table "CO_MONEDAS_LIQUIDACION" {
+  "COMERCIO" "number(15,0)"
+  "SUCURSAL" "number(15,0)"
+  "ADQUIRENTE" number
+  "ADQUIRENTE_SUCURSAL" number
+  "MONEDA" "number(3,0)"
+  "MONEDA_LIQ" "number(3,0)"
+  "TIPO_PAGO" "number(3,0)"
+  "TIPO_SERVICIO" "number(3,0)"
+  "ESTADO" "number(3,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+  "MOTIVO_OPERACION_ID" number
+}
+
+Table "CO_MOTIVOS_OPERACION" {
+  "ID_MOTIVO" number
+  "DESCRIPCION" varchar2(200BYTE)
+  "ESTADO" "number(1,0)"
+}
+
+Table "COMU_ADQUIRENTES" {
+  "ADQUIRENTE" number
+  "DESCRIPCION" varchar2(100BYTE)
+  "INSTITUCION_ID" varchar2(5BYTE)
+  "EMISOR_ID" number
+  "ABREVIATURA" varchar2(5BYTE)
+  "CODIGO_BANCO" number
+  "DOCUMENTO" varchar2(20BYTE)
+  "ACTIVO" "number(1,0)"
+}
+
+Table "COMU_AGENCIAS" {
+  "CODIGO_BANCO" number
+  "CODIGO_AGENCIA" number
+  "DESCRIPCION" varchar2(30BYTE)
+  "DEPARTAMENTO" "number(4,0)"
+  "ACTIVO" "number(1,0)"
+}
+
+Table "COMU_BANCOS" {
+  "CODIGO_BANCO" number
+  "DESCRIPCION" varchar2(100BYTE)
+  "ABREVIATURA" varchar2(5BYTE)
+  "SIGLA" varchar2(5BYTE)
+  "ACTIVO" "number(1,0)"
+  "SIAL" "number(1,0)"
+  "ID_EMISOR" number
+  "ID_ADQUIRENTE" number
+  "ABREVIATURA_CCA" varchar2(10BYTE)
+  "SIGLA_CCA" varchar2(10BYTE)
+  "COD_CAMARA" number
+}
+
+Table "COMU_BANCOS_CASHBACK" {
+  "ADQUIRENTE" number
+  "EMISOR" number
+  "CASHBACK" number
+  "NOMBRE" varchar2(50BYTE)
+}
+
+Table "COMU_CONSULTAS" {
+  "ID" "number(20,0)"
+  "NOMBRE" varchar2(200BYTE)
+  "CONSULTA" clob
+}
+
+Table "COMU_CUENTAS_ADQUIRENTES" {
+  "ADQUIRENTE" number
+  "MONEDA" "number(3,0)"
+  "BANCO" number
+  "AGENCIA" number
+  "TIPO_CUENTA" "number(3,0)"
+  "CUENTA" varchar2(30BYTE)
+  "GUBERNAMENTAL" "number(1,0)"
+}
+
+Table "COMU_DEPARTAMENTOS" {
+  "DEPARTAMENTO" number
+  "DESCRIPCION" varchar2(20BYTE)
+  "PAIS" number
+  "SIMBOLO" varchar2(5BYTE)
+  "DESCRIPCION_LIQ" varchar2(20BYTE)
+}
+
+Table "COMU_ESTADOS" {
+  "ID" number
+  "DESCRIPCION" varchar2(255BYTE)
+}
+
+Table "COMU_FECHAS" {
+  "FECHA_AYER" "number(8,0)"
+  "FECHA_HOY" "number(8,0)"
+  "FECHA_MANIANA" "number(8,0)"
+  "FECHA_SISTEMA" "number(8,0)"
+}
+
+Table "COMU_GRUPO_ELIMINACION" {
+  "ID_GRUPO_ELIMINACION" number
+  "COD_GRUPO" varchar2(10BYTE)
+  "TIPO" varchar2(30BYTE)
+  "PERMITE_BORRADO_DIRECTO" char(1BYTE)
+  "ACCION_SUGERIDA" varchar2(300BYTE)
+  "FECHA_CREACION" timestamp(6)
+  "FECHA_ACTUALIZACION" timestamp(6)
+}
+
+Table "COMU_GRUPO_ELIMINACION_REL" {
+  "ID_RELACION" number
+  "ID_GRUPO_ELIMINACION" number
+  "ID_GRUPO_RELACIONADO" number
+  "TIPO_RELACION" varchar2(30BYTE)
+  "ORDEN_EJECUCION" number
+  "FECHA_CREACION" timestamp(6)
+}
+
+Table "COMU_HISTORICO" {
+  "ID" "number(19,0)"
+  "LLAVE" varchar2(200BYTE)
+  "TABLA" varchar2(50BYTE)
+  "CAMPO" varchar2(50BYTE)
+  "VALOR_ACTUAL" varchar2(2500BYTE)
+  "VALOR_NUEVO" varchar2(2500BYTE)
+  "TABLA_USUARIO_MODIFICACION" varchar2(20BYTE)
+  "TABLA_FECHA_MODIFICACION" timestamp(6)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" timestamp(6)
+}
+
+Table "CO_MULTICOMERCIO" {
+  "ID_MULTICOMERCIO" number
+  "NRO_TERMINAL_MC" number
+  "DESCRIPCION" varchar2(100BYTE)
+  "ESTADO" "number(1,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+}
+
+Table "CO_MULTICOMERCIO_HIST" {
+  "ID_HIST" number
+  "NRO_TERMINAL_MC" number
+  "COD_PUNTO_VENTA" number
+  "COMERCIO" number
+  "SUCURSAL" number
+  "ACCION" varchar2(20BYTE)
+  "USUARIO" varchar2(20BYTE)
+  "FECHA" date
+}
+
+Table "COMU_MARCAS_TASA_CAMBIO" {
+  "ID_TASA_CAMBIO" number
+  "ID_MARCA" number
+  "FECHA_VIGENCIA" date
+  "MONEDA_ORIGEN" "number(4,0)"
+  "MONEDA_DESTINO" "number(4,0)"
+  "TASA_COMPRA" "number(26,12)"
+  "TASA_VENTA" "number(26,12)"
+  "VALOR_COMPRA_ORIGEN" "number(26,12)"
+  "VALOR_VENTA_ORIGEN" "number(26,12)"
+  "ID_ARCHIVO" number
+  "FECHA_PROCESO_ARCHIVO" date
+  "LOTE_ARCHIVO" number
+  "SECUENCIA_ARCHIVO" number
+  "ACTIVO" "number(1,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "COMU_MONEDAS" {
+  "MONEDA" "number(3,0)"
+  "DESCRIPCION" varchar2(30BYTE)
+  "SIMBOLO" varchar2(5BYTE)
+  "ACTIVO" "number(1,0)"
+}
+
+Table "COMU_MUNICIPIOS" {
+  "COD_MUNICIPIO" number
+  "DESCRIPCION" varchar2(50BYTE)
+  "COD_PROVINCIA" number
+  "COD_DEPARTAMENTO" number
+}
+
+Table "COMU_PAISES" {
+  "PAIS" "number(3,0)"
+  "DESCRIPCION" varchar2(30BYTE)
+  "ORDEN_CLAS" "number(3,0)"
+  "CODIGO_B2" varchar2(3BYTE)
+  "CODIGO_STD_CHAR" varchar2(3BYTE)
+  "ISO_CODE" varchar2(3BYTE)
+}
+
+Table "COMU_PARAMETROS" {
+  "ID_PARAMETRO" number
+  "GRUPO" varchar2(20BYTE)
+  "VALOR" varchar2(500BYTE)
+  "DESCRIPCION" varchar2(150BYTE)
+  "ABREVIATURA" varchar2(10BYTE)
+  "OBSERVACIONES" varchar2(150BYTE)
+  "ORDEN" number
+  "ACTIVO" "number(1,0)"
+  "EDITABLE" "number(1,0)"
+  "PERMISO" varchar2(50BYTE)
+  "ID_VISTA" "number(19,0)"
+}
+
+Table "COMU_PARAMETROS_MARCAS" {
+  "ID" "number(38,0)"
+  "CLAVE" varchar2(100BYTE)
+  "NOMBRE" varchar2(200BYTE)
+  "TIPO_VALOR" varchar2(20BYTE)
+  "VALOR_ENTERO" number
+  "VALOR_DECIMAL" "number(18,6)"
+  "VALOR_TEXTO" varchar2(4000BYTE)
+  "VALOR_FECHA" date
+  "VALOR_BOOLEANO" "number(1,0)"
+  "SEGMENTO" varchar2(20BYTE)
+  "MARCA" number
+  "ACTIVO" "number(1,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" timestamp(6)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" timestamp(6)
+  "EDITABLE" "number(1,0)"
+  "PERMISO" varchar2(50BYTE)
+}
+
+Table "COMU_PROCESO_ELIMINACION" {
+  "ID_PROCESO_ELIMINACION" number
+  "ID_GRUPO_ELIMINACION" number
+  "TIPO_PROCESO" varchar2(100BYTE)
+  "NOMBRE_PROCESO" varchar2(300BYTE)
+  "PROCESO_SISTEMA" varchar2(150BYTE)
+  "TIPO_PROCESO_SISTEMA" varchar2(100BYTE)
+  "FECHA_CREACION" timestamp(6)
+  "FECHA_ACTUALIZACION" timestamp(6)
+}
+
+Table "COMU_PROCESS_BATCH_CONTROL" {
+  "PROCESS_BATCH_ID" "number(19,0)"
+  "ID_EXECUTION" "number(19,0)"
+  "CREATION_TIMESTAMP" timestamp(6)
+  "MODULE_SOURCE" varchar2(20BYTE)
+  "STATUS" varchar2(10BYTE)
+  "COMMENTS" varchar2(200BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "COMU_PROCESS_FILE" {
+  "ID_FILE" "number(19,0)"
+  "ID_EXECUTION" "number(19,0)"
+  "ID_PARENT_FILE" "number(19,0)"
+  "FILE_NAME" varchar2(200BYTE)
+  "DESCRIPTION" varchar2(200BYTE)
+  "FILE_TYPE" varchar2(30BYTE)
+  "IN_OUT" varchar2(3BYTE)
+  "ORIGIN" varchar2(10BYTE)
+  "STATUS" varchar2(20BYTE)
+  "FILE_PATH" varchar2(500BYTE)
+  "FILE_HASH" varchar2(128BYTE)
+  "FILE_SIZE" number
+  "DOWNLOADABLE" varchar2(1BYTE)
+  "COMMENTS" varchar2(500BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+  "FILE_DATE" date
+}
+
+Table "COMU_PROVINCIAS" {
+  "COD_PROVINCIA" number
+  "DESCRIPCION" varchar2(50BYTE)
+  "COD_DEPARTAMENTO" number
+}
+
+Table "COMU_REPORT_TEMPLATE" {
+  "ID_REPORT_TEMPLATE" "number(19,0)"
+  "CODIGO" varchar2(50BYTE)
+  "NOMBRE_ARCHIVO" varchar2(100BYTE)
+  "TIPO" varchar2(10BYTE)
+  "DEFINICION" clob
+  "ACTIVO" "number(1,0)"
+  "VERSION" "number(3,0)"
+  "DESCRIPCION" varchar2(300BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(100BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(100BYTE)
+}
+
+Table "COMU_SEGUIMIENTO_PROCESOS" {
+  "ID" number
+  "NOMBRE_PROCESO" varchar2(255BYTE)
+  "TIPO_PROCESO" varchar2(50BYTE)
+  "TIPO_PROCESADO" varchar2(50BYTE)
+  "ID_ESTADO" number
+  "CANTIDAD" number
+  "TOTAL" number
+  "FECHA_CAPTURA_INICIO" date
+  "FECHA_CAPTURA_FIN" date
+  "FECHA_PROCESO_INICIO" timestamp(6)
+  "FECHA_PROCESO_FIN" timestamp(6)
+  "CREATED_AT" date
+  "ID_MARCA" number
+  "USUARIO" varchar2(20BYTE)
+  "MENSAJE_FALLO" varchar2(500BYTE)
+  "OPCIONES" varchar2(500BYTE)
+}
+
+Table "COMU_SEGUIMIENTO_SUB_PROCESOS" {
+  "ID" number
+  "ID_PROCESO" number
+  "NOMBRE_SUB_PROCESO" varchar2(100BYTE)
+  "TIPO_PROCESO" varchar2(100BYTE)
+  "TIPO_PROCESADO" varchar2(100BYTE)
+  "ID_ESTADO" number
+  "TRANSACCIONES_PROCESADO" number
+  "TRANSACCIONES_ORIGINAL" number
+  "FECHA" date
+  "FECHA_PROCESADO" date
+  "MENSAJE_FALLO" varchar2(500BYTE)
+  "ID_TIPO_SUBPROCESO" number
+}
+
+Table "COMU_TASAS_CAMBIO" {
+  "ID" number
+  "FECHA_VIGENCIA" date
+  "TASA" "number(26,6)"
+  "MONEDA_ORIGEN" "number(10,0)"
+  "MONEDA_DESTINO" "number(10,0)"
+  "TASA_VENTA" number
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+}
+
+Table "COMU_TIPOS_PROCESOS" {
+  "ID" number
+  "NOMBRE_PROCESO" varchar2(100BYTE)
+  "TIPO_PROCESO" varchar2(100BYTE)
+  "MARCA" number
+}
+
+Table "COMU_TIPOS_SUB_PROCESOS" {
+  "ID" number
+  "ID_PROCESO" number
+  "NOMBRE_SUB_PROCESO" varchar2(100BYTE)
+  "TIPO_SUB_PROCESO" varchar2(100BYTE)
+  "URL" varchar2(200BYTE)
+}
+
+Table "COMU_VISTAS_PARAMETROS" {
+  "ID" "number(19,0)"
+  "NOMBRE" varchar2(100BYTE)
+  "DESCRIPCION" varchar2(300BYTE)
+}
+
+Table "CO_NOMBRE_ARCHIVO_CCA" {
+  "CODIGO" number
+  "NOMBRE" varchar2(40BYTE)
+  "FECHA_CARGA" date
+}
+
+Table "CO_PLAZA_CIUDAD_CCA" {
+  "PUNTO_DE_VENTA" number
+  "CIUDAD" varchar2(13BYTE)
+  "FECHA_ACTUALIZACION" date
+}
+
+Table "CO_PUNTOS_DE_VENTAS" {
+  "COD_PUNTO_DE_VENTA" number
+  "COMERCIO" number
+  "SUCURSAL" number
+  "DESCRIPCION" varchar2(100BYTE)
+  "ESTADO" "number(1,0)"
+  "COD_SECCION" number
+  "CIERRE_FORZOSO" "number(1,0)"
+  "CAPT_AUT_VOZ_AUTO" "number(1,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+  "HABILITADO_AUT_VOZ" "number(1,0)"
+}
+
+Table "CO_REPORTES_COMERCIO" {
+  "ID_REPORTE" number
+  "CODIGO" varchar2(50BYTE)
+  "NOMBRE" varchar2(100BYTE)
+  "DESCRIPCION" varchar2(300BYTE)
+  "CATEGORIA" number
+  "FRECUENCIA" number
+  "ADQUIRENTE" number
+  "ES_FRECUENTE" "number(1,0)"
+  "ICONO" varchar2(50BYTE)
+  "ORDEN" number
+  "ACTIVO" "number(1,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "CO_SECCIONES" {
+  "COD_SECCION" number
+  "COMERCIO" number
+  "DESCRIPCION" varchar2(100BYTE)
+  "MCC" number
+  "COMISION" "number(4,2)"
+  "ESTADO" "number(3,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+}
+
+Table "CO_SECCIONES_SUCURSALES" {
+  "COMERCIO" number
+  "SUCURSAL" number
+  "COD_SECCION" number
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+}
+
+Table "CO_SUCURSALES_ECOMMERCE" {
+  "COMERCIO" "number(15,0)"
+  "SUCURSAL" "number(15,0)"
+  "URL" varchar2(255BYTE)
+  "GRUPO" "number(3,0)"
+  "TIPO" "number(3,0)"
+  "SERVICIO" varchar2(100BYTE)
+  "DS3" "number(1,0)"
+  "TOKEN" "number(1,0)"
+  "ACTIVO" varchar2(20BYTE)
+}
+
+Table "CO_SYNC_CCA_HIST" {
+  "ID" number
+  "FECHA_EJEC" date
+  "PROCEDIMIENTO" varchar2(60BYTE)
+  "TABLA_DESTINO" varchar2(60BYTE)
+  "LLAVE" varchar2(200BYTE)
+  "CAMPO" varchar2(60BYTE)
+  "DATOS_SIAL" clob
+  "DATOS_CCA" clob
+}
+
+Table "CO_TECNOLOGIAS" {
+  "COD_TECNOLOGIA" number
+  "TIPO_TECNOLOGIA" number
+  "MARCA" number
+  "MODELO" number
+  "MONEDA_VENTA" number
+  "IMPORTE_VENTA" number
+  "FECHA_COMPRA" date
+  "ANIO_INSTALACION" varchar2(4BYTE)
+  "FECHA_INSTALACION" date
+  "LATITUD" number
+  "LONGITUD" number
+  "MULTICOMERCIO" "number(1,0)"
+  "ESTADO" number
+  "COD_PUNTO_DE_VENTA" number
+  "COMERCIO" number
+  "SUCURSAL" number
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+  "NRO_TERMINAL_MC" "number(10,0)"
+}
+
+Table "CO_TERMINALES" {
+  "ID_TERMINAL" number
+  "MONEDA_TRANSACCION" number
+  "COD_TECNOLOGIA" number
+  "ESTADO" number
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+}
+
+Table "CO_TERMINALES_MODELOS" {
+  "ID_MODELO" number
+  "MODELO" varchar2(20BYTE)
+  "MONEDA" "number(3,0)"
+  "COD_CIUDAD" number
+  "COD_MODELO" number
+  "COD_MONEDA" number
+  "SECUENCIA" number
+}
+
+Table "CO_TERMINAL_ID" {
+  "ID" "number(8,0)"
+}
+
+Table "DCI_ACQ_CHIP_DETAIL" {
+  "ID_CHIP_DETAIL" "number(19,0)"
+  "ID_TRANSACTION" "number(19,0)"
+  "BATCH" varchar2(3BYTE)
+  "SEQNO" varchar2(3BYTE)
+  "SUSEQ" varchar2(3BYTE)
+  "CPANSQN" varchar2(3BYTE)
+  "CAIDT" varchar2(32BYTE)
+  "CAIPFL" varchar2(4BYTE)
+  "CATCTR" varchar2(4BYTE)
+  "CACRG" varchar2(16BYTE)
+  "CAUCN" varchar2(4BYTE)
+  "CAMTA" varchar2(12BYTE)
+  "CAMTO" varchar2(12BYTE)
+  "CCRIF" varchar2(2BYTE)
+  "CCVMR" varchar2(6BYTE)
+  "CDEDF" varchar2(32BYTE)
+  "CIDSN" varchar2(8BYTE)
+  "CADA1" varchar2(64BYTE)
+  "CADAT" varchar2(32BYTE)
+  "CISRT" varchar2(50BYTE)
+  "CTRMG" varchar2(3BYTE)
+  "CTAVN" varchar2(4BYTE)
+  "CTRMC" varchar2(6BYTE)
+  "CTRMT" varchar2(2BYTE)
+  "CTRMR" varchar2(10BYTE)
+  "CTRND" varchar2(6BYTE)
+  "CTRNT" varchar2(2BYTE)
+  "CTRNC" varchar2(3BYTE)
+  "CUNPN" varchar2(8BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_ACQ_RECAP" {
+  "ID_RECAP" "number(19,0)"
+  "ID_EXECUTION" "number(19,0)"
+  "ID_FILE" "number(19,0)"
+  "STATUS" varchar2(50BYTE)
+  "PROCESS_DATE" date
+  "CONFIRM_DATE" date
+  "TRANS" varchar2(4BYTE)
+  "FUNCD" varchar2(2BYTE)
+  "SFTER" varchar2(32BYTE)
+  "RCPNO" "number(3,0)"
+  "DFTER" varchar2(32BYTE)
+  "CURKY" varchar2(3BYTE)
+  "RCPDT" varchar2(6BYTE)
+  "RCNCR" "number(7,0)"
+  "RCACR" "number(16,2)"
+  "RCNDR" "number(7,0)"
+  "RCADR" "number(16,2)"
+  "DRATE" "number(6,3)"
+  "RNAMT" "number(16,3)"
+  "ACRKY" varchar2(3BYTE)
+  "AGAMT" "number(16,3)"
+  "ACAMT" "number(16,3)"
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_ACQ_RECAP_CONTROL" {
+  "DXS_ACQ" varchar2(32BYTE)
+  "DXS_ISS" varchar2(32BYTE)
+  "LAST_NUMBER" "number(4,0)"
+  "PROCESS_DATE" date
+}
+
+Table "DCI_ACQ_RECAP_SETTLEMENT" {
+  "ID_RECAP_SETTLEMENT" "number(19,0)"
+  "ID_EXECUTION" "number(19,0)"
+  "ID_FILE" "number(19,0)"
+  "ID_RECAP" "number(19,0)"
+  "STATUS" varchar2(50BYTE)
+  "CONFIRM_DATE" date
+  "ACQ_DXS_IIC" varchar2(3BYTE)
+  "ACQ_ISO_IIC" varchar2(11BYTE)
+  "ISS_DXS_IIC" varchar2(3BYTE)
+  "ISS_ISO_IIC" varchar2(11BYTE)
+  "RECAP_NUMBER" "number(3,0)"
+  "CURRENCY_CODE" varchar2(3BYTE)
+  "RECAP_DATE" date
+  "SETTLEMENT_CURRENCY_CODE" varchar2(3BYTE)
+  "NUM_BATCH" "number(3,0)"
+  "NUM_BATCH_CREDIT" "number(3,0)"
+  "NUM_BATCH_DEBIT" "number(3,0)"
+  "RECAP_GROSS_AMOUNT" "number(18,2)"
+  "RECAP_GROSS_AMOUNT_ALT" "number(18,2)"
+  "ORIGINAL_DISCOUNT_RATE" "number(8,3)"
+  "BLENDED_PTA" "number(8,3)"
+  "INTERCHANGE_PTF_USD" "number(18,2)"
+  "INTERCHANGE_PTF_SETT" "number(18,2)"
+  "PRICED_NET_AMOUNT" "number(18,2)"
+  "PRICED_NET_AMOUNT_ALT" "number(18,2)"
+  "INTERCHANGE_COMMISSION" "number(18,2)"
+  "INTERCHANGE_COMMISSION_ALT" "number(18,2)"
+  "GROSS_SETT_AMOUNT" "number(18,2)"
+  "NET_SETT_AMOUNT" "number(18,2)"
+  "INTERCHANGE_COMMISSION_SETT" "number(18,2)"
+  "GROSS_SETT_AMOUNT_USD" "number(18,2)"
+  "NET_SETT_AMOUNT_USD" "number(18,2)"
+  "SETTLEMENT_DATE" date
+  "FX_RATE" "number(16,2)"
+  "PAYABLE_RECEIVE_IND" varchar2(1BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_ACQ_RECAP_SUSPEND_REJECTED" {
+  "ID_SUSPEND_REJECTED" "number(19,0)"
+  "ID_EXECUTION" "number(19,0)"
+  "ID_FILE" "number(19,0)"
+  "ID_RECAP" "number(19,0)"
+  "TYPE" varchar2(50BYTE)
+  "PROCESS_DATE" date
+  "ACQ_DXS_IIC" varchar2(3BYTE)
+  "ACQ_ISO_IIC" varchar2(11BYTE)
+  "ISS_DXS_IIC" varchar2(3BYTE)
+  "ISS_ISO_IIC" varchar2(11BYTE)
+  "RECAP_NUMBER" "number(3,0)"
+  "CURRENCY_CODE" varchar2(3BYTE)
+  "RECAP_DATE" date
+  "NUM_SUSPEND_REJECTED" "number(19,0)"
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_ACQ_SUSPEND_REJECTED_RECORD" {
+  "ID" "number(19,0)"
+  "ID_SUSPEND_REJECTED" "number(19,0)"
+  "ID_EXECUTION" "number(19,0)"
+  "ID_FILE" "number(19,0)"
+  "ID_RECAP" "number(19,0)"
+  "TYPE" varchar2(50BYTE)
+  "PROCESS_DATE" date
+  "RECAP_NUMBER" "number(3,0)"
+  "BATCH_NUMBER" "number(3,0)"
+  "SEQ_NUMBER" "number(3,0)"
+  "FIELD_NAME" varchar2(50BYTE)
+  "FIELD_VALUE" varchar2(100BYTE)
+  "CODE" varchar2(2BYTE)
+  "MESSAGE" varchar2(200BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_ACQ_TRANSACTION" {
+  "ID_TRANSACTION" "number(19,0)"
+  "ID_FILE" "number(19,0)"
+  "ID_EXECUTION" "number(19,0)"
+  "ID_RECAP" "number(19,0)"
+  "ID_SETTLEMENT" "number(19,0)"
+  "PROCESS_DATE" date
+  "SETTLEMENT_DATE" date
+  "TRANSACTION_TYPE" varchar2(10BYTE)
+  "STATUS" varchar2(20BYTE)
+  "ISSUER_ID" "number(10,0)"
+  "BRANCH_ISS_ID" "number(10,0)"
+  "ACQUIRER_ID" "number(10,0)"
+  "BRANCH_ACQ_ID" "number(10,0)"
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "TRANS" varchar2(4BYTE)
+  "FUNCD" varchar2(2BYTE)
+  "SFTER" varchar2(32BYTE)
+  "RCPNO" "number(3,0)"
+  "DFTER" varchar2(32BYTE)
+  "BATCH" varchar2(3BYTE)
+  "SEQNO" varchar2(3BYTE)
+  "ACCT" varchar2(19BYTE)
+  "CAMTR" "number(16,2)"
+  "CHGDT" varchar2(6BYTE)
+  "DATYP" varchar2(2BYTE)
+  "CHTYP" varchar2(3BYTE)
+  "ESTAB" varchar2(36BYTE)
+  "LCITY" varchar2(26BYTE)
+  "GEOCD" varchar2(3BYTE)
+  "APPCD" varchar2(3BYTE)
+  "TYPCH" varchar2(2BYTE)
+  "REFNO" varchar2(8BYTE)
+  "ANBR" varchar2(6BYTE)
+  "SENUM" varchar2(19BYTE)
+  "ESTST" varchar2(35BYTE)
+  "ESTCO" varchar2(20BYTE)
+  "ESTZP" varchar2(11BYTE)
+  "ESTPN" varchar2(20BYTE)
+  "MSCCD" varchar2(4BYTE)
+  "MCCCD" varchar2(4BYTE)
+  "TAX1" "number(15,2)"
+  "TAX2" "number(15,2)"
+  "ORIGD" varchar2(15BYTE)
+  "CUSRF1" varchar2(30BYTE)
+  "CUSRF2" varchar2(30BYTE)
+  "CUSRF3" varchar2(30BYTE)
+  "CUSRF4" varchar2(30BYTE)
+  "CUSRF5" varchar2(30BYTE)
+  "CUSRF6" varchar2(30BYTE)
+  "CHOLDP" varchar2(1BYTE)
+  "CARDP" varchar2(1BYTE)
+  "CPTRM" varchar2(1BYTE)
+  "ECI" varchar2(1BYTE)
+  "CAVV" varchar2(4BYTE)
+  "NRID" varchar2(15BYTE)
+  "CRDINP" varchar2(1BYTE)
+  "SURFEE" varchar2(10BYTE)
+  "TRMTYP" varchar2(1BYTE)
+  "AQGEO" varchar2(3BYTE)
+  "CVVRST" varchar2(2BYTE)
+  "AUTYP" varchar2(1BYTE)
+  "AURCDE" varchar2(2BYTE)
+  "SECFAR" varchar2(2BYTE)
+  "CVVIND" varchar2(2BYTE)
+  "AUTHTR" varchar2(16BYTE)
+  "VERACT" varchar2(2BYTE)
+  "IPADDR" varchar2(8BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_CHARGE_TYPE" {
+  "ID_CHARGE_TYPE" "number(18,0)"
+  "REC_EFF_DATE" date
+  "CHARGE_TYPE" varchar2(100BYTE)
+  "CHARGE_TYPE_CODE" varchar2(3BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_CURRENCY_CODE" {
+  "ID_CURRENCY_CODE" "number(18,0)"
+  "REC_EFF_DATE" date
+  "ISO_COUNTRY_NAME" varchar2(100BYTE)
+  "DXS_GEOCODE" varchar2(10BYTE)
+  "ISO_GEOCODE" varchar2(10BYTE)
+  "CURRENCY_NAME" varchar2(50BYTE)
+  "ISO_ALPHA3" varchar2(3BYTE)
+  "ISO_NUMERIC" varchar2(10BYTE)
+  "MINOR_UNIT" "number(2,0)"
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_CYCLE_RANGE" {
+  "ID_CYCLE_RANGE" "number(18,0)"
+  "REC_EFF_DATE" date
+  "FROM_CYCLE_RANGE" varchar2(20BYTE)
+  "TO_CYCLE_RANGE" varchar2(20BYTE)
+  "ISSUER_NAME" varchar2(100BYTE)
+  "IIC" varchar2(20BYTE)
+  "DXS" varchar2(5BYTE)
+  "VALIDITY_PERIOD" "number(5,0)"
+  "RANGE_STATUS" varchar2(20BYTE)
+  "EFFECTIVE_DATE" date
+  "ISO_NUMERIC_CODE" varchar2(10BYTE)
+  "COUNTRY_NAME" varchar2(100BYTE)
+  "CANCEL_SUSPEND_DATE" date
+  "INTERCHANGE_CANCEL_SUSPEND_DATE" date
+  "PAN_LENGTH" "number(2,0)"
+  "STAND_IN_ALLOWED" varchar2(5BYTE)
+  "PRODUCT_TYPE" varchar2(5BYTE)
+  "ALPHA_CURRENCY" varchar2(10BYTE)
+  "ISO_CURRENCY" varchar2(10BYTE)
+  "RANGE_LENGTH" "number(2,0)"
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_DISPUTE_DETAIL" {
+  "ID_DISPUTE_DETAIL" "number(19,0)"
+  "ID_EXECUTION" "number(19,0)"
+  "ID_FILE" "number(19,0)"
+  "ID_RECAP" "number(19,0)"
+  "PROCESS_DATE" date
+  "ACQ_DXS_IIC" varchar2(3BYTE)
+  "ACQ_ISO_IIC" varchar2(11BYTE)
+  "ISS_DXS_IIC" varchar2(3BYTE)
+  "ISS_ISO_IIC" varchar2(11BYTE)
+  "RECAP_NUMBER" "number(3,0)"
+  "CURRENCY_CODE" varchar2(3BYTE)
+  "RECAP_DATE" date
+  "SETTLEMENT_CURRENCY_CODE" varchar2(3BYTE)
+  "SEQUENCE_NUMBER" "number(3,0)"
+  "DISPUTE_DATE" date
+  "TYPE_CHARGE" varchar2(2BYTE)
+  "CLEARING_REF_NUM" varchar2(8BYTE)
+  "XCHANGE_REF_NUM" varchar2(12BYTE)
+  "PTA" "number(6,3)"
+  "GROSS_DISPUTE_AMOUNT" "number(16,2)"
+  "NET_DISPUTE_AMOUNT" "number(16,2)"
+  "INTERCHANGE_FEE" "number(16,2)"
+  "GROSS_DISPUTE_SETT_AMOUNT" "number(16,2)"
+  "NET_DISPUTE_SETT_AMOUNT" "number(16,2)"
+  "INTERCHANGE_FEE_SETT_CUR" "number(16,2)"
+  "GROSS_DISPUTE_SETT_AMT_USD" "number(16,2)"
+  "NET_DISPUTE_SETT_AMT_USD" "number(16,2)"
+  "INTERCHANGE_FEE_USD" "number(16,2)"
+  "INTERCHANGE_PROCESS_DATE" timestamp(6)
+  "STAGE_CREATION_DATE" timestamp(6)
+  "REASON_CODE" varchar2(4BYTE)
+  "SETTLEMENT_DATE" timestamp(6)
+  "DOCUMENT_ATTACH_IND" varchar2(1BYTE)
+  "DOCUMENT_CODE" varchar2(200BYTE)
+  "METHOD_SENT" varchar2(200BYTE)
+  "CR_DB_IND" varchar2(1BYTE)
+  "INTERCHANGE_PROCESS_DATE2" timestamp(6)
+  "DISPUTE_STAGE" varchar2(4BYTE)
+  "DISPUTE_STATUS" varchar2(4BYTE)
+  "LIABLE_FRANCHISE" varchar2(8BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_DISPUTE_ORIGINAL_DETAIL" {
+  "ID_ORIGINAL_DETAIL" "number(19,0)"
+  "ID_DISPUTE_DETAIL" "number(19,0)"
+  "CARD_NUMBER" varchar2(19BYTE)
+  "CHARGE_DATE" date
+  "CHARGE_TYPE" "number(3,0)"
+  "REFERENCE_NUMBER" varchar2(8BYTE)
+  "AUTHORIZATION_NUMBER" varchar2(6BYTE)
+  "INTERCHANGE_PTF_USD" "number(6,3)"
+  "GROSS_CHARGE_AMOUNT" "number(16,2)"
+  "GROSS_CHARGE_CURRENCY" varchar2(3BYTE)
+  "NET_CHARGE_AMOUNT" "number(19,6)"
+  "INTCH_COMMISSION" "number(19,6)"
+  "GROSS_SETT_AMOUNT" "number(19,6)"
+  "GROSS_SETT_CURRENCY" varchar2(3BYTE)
+  "NET_SETT_AMOUNT" "number(19,6)"
+  "INTCH_COMMISSION_SETT_CUR" "number(19,6)"
+  "GROSS_SETT_AMOUNT_USD" "number(19,6)"
+  "NET_SETT_AMOUNT_USD" "number(19,6)"
+  "INTCH_COMMISSION_USD" "number(19,6)"
+  "INTCH_PTF_SETT_CUR" "number(19,6)"
+  "ATM_INTCH_FEE_USD" "number(19,6)"
+  "ATM_SWITCH_FEE_USD" "number(19,6)"
+  "ATM_NETWORK_ASSMT_USD" "number(19,6)"
+  "ATM_NETWORK_PROC_FEE_USD" "number(19,6)"
+  "POS_INTL_PROC_FEE_USD" "number(19,6)"
+  "POS_INTL_AUTH_FEE_USD" "number(19,6)"
+  "POS_NETWORK_ASSMT_USD" "number(19,6)"
+  "ATM_INTCH_FEE_SETT_CUR" "number(19,6)"
+  "ATM_SWICHT_FEE_SETT_CUR" "number(19,6)"
+  "ATM_NETWORK_ASSMT_SETT_CUR" "number(19,6)"
+  "ATM_INTL_PROC_FEE_SETT_CUR" "number(19,6)"
+  "POS_INTL_PROC_FEE_SETT_CUR" "number(19,6)"
+  "POS_AUTH_FEE_SETT_CUR" "number(19,6)"
+  "POS_NETWORK_SETT_CUR" "number(19,6)"
+  "CONVERSION_RATE" "number(19,6)"
+  "CURRENCY_CODE_ACCOUNTING" varchar2(3BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_EXCHANGE_RATE" {
+  "ID_EXCHANGE_RATE" "number(19,0)"
+  "FROM_CURRENCY" varchar2(3BYTE)
+  "TO_CURRENCY" varchar2(3BYTE)
+  "EXCHANGE_RATE" "number(6,3)"
+  "EFF_DATE" date
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_FEE_DETAIL" {
+  "ID_FEE_DETAIL" "number(19,0)"
+  "ID_EXECUTION" "number(19,0)"
+  "ID_FILE" "number(19,0)"
+  "ID_RECAP" "number(19,0)"
+  "PROCESS_DATE" date
+  "SRCE_DXS_IIC" varchar2(3BYTE)
+  "SRCE_ISO_IIC" varchar2(11BYTE)
+  "DEST_DXS_IIC" varchar2(3BYTE)
+  "DEST_ISO_IIC" varchar2(11BYTE)
+  "RECAP_NUMBER" "number(3,0)"
+  "CURRENCY_CODE" varchar2(3BYTE)
+  "RECAP_DATE" date
+  "SETTLEMENT_CURRENCY_CODE" varchar2(3BYTE)
+  "SEQUENCE_NUMBER" "number(3,0)"
+  "FEE_DATE" date
+  "TYPE_CHARGE" varchar2(2BYTE)
+  "CLEARING_REF_NUM" varchar2(8BYTE)
+  "XCHANGE_REF_NUM" varchar2(12BYTE)
+  "PTA" "number(6,3)"
+  "GROSS_FEE_AMOUNT" "number(16,2)"
+  "NET_FEE_AMOUNT" "number(16,2)"
+  "INTCH_FEE_COMMISSION" "number(16,2)"
+  "GROSS_FEE_SETT_AMOUNT" "number(16,2)"
+  "NET_FEE_SETT_AMOUNT" "number(16,2)"
+  "INTCH_FEE_COMMISSION_SETT_CUR" "number(16,2)"
+  "GROSS_FEE_SETT_USD" "number(16,2)"
+  "NET_FEE_SETT_USD" "number(16,2)"
+  "INTCH_FEE_COMMISSION_USD" "number(16,2)"
+  "SETTLEMENT_DATE" timestamp(6)
+  "SETTLEMENT_IND" varchar2(1BYTE)
+  "FEE_DESCRIPTION" varchar2(60BYTE)
+  "RULE_SN" varchar2(36BYTE)
+  "RULE_DESCRIPTION" varchar2(38BYTE)
+  "VOLUME" "number(16,3)"
+  "TRANSACTION_COUNT" "number(8,0)"
+  "FEE_BASIS" varchar2(1BYTE)
+  "RATE_AMOUNT" "number(8,3)"
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_GEO_CODE" {
+  "ID_GEO_CODE" "number(18,0)"
+  "REC_EFF_DATE" date
+  "COUNTRY_NAME" varchar2(100BYTE)
+  "NUMERIC_ISO_GEO_CODE" varchar2(10BYTE)
+  "ALPHA_ISO_GEO_CODE" varchar2(10BYTE)
+  "DXS_GEO_CODE" varchar2(10BYTE)
+  "ISS_IIC_NAME" varchar2(100BYTE)
+  "ISS_ISO_IIC_CODE" varchar2(20BYTE)
+  "ISS_DXS_IIC_CODE" varchar2(10BYTE)
+  "ACQ_IIC_NAME" varchar2(100BYTE)
+  "ACQ_ISO_IIC_CODE" varchar2(20BYTE)
+  "ACQ_DXS_IIC_CODE" varchar2(10BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_IIC" {
+  "ID_IIC" "number(18,0)"
+  "REC_EFF_DATE" date
+  "FRAN_DXS_CODE" varchar2(50BYTE)
+  "AIR_DXS_CODE" varchar2(10BYTE)
+  "NAME" varchar2(255BYTE)
+  "ISO_IIC" varchar2(20BYTE)
+  "IATA_CODE" varchar2(10BYTE)
+  "WARNING_BULLETIN_POSITION" varchar2(10BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_IMR_MERCHANT" {
+  "ID" "number(19,0)"
+  "STATUS" varchar2(20BYTE)
+  "OBSERVACION" varchar2(500BYTE)
+  "LAST_SENT_AT" timestamp(6)
+  "ACQUIRER_ID" varchar2(15BYTE)
+  "MERCHANT_RECORD_TYPE" varchar2(2BYTE)
+  "MERCHANT_PARENT_GROUP_ID" varchar2(15BYTE)
+  "MERCHANT_PARENT_GROUP_NAME" varchar2(36BYTE)
+  "MERCHANT_IDENTIFIER" varchar2(15BYTE)
+  "TERMINAL_IDENTIFIER" varchar2(15BYTE)
+  "DPAS_ENABLED" char(1BYTE)
+  "MERCHANT_OPEN_DATE" varchar2(8BYTE)
+  "MERCHANT_CLOSE_DATE" varchar2(8BYTE)
+  "TARGET_MERCHANT_INDICATOR" char(1BYTE)
+  "MERCHANT_TIER" varchar2(2BYTE)
+  "MCC_CODE" varchar2(4BYTE)
+  "MERCHANT_DBA_NAME" varchar2(36BYTE)
+  "LEGAL_NAME" varchar2(36BYTE)
+  "ADDRESS_LINE_1" varchar2(36BYTE)
+  "ADDRESS_LINE_2" varchar2(36BYTE)
+  "ADDRESS_LINE_3" varchar2(36BYTE)
+  "POSTAL_CODE" varchar2(11BYTE)
+  "CITY" varchar2(26BYTE)
+  "STATE" varchar2(20BYTE)
+  "COUNTRY" varchar2(3BYTE)
+  "PHONE_NUMBER" varchar2(20BYTE)
+  "WEB_ADDRESS" varchar2(50BYTE)
+  "FILE_LAYOUT_VERSION" varchar2(5BYTE)
+  "INTERCHANGE_MERCHANT_ID" varchar2(15BYTE)
+  "CONTACTLESS" char(1BYTE)
+  "NATIVE_LANGUAGE" char(3BYTE)
+  "DBA_NAME_NATIVE" varchar2(80BYTE)
+  "ADDRESS_LINE_1_NATIVE" varchar2(80BYTE)
+  "ADDRESS_LINE_2_NATIVE" varchar2(80BYTE)
+  "ADDRESS_LINE_3_NATIVE" varchar2(80BYTE)
+  "STATE_NATIVE" varchar2(80BYTE)
+  "POSTAL_CODE_NATIVE" varchar2(15BYTE)
+  "CITY_NATIVE" varchar2(28BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_INTES" {
+  "ID_INTES" "number(18,0)"
+  "REC_EFF_DATE" date
+  "INT_SE" varchar2(255BYTE)
+  "INTES_CODE" varchar2(43BYTE)
+  "MCC" varchar2(4BYTE)
+  "HEADQUARTERS_IIC" varchar2(2BYTE)
+  "TCC" varchar2(1BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_MCC" {
+  "ID_MCC" "number(18,0)"
+  "REC_EFF_DATE" date
+  "MCC" varchar2(10BYTE)
+  "MCC_DESCRIPTION" varchar2(400BYTE)
+  "ABC" varchar2(10BYTE)
+  "ABC_ROLL_UP" varchar2(10BYTE)
+  "DXS_CHARGE_TYPE" varchar2(10BYTE)
+  "DXS_DESCRIPTION" varchar2(100BYTE)
+  "IPSE_CHARGE_TYPE" varchar2(10BYTE)
+  "IPSE_SIC_CODE" varchar2(10BYTE)
+  "IPSE_MSC" varchar2(10BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_PTA_RATE" {
+  "ID_PTA_RATE" "number(19,0)"
+  "PTA_RATE" "number(6,3)"
+  "EFF_DATE" date
+  "STATUS" varchar2(1BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DCI_TYPE_CHARGE" {
+  "ID_TYPE_CHARGE" "number(18,0)"
+  "REC_EFF_DATE" date
+  "TYPE_CHARGE" varchar2(2BYTE)
+  "TYPE_CHARGE_DESCRIPTION" varchar2(255BYTE)
+  "DR_CR_IND" varchar2(1BYTE)
+  "CLASS_IND" varchar2(1BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "DL_ELIMINACION_PROCESOS_DETALLE" {
+  "ID_ELIMINACION_DETALLE" number
+  "ID_LOTE_ELIMINACION" number
+  "ID_PROCESO" number
+  "PROCESO" varchar2(255BYTE)
+  "TIPO_PROCESO" varchar2(50BYTE)
+  "PRIORIDAD" number
+  "NIVEL" number
+  "FECHA_CAPTURA_INICIO" date
+  "EXISTE" varchar2(2BYTE)
+  "VALOR" number
+  "ELIMINADO" varchar2(2BYTE)
+  "ESTADO" varchar2(30BYTE)
+  "MARCA" varchar2(200BYTE)
+}
+
+Table "DL_HIST_COMU_PROCESOS_MARCAS" {
+  "FECHA_ELIMINACION" date
+  "USUARIO_ELIMINACION" varchar2(20BYTE)
+  "NOMBRE_TABLA" varchar2(50BYTE)
+  "ID_ESTADO" number
+  "DATOS_TABLA" clob
+}
+
+Table "DL_HIST_CONFIR_DINERS" {
+  "FECHA_ELIMINACION" date
+  "USUARIO_ELIMINACION" varchar2(20BYTE)
+  "NOMBRE_TABLA" varchar2(50BYTE)
+  "DATOS_TABLA" clob
+}
+
+Table "DL_HIST_CONFIR_MASTERCARD" {
+  "FECHA_ELIMINACION" date
+  "USUARIO_ELIMINACION" varchar2(20BYTE)
+  "NOMBRE_TABLA" varchar2(50BYTE)
+  "DATOS_TABLA" clob
+}
+
+Table "DL_HIST_CONFIR_VISA" {
+  "FECHA_ELIMINACION" date
+  "USUARIO_ELIMINACION" varchar2(20BYTE)
+  "NOMBRE_TABLA" varchar2(50BYTE)
+  "DATOS_TABLA" clob
+}
+
+Table "DL_HIST_INCOMING_MASTERCARD" {
+  "FECHA_ELIMINACION" date
+  "USUARIO_ELIMINACION" varchar2(20BYTE)
+  "NOMBRE_TABLA" varchar2(50BYTE)
+  "DATOS_TABLA" clob
+}
+
+Table "DL_HIST_INCOMING_MDS" {
+  "FECHA_ELIMINACION" date
+  "USUARIO_ELIMINACION" varchar2(20BYTE)
+  "NOMBRE_TABLA" varchar2(50BYTE)
+  "DATOS_TABLA" clob
+}
+
+Table "DL_HIST_INCOMING_PROPIETARIA" {
+  "FECHA_ELIMINACION" date
+  "USUARIO_ELIMINACION" varchar2(20BYTE)
+  "NOMBRE_TABLA" varchar2(50BYTE)
+  "DATOS_TABLA" clob
+}
+
+Table "DL_HIST_INCOMING_VISA" {
+  "FECHA_ELIMINACION" date
+  "USUARIO_ELIMINACION" varchar2(20BYTE)
+  "NOMBRE_TABLA" varchar2(50BYTE)
+  "DATOS_TABLA" clob
+}
+
+Table "DL_HIST_LIQUIDACIONES_COMERCIO" {
+  "FECHA_ELIMINACION" date
+  "USUARIO_ELIMINACION" varchar2(20BYTE)
+  "NOMBRE_TABLA" varchar2(50BYTE)
+  "DATOS_TABLA" clob
+}
+
+Table "DL_HIST_LIQUIDACIONES_MARCAS" {
+  "FECHA_ELIMINACION" date
+  "USUARIO_ELIMINACION" varchar2(20BYTE)
+  "NOMBRE_TABLA" varchar2(50BYTE)
+  "ID_MARCA" number
+  "DATOS_TABLA" clob
+}
+
+Table "DL_HIST_OUTGOING_DINNER" {
+  "FECHA_ELIMINACION" date
+  "USUARIO_ELIMINACION" varchar2(20BYTE)
+  "NOMBRE_TABLA" varchar2(50BYTE)
+  "NOMBRE_PROCESO" varchar2(20BYTE)
+  "DATOS_TABLA" clob
+}
+
+Table "DL_HIST_OUTGOING_MASTERCARD" {
+  "FECHA_ELIMINACION" date
+  "USUARIO_ELIMINACION" varchar2(20BYTE)
+  "NOMBRE_TABLA" varchar2(50BYTE)
+  "NOMBRE_PROCESO" varchar2(20BYTE)
+  "DATOS_TABLA" clob
+}
+
+Table "DL_HIST_OUTGOING_VISA" {
+  "FECHA_ELIMINACION" date
+  "USUARIO_ELIMINACION" varchar2(20BYTE)
+  "NOMBRE_TABLA" varchar2(50BYTE)
+  "NOMBRE_PROCESO" varchar2(20BYTE)
+  "DATOS_TABLA" clob
+}
+
+Table "DL_PROCESOS_ELIMINADOS" {
+  "ID_LOTE_ELIMINACION" number
+  "ID_PROCESO_ORIGEN" number
+  "PROCESO_ORIGEN" varchar2(255BYTE)
+  "TIPO_PROCESO_ORIGEN" varchar2(50BYTE)
+  "FECHA_PROCESO_ORIGEN" date
+  "ESTADO" varchar2(30BYTE)
+}
+
+Table "FACREP_PSWD" {
+  "RC_RUC" varchar2(45BYTE)
+  "RC_NUMCOMERCIO" varchar2(45BYTE)
+  "F_GEN_PASSWD" varchar2(4000BYTE)
+  "RC_ESTADO" varchar2(1BYTE)
+}
+
+Table "MAIL_ADJUNTOS" {
+  "IDCORREO" number
+  "NUMERO_COMERCIO" varchar2(15BYTE)
+  "NOMBRE_COMERCIO" varchar2(150BYTE)
+}
+
+Table "MAIL_CORREO" {
+  "IDCORREO" number
+  "PARA" varchar2(250BYTE)
+  "CC" varchar2(250BYTE)
+  "ASUNTO" varchar2(250BYTE)
+  "MENSAJE" varchar2(250BYTE)
+  "FLAG_ENVIO" varchar2(1BYTE)
+  "NIT" varchar2(45BYTE)
+}
+
+Table "MASTER_ADDRESS" {
+  "INSTITUTION_ID" varchar2(10BYTE)
+  "ADDRESS_ID" "number(12,0)"
+  "ADDRESS1" varchar2(50BYTE)
+  "ADDRESS2" varchar2(50BYTE)
+  "CITY" varchar2(50BYTE)
+  "PROV_STATE_ABBREV" char(3BYTE)
+  "PROV_STATE_NUM_CD" "number(2,0)"
+  "PROVINCE_STATE" varchar2(50BYTE)
+  "COUNTY_CD" "number(4,0)"
+  "COUNTY" varchar2(25BYTE)
+  "POSTAL_CD_ZIP" varchar2(20BYTE)
+  "GEOCODE" varchar2(16BYTE)
+  "CNTRY_CODE" char(3BYTE)
+  "COUNTRY" varchar2(50BYTE)
+  "PHONE1" varchar2(30BYTE)
+  "PHONE2" varchar2(30BYTE)
+  "FAX" varchar2(30BYTE)
+  "EMAIL_ADDRESS" varchar2(100BYTE)
+  "URL" varchar2(255BYTE)
+  "ADDRESS3" varchar2(50BYTE)
+  "ADDRESS4" varchar2(50BYTE)
+  "REGION_CODE" varchar2(3BYTE)
+  "CED_MAPPING" varchar2(8BYTE)
+}
+
+Table "MC_ACQ_BIN_SERVICE" {
+  "ID_ACQ_BIN_SERVICE" "number(11,0)"
+  "EFF_TIME_STAMP" timestamp(6)
+  "ACTIVE_CODE" varchar2(1BYTE)
+  "ACQUIRER_BIN" varchar2(6BYTE)
+  "BUS_SERVICE_TYPE" varchar2(1BYTE)
+  "BUS_SERVICE_ID_CODE" varchar2(6BYTE)
+  "CARD_PROGRAM_ID" varchar2(3BYTE)
+  "BUS_SERVICE_TYPE_PRIORITY" varchar2(2BYTE)
+  "BUS_SERVICE_LIFE_CYCLE" varchar2(1BYTE)
+  "ENABLED" "number(1,0)"
+}
+
+Table "MC_ACQUIRER_BIN" {
+  "ID_ACQUIRER_BIN" "number(11,0)"
+  "EFF_TIME_STAMP" timestamp(6)
+  "ACTIVE_CODE" varchar2(1BYTE)
+  "ACQUIRER_BIN" varchar2(6BYTE)
+  "CARD_PROGRAM_ID" varchar2(3BYTE)
+  "MEMBER_ID" varchar2(11BYTE)
+  "FILLER" varchar2(1BYTE)
+  "END_POINT" varchar2(7BYTE)
+  "POS_EMV_COMP_IND" varchar2(1BYTE)
+  "TM_EMV_COMP_IND" varchar2(1BYTE)
+  "MERCHANT_UCAF" varchar2(1BYTE)
+  "REGION" varchar2(1BYTE)
+  "COUNTRY_ALPHA" varchar2(3BYTE)
+  "FILLER_2" varchar2(14BYTE)
+  "ENABLED" "number(1,0)"
+}
+
+Table "MC_BUS_SERVICE_ENFORCEMENT" {
+  "ID_BUS_SERVICE_ENFORCEMENT" "number(11,0)"
+  "EFF_TIME_STAMP" timestamp(6)
+  "ACTIVE_CODE" varchar2(1BYTE)
+  "CARD_PROGRAM_ID" varchar2(3BYTE)
+  "BUS_SERVICE_TYPE" varchar2(1BYTE)
+  "BUS_SERVICE_ID_CODE" varchar2(6BYTE)
+  "MTI" varchar2(4BYTE)
+  "FUNC_CODE" varchar2(3BYTE)
+  "PCODE_S1" varchar2(2BYTE)
+  "IRD" varchar2(2BYTE)
+  "ENABLED" "number(1,0)"
+}
+
+Table "MC_CAB_PROGRAM" {
+  "ID_MC_CAB_PROGRAM" "number(11,0)"
+  "EFF_TIME_STAMP" timestamp(6)
+  "ACTIVE_CODE" varchar2(1BYTE)
+  "CARD_PROGRAM_ID" varchar2(3BYTE)
+  "BUS_SERVICE_TYPE" varchar2(1BYTE)
+  "BUS_SERVICE_ID_CODE" varchar2(6BYTE)
+  "IRD" varchar2(2BYTE)
+  "CAB_PROGRAM" varchar2(4BYTE)
+  "LIFE_CYCLE_IND" varchar2(1BYTE)
+  "ENABLED" "number(1,0)"
+}
+
+Table "MC_CARD_PRODUCT" {
+  "ID_CARD_PRODUCT" "number(11,0)"
+  "EFF_TIME_STAMP" timestamp(6)
+  "ACTIVE_CODE" varchar2(1BYTE)
+  "CARD_PROGRAM_ID" varchar2(3BYTE)
+  "BUS_SERVICE_TYPE" varchar2(1BYTE)
+  "BUS_SERVICE_ID_CODE" varchar2(6BYTE)
+  "IRD" varchar2(2BYTE)
+  "GCMS_PRODUCT_ID" varchar2(3BYTE)
+  "LIFE_CYCLE_IND" varchar2(1BYTE)
+  "ENABLED" "number(1,0)"
+}
+
+Table "MC_CARGOS_FEE" {
+  "ID_CARGO" "number(19,0)"
+  "ID_MARCA" "number(2,0)"
+  "TIPO_TRANSACCION" varchar2(10BYTE)
+  "SOLICITANTE" varchar2(100BYTE)
+  "FECHA_SOLICITUD" date
+  "FECHA_PRESENTACION" date
+  "ESTADO" "number(2,0)"
+  "ICA_NUMBER" varchar2(20BYTE)
+  "ICA_ENVIA" varchar2(20BYTE)
+  "ACCT_NUMBER" varchar2(50BYTE)
+  "TRANS_DATE" date
+  "CODE_D_USAGE" varchar2(20BYTE)
+  "CODE_D_FUNCTION" varchar2(20BYTE)
+  "CRED_DEB" varchar2(10BYTE)
+  "RECORD_TYPE" varchar2(20BYTE)
+  "MONTO_ORIGINAL" "number(16,2)"
+  "MON_ORI" varchar2(10BYTE)
+  "RETURN_IND" varchar2(20BYTE)
+  "COD_RAZON_ORIGINAL" varchar2(20BYTE)
+  "TRANS_AMOUNT" "number(16,2)"
+  "MICROFIL" varchar2(50BYTE)
+  "STTL_IND" varchar2(20BYTE)
+  "STTL_CURRNCY" varchar2(10BYTE)
+  "STTL_CURR_EXP" varchar2(10BYTE)
+  "CONTROL_NUMBR" varchar2(50BYTE)
+  "MESSAGE_TEXT" varchar2(250BYTE)
+  "USUARIO_CREACION" varchar2(50BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(50BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "MC_DEFAULT_BUS_SERVICE" {
+  "ID_DEFAULT_BUS_SERVICE" "number(11,0)"
+  "EFF_TIME_STAMP" timestamp(6)
+  "ACTIVE_CODE" varchar2(1BYTE)
+  "REGION" varchar2(1BYTE)
+  "FROM_REGION" varchar2(1BYTE)
+  "TO_REGION" varchar2(1BYTE)
+  "CARD_PROGRAM_ID" varchar2(3BYTE)
+  "BUS_SERVICE_TYPE_PRIORITY" varchar2(2BYTE)
+  "BUS_SERVICE_TYPE" varchar2(1BYTE)
+  "BUS_SERVICE_ID_CODE" varchar2(6BYTE)
+  "BUS_SERVICE_LIFE_CYCLE" varchar2(1BYTE)
+  "BUS_SERVICE_ENFORCE" varchar2(1BYTE)
+  "ENABLED" "number(1,0)"
+}
+
+Table "MC_EXCHANGE_RATE" {
+  "ID_EXCHANGE_RATE" "number(19,0)"
+  "FROM_CURRENCY" varchar2(3BYTE)
+  "TO_CURRENCY" varchar2(3BYTE)
+  "EXCHANGE_RATE" "number(6,3)"
+  "EFF_DATE" date
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "MC_INTCHG_AMOUNT" {
+  "ID_MC_INTCHG_AMOUNT" "number(11,0)"
+  "EFF_TIME_STAMP" timestamp(6)
+  "ACTIVE_CODE" varchar2(1BYTE)
+  "CARD_PROGRAM_ID" varchar2(3BYTE)
+  "BUS_SERVICE_TYPE" varchar2(1BYTE)
+  "BUS_SERVICE_ID_CODE" varchar2(6BYTE)
+  "IRD" varchar2(2BYTE)
+  "CURRENCY_CODE" varchar2(3BYTE)
+  "EXPONENT" varchar2(1BYTE)
+  "MIN_TX_AMOUNT" "number(12,0)"
+  "MAX_TX_AMOUNT" "number(12,0)"
+  "ENABLED" "number(1,0)"
+}
+
+Table "MC_INTCHG_FEE_GROUPS" {
+  "ID_INTCHG_FEE_GROUP" "number(11,0)"
+  "EFF_TIME_STAMP" timestamp(6)
+  "ACTIVE_CODE" varchar2(1BYTE)
+  "CARD_PROGRAM_ID" varchar2(3BYTE)
+  "BUS_SERVICE_TYPE" varchar2(1BYTE)
+  "BUS_SERVICE_ID_CODE" varchar2(6BYTE)
+  "IRD" varchar2(2BYTE)
+  "MTI" varchar2(4BYTE)
+  "FUNC_CODE" varchar2(3BYTE)
+  "PCODE_S1" varchar2(2BYTE)
+  "PCODE_S2" varchar2(2BYTE)
+  "PCODE_S3" varchar2(2BYTE)
+  "REVERSAL_ALLOWED" varchar2(1BYTE)
+  "INTCHG_COMPLIANCE_SW" varchar2(1BYTE)
+  "FEE_CODE_POINTER" varchar2(11BYTE)
+  "PRODUCT_TYPE_ID" varchar2(1BYTE)
+  "TIME_AUTH_CODE_POINTER" varchar2(11BYTE)
+  "PRODUCT_CLASS_ACCEPTOR" varchar2(11BYTE)
+  "MC_ASSIGNED_ID_MNDT" varchar2(1BYTE)
+  "VALID_ASSIGNED_ID_MNDT" varchar2(1BYTE)
+  "CONTACLESS_IND" varchar2(1BYTE)
+  "ENABLED" "number(1,0)"
+}
+
+Table "MC_IPM_TRANSACTION" {
+  "IPM_TRANSACTION_ID" "number(19,0)"
+  "ID_FILE" "number(19,0)"
+  "ID_EXECUTION" "number(19,0)"
+  "PROCESS_DATE" date
+  "ID_SETTLEMENT" "number(19,0)"
+  "SETTLEMENT_DATE" date
+  "SETTLEMENT_TYPE" varchar2(1BYTE)
+  "IN_OUT" varchar2(10BYTE)
+  "TRANSACTION_TYPE" varchar2(10BYTE)
+  "CARD_TYPE" varchar2(20BYTE)
+  "STATUS" varchar2(20BYTE)
+  "OUT_SENT_FLAG" "number(1,0)"
+  "ISSUER_ID" "number(10,0)"
+  "BRANCH_ISS_ID" "number(10,0)"
+  "ACQUIRER_ID" "number(10,0)"
+  "BRANCH_ACQ_ID" "number(10,0)"
+  "ROOT_TRANSACTION_ID" "number(19,0)"
+  "INTENT_NUMBER" "number(5,0)"
+  "IPM_FILE_ID" varchar2(25BYTE)
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "MTI" varchar2(4BYTE)
+  "BITMAP" varchar2(99BYTE)
+  "DE02_PAN" "number(19,0)"
+  "DE03_PCODE" varchar2(6BYTE)
+  "DE04_AMOUNT_TX" varchar2(12BYTE)
+  "DE05_AMOUNT_CONCILIATION" varchar2(12BYTE)
+  "DE06_AMOUNT_CH_BILLING" varchar2(12BYTE)
+  "DE09_CONV_RATE_CONCILIATION" varchar2(8BYTE)
+  "DE10_CONV_RATE_CH_BILLING" varchar2(8BYTE)
+  "DE12_DATE_TIME_LOCAL_TX" varchar2(12BYTE)
+  "DE14_DATE_EXP" varchar2(4BYTE)
+  "DE22_POS_ENTRY_MODE" varchar2(12BYTE)
+  "DE23_CARD_SEQ_NUM" varchar2(3BYTE)
+  "DE24_FUNCTION_CODE" varchar2(3BYTE)
+  "DE25_MSG_REASON_CODE" varchar2(4BYTE)
+  "DE26_MCC" varchar2(4BYTE)
+  "DE30_AMOUNT_ORIGINAL" varchar2(24BYTE)
+  "DE31_ACQ_REF_DATA" varchar2(99BYTE)
+  "DE32_ACQ_INST_ID" varchar2(99BYTE)
+  "DE33_FORWADING_INST_ID" varchar2(99BYTE)
+  "DE37_RETRIEVAL_REFNUM" varchar2(12BYTE)
+  "DE38_APPROVAL_CODE" varchar2(6BYTE)
+  "DE40_SERVICE_CODE" varchar2(3BYTE)
+  "DE41_TERMID" varchar2(8BYTE)
+  "DE42_CARD_ACCEPTOR_ID" varchar2(15BYTE)
+  "DE43_CARD_ACCEPTOR_NAME" varchar2(99BYTE)
+  "DE48_ADDITIONAL_DATA" varchar2(999BYTE)
+  "DE49_CURR_CODE_TX" varchar2(3BYTE)
+  "DE50_CURR_CODE_CONCILIATION" varchar2(3BYTE)
+  "DE51_CURR_CODE_CH_BILLING" varchar2(3BYTE)
+  "DE54_AMOUNTS_ADD" varchar2(999BYTE)
+  "DE55_ICC_DATA" varchar2(999BYTE)
+  "DE62_ADDITIONAL_DATA_2" varchar2(999BYTE)
+  "DE63_TX_LIFE_CYCLE_ID" varchar2(999BYTE)
+  "DE71_MSG_NUM" varchar2(8BYTE)
+  "DE72_DATA_RECORD" varchar2(999BYTE)
+  "DE73_DATE_ACTION" varchar2(6BYTE)
+  "DE93_TX_DEST_INST_ID" varchar2(99BYTE)
+  "DE94_TX_ORIG_INST_ID" varchar2(99BYTE)
+  "DE95_CARD_ISS_REF_DATA" varchar2(99BYTE)
+  "DE100_RECEIVING_INST_ID" varchar2(99BYTE)
+  "DE105_MULTI_USE_TX_ID_DATA" varchar2(999BYTE)
+  "DE111_AMOUNT_CURR_CONV_ASSESS" varchar2(999BYTE)
+  "DE123_ADDITIONAL_DATA_3" varchar2(999BYTE)
+  "DE124_ADDITIONAL_DATA_4" varchar2(999BYTE)
+  "DE125_ADDITIONAL_DATA_5" varchar2(999BYTE)
+  "DE127_NETWORK_DATA" varchar2(999BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "MC_IRD_PRODUCT_LNK" {
+  "ID_MC_IRD_PRODUCT_LNK" "number(11,0)"
+  "EFF_TIME_STAMP" timestamp(6)
+  "ACTIVE_CODE" varchar2(1BYTE)
+  "PRODUCT_ID" varchar2(3BYTE)
+  "CARD_PROGRAM_ID" varchar2(3BYTE)
+  "IRD" varchar2(2BYTE)
+  "BUS_SERVICE_TYPE" varchar2(1BYTE)
+  "ENABLED" "number(1,0)"
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "MC_ISS_ACC_RANGE_CP" {
+  "ID_ISS_ACC_RANGE" "number(11,0)"
+  "EFF_TIME_STAMP" timestamp(6)
+  "ACTIVE_CODE" varchar2(1BYTE)
+  "ISS_ACC_RANGE_LOW" "number(19,0)"
+  "BUS_SERVICE_TYPE" varchar2(1BYTE)
+  "BUS_SERVICE_ID_CODE" varchar2(6BYTE)
+  "CARD_PROGRAM_ID" varchar2(3BYTE)
+  "ISS_ACC_RANGE_HIGH" "number(19,0)"
+  "BUS_SERVICE_TYPE_PRIORITY" varchar2(2BYTE)
+  "ISS_CARD_PROGRAM_PRIORITY" varchar2(2BYTE)
+  "BUS_SERVICE_LIFE_CYCLE" varchar2(1BYTE)
+  "BUS_SERVICE_ENFORCE" varchar2(1BYTE)
+  "ENABLED" "number(1,0)"
+}
+
+Table "MC_ISSUE_ACCOUNT_RANGE" {
+  "I_ISSUE_ACCOUNT_RANGE" "number(11,0)"
+  "EFF_TIME_STAMP" timestamp(6)
+  "ACTIVE_CODE" varchar2(1BYTE)
+  "ISS_ACC_RANGE_LOW" "number(19,0)"
+  "GCMS_PRODUCT_ID" varchar2(3BYTE)
+  "ISS_ACC_RANGE_HIGH" "number(19,0)"
+  "CARD_PROGRAM_ID" varchar2(3BYTE)
+  "ISS_CARD_PROGRAM_PRIORITY" varchar2(2BYTE)
+  "MEMBER_ID" varchar2(11BYTE)
+  "PRODUCT_TYPE_ID" varchar2(1BYTE)
+  "END_POINT" varchar2(7BYTE)
+  "COUNTRY_CODE_ALPHA" varchar2(3BYTE)
+  "COUNTRY_CODE_NUMERIC" varchar2(3BYTE)
+  "REGION" varchar2(1BYTE)
+  "PRODUCT_CLASS" varchar2(3BYTE)
+  "TX_ROUTING_IND" varchar2(1BYTE)
+  "FIRST_PRESENT_REASSIG" varchar2(1BYTE)
+  "ADDICIONAL_DATA" varchar2(200BYTE)
+  "ENABLED" "number(1,0)"
+}
+
+Table "MC_LINKSER_IRD_POLICY" {
+  "IRD" varchar2(2BYTE)
+  "TX_QUALIFICATION" varchar2(3BYTE)
+  "BUS_SERVICE_TYPE" "number(1,0)"
+  "VALIDATION_PROFILE" varchar2(20BYTE)
+  "PRIORITY" "number(5,0)"
+  "SELECTION_PRIORITY" "number(5,0)"
+  "ALLOWED_PROCESSING_CODES" varchar2(30BYTE)
+  "ALLOW_MCC_FALLBACK" "number(1,0)"
+  "MAX_PRESENTMENT_DAYS" "number(4,0)"
+  "ENABLED" "number(1,0)"
+  "ACTIVE_CODE" varchar2(1BYTE)
+  "DESCRIPTION" varchar2(250BYTE)
+  "EFF_TIME_STAMP" timestamp(6)
+  "EXP_TIME_STAMP" timestamp(6)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "MC_MCC" {
+  "ID_MC_MCC" "number(11,0)"
+  "EFF_TIME_STAMP" timestamp(6)
+  "ACTIVE_CODE" varchar2(1BYTE)
+  "MCC" varchar2(5BYTE)
+  "CAB_PROGRAM" varchar2(4BYTE)
+  "CAB_PROGAM_LIFE_CYCLE" varchar2(1BYTE)
+  "CAB_TYPE" varchar2(1BYTE)
+  "CAB_LIFE_CYCLE" varchar2(1BYTE)
+  "ENABLED" "number(1,0)"
+}
+
+Table "MC_MDS_SETTLEMENT_CONTROL" {
+  "ID_MDS_SETTLEMENT_CONTROL" "number(19,0)"
+  "ID_EXECUTION" "number(19,0)"
+  "PROCESS_DATE" date
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "ID_SETTLEMENT" "number(19,0)"
+  "SETTLEMENT_DATE" date
+  "SETTLEMENT_TYPE" varchar2(1BYTE)
+  "STATUS" varchar2(50BYTE)
+  "ISSUER_ID" "number(10,0)"
+  "BRANCH_ISS_ID" "number(10,0)"
+  "ACQUIRER_ID" "number(10,0)"
+  "BRANCH_ACQ_ID" "number(10,0)"
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "MC_MDS_SIAL_PENDING" {
+  "ID_MDS_SIAL_PENDING" "number(19,0)"
+  "ID_EXECUTION" "number(19,0)"
+  "PROCESS_DATE" date
+  "STATUS" varchar2(20BYTE)
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "ID_T464_TRANSACTION" "number(19,0)"
+  "CONFIRM_DATE" date
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(30BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(30BYTE)
+}
+
+Table "MC_TABLA_RANGO_CUENTAS" {
+  "FECHA_EFECTUADA" varchar2(7BYTE)
+  "CODIGO" varchar2(1BYTE)
+  "ID_TABLA" varchar2(3BYTE)
+  "RANGO_BAJO" varchar2(19BYTE)
+  "ID_PRODUCTO_GCMS" varchar2(3BYTE)
+  "RANGO_ALTO" varchar2(19BYTE)
+  "ID_PROGRAMA_TARJETA" varchar2(3BYTE)
+  "PRIORIDAD" varchar2(2BYTE)
+  "MEMBER_ID" varchar2(11BYTE)
+  "ID_TIPO_PRODUCTO" varchar2(1BYTE)
+  "ENDPOINT" varchar2(7BYTE)
+  "CODIGO_ALFA_PAIS" varchar2(3BYTE)
+  "CODIGO_NUMERICO_PAIS" varchar2(3BYTE)
+  "REGION" varchar2(1BYTE)
+  "CLASE_PRODUCTO" varchar2(3BYTE)
+  "INDICADOR_RUTEO_TX" varchar2(1BYTE)
+  "PRIMERA_REASIGNACION" varchar2(1BYTE)
+  "REASIGNACION_PRODUCTO" varchar2(1BYTE)
+  "CAMBIO_PWCB" varchar2(1BYTE)
+  "ID_LICENCIA_PRODUCTO" varchar2(3BYTE)
+  "INDICADOR_SERVICIO_MAPEO" varchar2(1BYTE)
+  "NOMBRE_ARCHIVO" varchar2(200BYTE)
+  "DESCRIPCION" varchar2(80BYTE)
+  "MODIFICACION" varchar2(80BYTE)
+  "TIPO_REGISTRO" "number(38,0)"
+  "SUB_PIE" varchar2(80BYTE)
+  "DATO" varchar2(2000BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "MC_TABLA_RANGO_CUENTAS_BOL" {
+  "FECHA_EFECTUADA" varchar2(7BYTE)
+  "CODIGO" varchar2(1BYTE)
+  "ID_TABLA" varchar2(3BYTE)
+  "RANGO_BAJO" varchar2(19BYTE)
+  "ID_PRODUCTO_GCMS" varchar2(3BYTE)
+  "RANGO_ALTO" varchar2(19BYTE)
+  "ID_PROGRAMA_TARJETA" varchar2(3BYTE)
+  "PRIORIDAD" varchar2(2BYTE)
+  "MEMBER_ID" varchar2(11BYTE)
+  "ID_TIPO_PRODUCTO" varchar2(1BYTE)
+  "ENDPOINT" varchar2(7BYTE)
+  "CODIGO_ALFA_PAIS" varchar2(3BYTE)
+  "CODIGO_NUMERICO_PAIS" varchar2(3BYTE)
+  "REGION" varchar2(1BYTE)
+  "CLASE_PRODUCTO" varchar2(3BYTE)
+  "INDICADOR_RUTEO_TX" varchar2(1BYTE)
+  "PRIMERA_REASIGNACION" varchar2(1BYTE)
+  "REASIGNACION_PRODUCTO" varchar2(1BYTE)
+  "CAMBIO_PWCB" varchar2(1BYTE)
+  "ID_LICENCIA_PRODUCTO" varchar2(3BYTE)
+  "INDICADOR_SERVICIO_MAPEO" varchar2(1BYTE)
+  "NOMBRE_ARCHIVO" varchar2(200BYTE)
+  "DESCRIPCION" varchar2(80BYTE)
+  "MODIFICACION" varchar2(80BYTE)
+  "TIPO_REGISTRO" "number(38,0)"
+  "SUB_PIE" varchar2(80BYTE)
+  "DATO" varchar2(2000BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "MC_TABLA_RANGO_CUENTAS_HIST" {
+  "FECHA_EFECTUADA" varchar2(7BYTE)
+  "CODIGO" varchar2(1BYTE)
+  "ID_TABLA" varchar2(3BYTE)
+  "RANGO_BAJO" varchar2(19BYTE)
+  "ID_PRODUCTO_GCMS" varchar2(3BYTE)
+  "RANGO_ALTO" varchar2(19BYTE)
+  "ID_PROGRAMA_TARJETA" varchar2(3BYTE)
+  "PRIORIDAD" varchar2(2BYTE)
+  "MEMBER_ID" varchar2(11BYTE)
+  "ID_TIPO_PRODUCTO" varchar2(1BYTE)
+  "ENDPOINT" varchar2(7BYTE)
+  "CODIGO_ALFA_PAIS" varchar2(3BYTE)
+  "CODIGO_NUMERICO_PAIS" varchar2(3BYTE)
+  "REGION" varchar2(1BYTE)
+  "CLASE_PRODUCTO" varchar2(3BYTE)
+  "INDICADOR_RUTEO_TX" varchar2(1BYTE)
+  "PRIMERA_REASIGNACION" varchar2(1BYTE)
+  "REASIGNACION_PRODUCTO" varchar2(1BYTE)
+  "CAMBIO_PWCB" varchar2(1BYTE)
+  "ID_LICENCIA_PRODUCTO" varchar2(3BYTE)
+  "INDICADOR_SERVICIO_MAPEO" varchar2(1BYTE)
+  "NOMBRE_ARCHIVO" varchar2(200BYTE)
+  "DESCRIPCION" varchar2(80BYTE)
+  "MODIFICACION" varchar2(80BYTE)
+  "TIPO_REGISTRO" "number(38,0)"
+  "SUB_PIE" varchar2(80BYTE)
+  "DATO" varchar2(2000BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICAION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "USUARIO" "HIST varchar2(20BYTE)"
+  "FECHA_HIST" date
+}
+
+Table "MC_TIMELINESS_CODE" {
+  "ID_TIMELINESS_CODE" "number(11,0)"
+  "EFF_TIME_STAMP" timestamp(6)
+  "ACTIVE_CODE" varchar2(1BYTE)
+  "TIME_AUTH_CODE_POINTER" varchar2(11BYTE)
+  "SYSTEM_APP" varchar2(1BYTE)
+  "AIRLINE_IND" varchar2(1BYTE)
+  "SUBMISSION_TIME_FRM" varchar2(4BYTE)
+  "EXC_NON_PROC_DAY_SW" varchar2(1BYTE)
+  "HOLIDAY_EXC" varchar2(1BYTE)
+  "TX_DATE_EXC" varchar2(1BYTE)
+  "HEADER_PROC_DATE_EXC" varchar2(1BYTE)
+  "AUTHORIZATION_IND" varchar2(1BYTE)
+  "AIRLINE_IND2" varchar2(1BYTE)
+  "SUBMISSION_TIME_FRM2" varchar2(4BYTE)
+  "EXC_NON_PROC_DAY_SW2" varchar2(1BYTE)
+  "HOLIDAY_EXC2" varchar2(1BYTE)
+  "TX_DATE_EXC2" varchar2(1BYTE)
+  "HEADER_PROC_DATE_EXC2" varchar2(1BYTE)
+  "AUTHORIZATION_IND2" varchar2(1BYTE)
+  "ENABLED" "number(1,0)"
+}
+
+Table "MC_T464_SETTLEMENT_SUMMARY" {
+  "ID_SETTLEMENT_SUMMARY" "number(19,0)"
+  "ID_EXECUTION" "number(19,0)"
+  "ID_FILE" "number(19,0)"
+  "PROCESS_DATE" date
+  "STATUS" varchar2(50BYTE)
+  "MESSAGE_TYPE" varchar2(4BYTE)
+  "SETTLEMENT_SERVICE_NUMBER" varchar2(3BYTE)
+  "INTRACURRENCY_AGREEMENT" varchar2(4BYTE)
+  "SETTLEMENT_CURRENCY_CODE" varchar2(3BYTE)
+  "IMPLIED_DECIMAL_SETTLEMENT" varchar2(1BYTE)
+  "PROCESSOR_TYPE" varchar2(1BYTE)
+  "TOTAL_DEBIT_AMOUNT" "number(20,4)"
+  "NUMBER_OF_DEBIT_ITEMS" "number(10,0)"
+  "TOTAL_CREDIT_AMOUNT" "number(20,4)"
+  "NUMBER_OF_CREDIT_ITEMS" "number(10,0)"
+  "TOTAL_REVERSAL_DEBIT_AMOUNT" "number(20,4)"
+  "NUMBER_OF_DEBIT_REVERSALS" "number(10,0)"
+  "TOTAL_REVERSAL_CREDIT_AMOUNT" "number(20,4)"
+  "NUMBER_OF_CREDIT_REVERSALS" "number(10,0)"
+  "NUMBER_OF_NON_FINANCIAL" "number(10,0)"
+  "TOTAL_INTERCHANGE_DEBIT" "number(20,4)"
+  "TOTAL_INTERCHANGE_CREDIT" "number(20,4)"
+  "TOTAL_NET_SETTLEMENT" "number(20,4)"
+  "TOTAL_NET_SETTLEMENT_DRCR" varchar2(1BYTE)
+  "TOTAL_DEBIT_WITH_FEES" "number(20,4)"
+  "NUMBER_OF_DEBIT_WITH_FEES" "number(10,0)"
+  "TOTAL_CREDIT_WITH_FEES" "number(20,4)"
+  "NUMBER_OF_CREDIT_WITH_FEES" "number(10,0)"
+  "EXT_PRECISION_INTERCHANGE_DEBIT" "number(20,4)"
+  "EXT_PRECISION_INTERCHANGE_CREDIT" "number(20,4)"
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(100BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(100BYTE)
+}
+
+Table "MC_T464_TRANSACTION" {
+  "ID_T464_TRANSACTION" "number(19,0)"
+  "ID_SETTLEMENT_SUMMARY" "number(19,0)"
+  "ID_EXECUTION" "number(19,0)"
+  "ID_FILE" "number(19,0)"
+  "ID_SETTLEMENT" "number(19,0)"
+  "SETTLEMENT_DATE" date
+  "SETTLEMENT_TYPE" varchar2(1BYTE)
+  "STATUS" varchar2(50BYTE)
+  "ISSUER_ID" "number(10,0)"
+  "BRANCH_ISS_ID" "number(10,0)"
+  "ACQUIRER_ID" "number(10,0)"
+  "BRANCH_ACQ_ID" "number(10,0)"
+  "PROCESS_DATE" date
+  "CONFIRM_DATE" date
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "MESSAGE_TYPE" varchar2(4BYTE)
+  "SWITCH_SERIAL_NUMBER" varchar2(9BYTE)
+  "PROCESSOR_TYPE" varchar2(1BYTE)
+  "PROCESSOR_ID" varchar2(4BYTE)
+  "TRANSACTION_DATE" varchar2(6BYTE)
+  "TRANSACTION_TIME" varchar2(6BYTE)
+  "PAN_LENGTH" varchar2(2BYTE)
+  "PAN" varchar2(19BYTE)
+  "PROCESSING_CODE" varchar2(6BYTE)
+  "TRACE_NUMBER" varchar2(6BYTE)
+  "MERCHANT_TYPE" varchar2(4BYTE)
+  "POS_ENTRY" varchar2(3BYTE)
+  "REFERENCE_NUMBER" varchar2(12BYTE)
+  "ACQUIRER_INSTITUTION_ID" varchar2(10BYTE)
+  "TERMINAL_ID" varchar2(10BYTE)
+  "RESPONSE_CODE" varchar2(2BYTE)
+  "BRAND" varchar2(3BYTE)
+  "ADVICE_REASON_CODE" varchar2(7BYTE)
+  "INTRACURRENCY_AGREEMENT_CODE" varchar2(4BYTE)
+  "AUTHORIZATION_ID" varchar2(6BYTE)
+  "TRANSACTION_CURRENCY_CODE" varchar2(3BYTE)
+  "COMPLETED_AMOUNT_TRANSACTION" "number(20,4)"
+  "COMPLETED_AMOUNT_TRANSACTION_DRCR" varchar2(1BYTE)
+  "CASH_BACK_AMOUNT" "number(20,4)"
+  "CASH_BACK_DRCR" varchar2(1BYTE)
+  "ACCESS_FEE" "number(20,4)"
+  "ACCESS_FEE_DRCR" varchar2(1BYTE)
+  "SETTLEMENT_CURRENCY_CODE" varchar2(3BYTE)
+  "CONVERSION_RATE" "number(20,8)"
+  "COMPLETED_AMOUNT_SETTLEMENT" "number(20,4)"
+  "COMPLETED_AMOUNT_SETTLEMENT_DRCR" varchar2(1BYTE)
+  "INTERCHANGE_FEE" "number(20,4)"
+  "INTERCHANGE_FEE_DRCR" varchar2(1BYTE)
+  "SERVICE_LEVEL_INDICATOR" varchar2(3BYTE)
+  "ENRICHED_RESPONSE_CODE" varchar2(2BYTE)
+  "POSITIVE_ID_INDICATOR" varchar2(1BYTE)
+  "ATM_SURCHARGE_PROGRAM_ID" varchar2(1BYTE)
+  "CROSS_BORDER_INDICATOR" varchar2(1BYTE)
+  "CROSS_BORDER_CURRENCY_INDICATOR" varchar2(1BYTE)
+  "REQUESTED_AMOUNT_TRANSACTION" "number(20,4)"
+  "ADDITIONAL_TRACE_NUMBER" varchar2(6BYTE)
+  "RECON_ACTIVITY" varchar2(1BYTE)
+  "CREATED_AT" timestamp(6)
+  "CREATED_BY" varchar2(100BYTE)
+  "UPDATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(100BYTE)
+}
+
+Table "PRO_BASEII_INC" {
+  "ID_ARCHIVO" "number(38,0)"
+  "FECHA_PROCESO_ARCHIVO" date
+  "LOTE_ARCHIVO" "number(38,0)"
+  "SECUENCIA_ARCHIVO" "number(38,0)"
+  "TC" char(2BYTE)
+  "TCQ" char(1BYTE)
+  "TCSN" char(1BYTE)
+  "DATA" char(164BYTE)
+  "ESTADO" "number(38,0)"
+  "FECHA_CREACION" date
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+}
+
+Table "PRO_BASEII_INC_ARCHIVO" {
+  "ID" "number(38,0)"
+  "NOMBRE" varchar2(200BYTE)
+  "ESTADO" "number(38,0)"
+  "ID_PROCESO" "number(38,0)"
+  "FECHA_PROCESO" date
+  "FECHA_PROCESO_ARCHIVO" date
+  "TOTAL_COMPRA" "number(26,6)"
+  "TOTAL_AVANCE" "number(26,6)"
+  "FECHA_CREACION" date
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+}
+
+Table "PRO_FEE_APLICADOS" {
+  "ID" "number(38,0)"
+  "SIS_TIPO_LOCAL" "number(38,0)"
+  "BANCO_ID" "number(38,0)"
+  "MONEDA" "number(38,0)"
+  "SIS_PRODUCTO" "number(38,0)"
+  "FEE_MOTIVO" varchar2(255BYTE)
+  "FECHA" date
+  "MONTO" "number(13,4)"
+  "USUARIO_CREACION" varchar2(50BYTE)
+  "FECHA_CREACION" timestamp(6)
+  "USUARIO_MODIFICACION" varchar2(50BYTE)
+  "FECHA_MODIFICACION" timestamp(6)
+  "ACTIVO" "number(1,0)"
+}
+
+Table "PRO_TRANSACCIONES_INCOMING" {
+  "ID_ARCHIVO" "number(38,0)"
+  "FECHA_PROCESO" date
+  "LOTE" "number(38,0)"
+  "SECUENCIA" "number(38,0)"
+  "TARJETA" varchar2(19BYTE)
+  "MICROFIL" varchar2(23BYTE)
+  "FECHA_COMPRA" date
+  "MONTO_DESTINO" "number(26,6)"
+  "MONEDA_DESTINO" "number(38,0)"
+  "MONTO_ORIGEN" "number(26,6)"
+  "MONEDA_ORIGEN" "number(38,0)"
+  "NOMBRE_COMERCIO" varchar2(25BYTE)
+  "CIUDAD_COMERCIO" varchar2(13BYTE)
+  "PAIS_COMERCIO" varchar2(3BYTE)
+  "TIPO_LIQUIDACION" varchar2(3BYTE)
+  "NUMERO_AUTORIZACION" varchar2(6BYTE)
+  "NUMERO_COMERCIO" varchar2(15BYTE)
+  "TERMINAL" varchar2(8BYTE)
+  "TOKENIZADA" "number(9,0)"
+  "POS_ENTRY_CODE" varchar2(4BYTE)
+  "MCC" varchar2(8BYTE)
+  "CASH_BACK" "number(26,0)"
+  "BANCO_EMISOR" "number(4,0)"
+  "SUCURSAL_EMISOR" "number(5,0)"
+  "SIS_MIEMBRO" "number(38,0)"
+  "CODIGO_USO" varchar2(15BYTE)
+  "CODIGO_RAZON" varchar2(15BYTE)
+  "BANDERA_LIQUIDACION" varchar2(15BYTE)
+  "ATRIBUTO_REEMBOLSO" varchar2(15BYTE)
+  "TIPO_FONDO" "number(2,0)"
+  "COMISION_EMI" "number(26,6)"
+  "FECHA_CREACION" date
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+}
+
+Table "QR_CUENTAS_PARTICIPANTES" {
+  "CODIGO" number
+  "TIPO_PARTICIPANTE" number
+  "BANCO_CUENTA" number
+  "NRO_CUENTA" number
+  "TIPO_DOCUMENTO" number
+  "DOCUMENTO" number
+  "TIPO_CUENTA" number
+  "TIPO_PERSONA" number
+  "MONEDA" number
+}
+
+Table "QR_PAGO_CONSOLIDADO" {
+  "FECHA_LIQUIDACION" date
+  "ADQUIRENTE" number
+  "SUCURSAL_ADQUIRENTE" number
+  "MEDIO_PAGO" number
+  "COMERCIO" number
+  "SUCURSAL" number
+  "PUNTO_VENTA" number
+  "FORMA_PAGO" number
+  "CENTRALIZADORA" number
+  "DIAS_PAGO" number
+  "GUBERNAMENTAL" "number(1,0)"
+  "CANTIDAD_TRANSACCIONES" number
+  "MONTO" "number(38,2)"
+  "CARGO" "number(38,2)"
+  "ABONO" "number(38,2)"
+  "MONEDA_LIQ" "number(3,0)"
+  "TIPO_PAGO" number
+  "BANCO_CUENTA" number
+  "NRO_CUENTA" number
+  "AGENCIA_CUENTA" number
+  "TIPO_CUENTA" number
+  "NOMBRE_TITULAR_CUENTA" varchar2(50BYTE)
+  "USUARIO_CREACION" varchar2(50BYTE)
+  "FECHA_CREACION" date
+}
+
+Table "QR_PAGO_DETALLE" {
+  "FECHA_TRANSACCION" date
+  "ADQUIRENTE" number
+  "SUCURSAL_ADQUIRENTE" number
+  "MEDIO_PAGO" number
+  "COD_ORIGINANTE" number
+  "IDENTIFICADOR" number
+  "MONTO" "number(38,2)"
+  "PORCENTAJE_COMISION" "number(4,2)"
+  "COMISION" "number(38,2)"
+  "ABONO" "number(38,2)"
+  "MONEDA" "number(3,0)"
+  "MONEDA_LIQ" "number(3,0)"
+  "COMERCIO" number
+  "SUCURSAL" number
+  "PUNTO_VENTA" number
+  "TERMINAL" varchar2(50BYTE)
+  "NRO_REFERENCIA" number
+  "FECHA_LIQUIDACION" number
+  "GATEWAY" number
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "QR_PARTICIPANTES" {
+  "COD_PARTICIPANTE" number
+  "DESCRIPCION" varchar2(100BYTE)
+  "MEDIO_PAGO" number
+  "COMISION" number
+  "ACTIVO" number
+}
+
+Table "REPORTES_CONFIG" {
+  "MARCA" varchar2(20BYTE)
+  "BANCO" varchar2(10BYTE)
+  "ID_EMISOR" number
+  "ID_ADQUIRENTE" number
+  "SUCURSAL" varchar2(20BYTE)
+  "ID_CONSULTA" number
+  "RUTA_BASE" varchar2(500BYTE)
+  "NOMBRE_ARCHIVO" varchar2(200BYTE)
+  "FORMATO" varchar2(10BYTE)
+  "ACTIVO" char(1BYTE)
+  "OBSERVACIONES" varchar2(500BYTE)
+}
+
+Table "RUTAS_VISA_SETTLEMETN" {
+  "BANCO" "number(4,0)"
+  "SUCURSAL" "number(5,0)"
+  "ROL" "number(1,0)"
+  "TIPO_FONDO" "number(2,0)"
+  "ID_CONSULTA" "number(38,0)"
+  "NOMBRE" varchar2(10BYTE)
+  "EXTENSION" varchar2(10BYTE)
+  "SALIDA" varchar2(100BYTE)
+  "SFTP" varchar2(1BYTE)
+}
+
+Table "SIN_PARAMETRIZACION_PERIODO" {
+  "MES" "number(2,0)"
+  "ANIO" "number(4,0)"
+  "TIPO_CAMBIO" "number(8,4)"
+  "FECHA_INICIO" "number(8,0)"
+  "FECHA_FIN" "number(8,0)"
+  "PROCESADO" "number(1,0)"
+  "USUARIO" varchar2(20BYTE)
+}
+
+Table "SIN_TRANSACCIONES_ENVIADAS" {
+  "NUMERO_RECEPCION" "number(14,0)"
+  "MES" "number(2,0)"
+  "ANIO" "number(4,0)"
+  "IMPORTE_TOTAL" "number(20,5)"
+  "CANTIDAD_REGISTROS" "number(4,0)"
+  "FECHA_ENVIO" "number(8,0)"
+  "NOMBRE_ARCHIVO" varchar2(300BYTE)
+  "USUARIO" varchar2(100BYTE)
+  "TIPO_TRANSACCION" varchar2(1BYTE)
+  "TIPO_DE_CAMBIO" "number(8,4)"
+  "ESTADO" "number(4,0)"
+  "HORA_ENVIO" varchar2(4BYTE)
+  "SECUENCIA" "number(6,0)"
+}
+
+Table "SIN_TRANSACCIONES_ENVIADAS_DET" {
+  "NIT_VENDEDOR" "number(14,0)"
+  "NOMBRE_VENDEDOR" varchar2(150BYTE)
+  "ACTIVIDAD_COMERCIO" varchar2(100BYTE)
+  "DIRECCION_VENDEDOR" varchar2(150BYTE)
+  "NUMERO_TARJETA" varchar2(30BYTE)
+  "FECHA_TRANSACCION" varchar2(10BYTE)
+  "IMPORTE_TRANSACCION" "number(20,5)"
+  "NUMERO_AUTORIZACION" varchar2(20BYTE)
+  "COMPROBANTE_TRANSACCION" varchar2(20BYTE)
+  "TIPO_TARJETA" "number(1,0)"
+  "NIT_ENTIDAD_EMISORA" "number(14,0)"
+  "NOMBRE_ENTIDAD_EMISORA" varchar2(150BYTE)
+  "MOVIMIENTO_PROCESO" "number(1,0)"
+  "NUMERO_RECEPCION" "number(14,0)"
+  "ESTADO" "number(4,0)"
+  "OBSERVACION" varchar2(200BYTE)
+  "MES" "number(2,0)"
+  "ANIO" "number(4,0)"
+  "SECUENCIA" "number(6,0)"
+}
+
+Table "SIN_TRANSACCIONES_ESTADOS" {
+  "CODIGO" "number(4,0)"
+  "NOMBRE" varchar2(100BYTE)
+  "DESCRIPCION" varchar2(100BYTE)
+}
+
+Table "SIN_TRANSACCIONES_REV_DET" {
+  "NIT_VENDEDOR" "number(14,0)"
+  "NUMERO_TARJETA" varchar2(30BYTE)
+  "FECHA_TRAN_ORIGEN" varchar2(10BYTE)
+  "NUMERO_AUTORIZACION_ORIGEN" varchar2(20BYTE)
+  "COMPROBANTE_TRANSACCION" varchar2(20BYTE)
+  "FECHA_REVERSION" varchar2(10BYTE)
+  "MONTO_REVERTIDO" "number(20,5)"
+  "NUMERO_RECEPCION" "number(14,0)"
+  "ESTADO" "number(4,0)"
+  "OBSERVACION" varchar2(200BYTE)
+  "MES" "number(2,0)"
+  "ANIO" "number(4,0)"
+  "SECUENCIA" "number(6,0)"
+}
+
+Table "STAGING_MATCH" {
+  "CC_TARJETA" varchar2(19BYTE)
+  "CC_AUTORIZACION" varchar2(6BYTE)
+  "FECHA_CAPTURA" date
+  "FECHA_LIQUIDACION" date
+  "USUARIO_CREACION" char(5BYTE)
+  "LOTE" number
+  "SECUENCIA" number
+}
+
+Table "ST_SETTLEMENT_ADJUSTMENTS" {
+  "ADJUSTMENT_ID" "number(19,0)"
+  "PROCESS_ID" "number(19,0)"
+  "SETTLEMENT_ID" "number(19,0)"
+  "SETTLEMENT_DATE" date
+  "SETTLEMENT_TYPE" varchar2(20BYTE)
+  "BRAND" varchar2(20BYTE)
+  "CARD_TYPE" varchar2(20BYTE)
+  "BANK_CODE" "number(10,0)"
+  "CURRENCY_CODE" varchar2(3BYTE)
+  "ENABLED" "number(1,0)"
+  "APPLIED_BY_CODE" "number(1,0)"
+  "AMOUNT" "number(18,2)"
+  "CR_DB" varchar2(2BYTE)
+  "COMMENTS" varchar2(999BYTE)
+  "RECORD_TYPE" varchar2(20BYTE)
+  "CREATED_BY" varchar2(50BYTE)
+  "CREATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(50BYTE)
+  "UPDATED_AT" timestamp(6)
+}
+
+Table "ST_SETTLEMENT_ISSUER_ACQUIRER" {
+  "SETTLEMENT_ID" "number(19,0)"
+  "PROCESS_ID" "number(19,0)"
+  "BANK_CODE" "number(10,0)"
+  "ACQUIRER_ID" "number(10,0)"
+  "ISSUER_ID" "number(10,0)"
+  "BRAND" varchar2(20BYTE)
+  "CARD_TYPE" varchar2(10BYTE)
+  "CURRENCY_CODE" varchar2(3BYTE)
+  "SETTLEMENT_TYPE" varchar2(20BYTE)
+  "SETTLEMENT_DATE" date
+  "CAPTURE_DATE_START" date
+  "CAPTURE_DATE_END" date
+  "ACQUIRER_TX_COUNT" "number(10,0)"
+  "ACQUIRER_TX_GROSS_AMOUNT" "number(18,2)"
+  "ACQUIRER_COMMISSION" "number(18,2)"
+  "MERCHANT_COMMISSION" "number(18,2)"
+  "ISSUER_TX_COUNT" "number(10,0)"
+  "ISSUER_TX_GROSS_AMOUNT" "number(18,2)"
+  "ISSUER_COMMISSION" "number(18,2)"
+  "BRAND_FEE_APPLIED" "number(18,2)"
+  "LINKSER_FEE_APPLIED" "number(18,2)"
+  "NET_AMOUNT_NO_FEES" number
+  "TOTAL_NET_AMOUNT" number
+  "CREATED_BY" varchar2(50BYTE)
+  "CREATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(50BYTE)
+  "UPDATED_AT" timestamp(6)
+}
+
+Table "ST_SETTLEMENT_TRANSACTION" {
+  "ID_TRANSACTION" "number(19,0)"
+  "ID_PROCESS" "number(19,0)"
+  "BRAND" varchar2(20BYTE)
+  "SETTLEMENT_TYPE" varchar2(20BYTE)
+  "SETTLEMENT_DATE" date
+  "CAPTURE_DATE_INIT" date
+  "CAPTURE_DATE_END" date
+  "SOURCE_TABLE" varchar2(20BYTE)
+  "SOURCE_ID" "number(19,0)"
+  "ISSUER_ID" "number(10,0)"
+  "ISSUER_BRANCH_ID" "number(10,0)"
+  "ISSUER_CODE" varchar2(1BYTE)
+  "ACQUIRER_ID" "number(10,0)"
+  "ACQUIRER_BRANCH_ID" "number(10,0)"
+  "ACQUIRER_CODE" varchar2(1BYTE)
+  "CARD_TYPE" varchar2(10BYTE)
+  "TX_CODE_1" varchar2(1BYTE)
+  "TX_CODE_2" varchar2(1BYTE)
+  "TRANSACTION_CODE" varchar2(2BYTE)
+  "TRANSACTION_TYPE" "number(3,0)"
+  "SETTLEMENT_METHOD" varchar2(1BYTE)
+  "USAGE_CODE" varchar2(2BYTE)
+  "ACCOUNT_NUMBER" varchar2(20BYTE)
+  "ACCOUNT_EXT" varchar2(3BYTE)
+  "CARD_NUMBER" varchar2(23BYTE)
+  "MICROFILM_NUMBER" varchar2(23BYTE)
+  "TRANSACTION_DATE" date
+  "DEST_AMOUNT" "number(18,2)"
+  "DEST_CURRENCY" varchar2(3BYTE)
+  "ORIG_AMOUNT" "number(18,2)"
+  "ORIG_CURRENCY" varchar2(3BYTE)
+  "CASHBACK_AMOUNT" "number(18,2)"
+  "ISSUER_FEE" "number(11,2)"
+  "ACQUIRER_FEE" "number(11,2)"
+  "MERCHANT_RETENTION" "number(11,2)"
+  "MERCHANT_NAME" varchar2(50BYTE)
+  "MERCHANT_CITY" varchar2(50BYTE)
+  "MERCHANT_COUNTRY" varchar2(3BYTE)
+  "MERCHANT_MCC" varchar2(4BYTE)
+  "MERCHANT_CODE" varchar2(15BYTE)
+  "POS_ENTRY_MODE" varchar2(2BYTE)
+  "TERMINAL_ID" varchar2(15BYTE)
+  "AUTHORIZATION_CODE" varchar2(10BYTE)
+  "MEMBER_CODE" varchar2(5BYTE)
+  "CREATED_BY" varchar2(50BYTE)
+  "CREATED_AT" timestamp(6)
+  "UPDATED_BY" varchar2(50BYTE)
+  "UPDATED_AT" timestamp(6)
+  "TRANSACTION_LOCAL_TIME" varchar2(6BYTE)
+}
+
+Table "TB_CAPT_COMERCIO_POS" {
+  "COMERCIO" varchar2(15BYTE)
+  "ACTIVO" "number(1,0)"
+}
+
+Table "TB_CAPT_MATRIZ_POS" {
+  "COMERCIO_MATRIZ" varchar2(15BYTE)
+  "ACTIVO" "number(1,0)"
+}
+
+Table "TB_CCA_COMERCIOS" {
+  "TCO_NOMRCH" char(7BYTE)
+  "TCO_SHORT_NM" char(36BYTE)
+  "TCO_FULL_NAME" char(47BYTE)
+  "TCO_RUBRO" char(3BYTE)
+  "TCO_SUBRUBRO" char(3BYTE)
+  "TCO_CATEGORY" char(4BYTE)
+  "TCO_ADDR" char(32BYTE)
+  "TCO_BARRIO_ZONA" char(19BYTE)
+  "TCO_MANZANA" char(4BYTE)
+  "TCO_UV" char(3BYTE)
+  "TCO_EDIF" char(20BYTE)
+  "TCO_OF_LOCAL" char(5BYTE)
+  "TCO_PISO" char(2BYTE)
+  "TCO_CITY" char(2BYTE)
+  "TCO_POST" char(6BYTE)
+  "TCO_FONO1" char(8BYTE)
+  "TCO_FAX" char(8BYTE)
+  "TCO_CONTACT" char(36BYTE)
+  "TCO_RUC" char(10BYTE)
+  "TCO_PAY_CYCLE" char(1BYTE)
+  "TCO_TRAN_PURSH" char(1BYTE)
+  "TCO_TRAN_AVEFE" char(1BYTE)
+  "TCO_TRAN_MAIL_O_T" char(1BYTE)
+  "TCO_TRAN_CAS_CSH" char(1BYTE)
+  "TCO_TRAN_VTA_PLAZO" char(1BYTE)
+  "TCO_TRAN_DEB_AUT" char(1BYTE)
+  "TCO_PROCESS_POS" char(1BYTE)
+  "TCO_PROCESS_IMPRINTER" char(1BYTE)
+  "TCO_PROCESS_DEB_AUT" char(1BYTE)
+  "TCO_ESQ_LIM_PISO" char(2BYTE)
+  "TCO_ESQ_PREF" char(2BYTE)
+  "TCO_FEE" char(4BYTE)
+  "TCO_LIM_PISO" char(7BYTE)
+  "TCO_WB_COPY" char(2BYTE)
+  "TCO_STATUS" char(1BYTE)
+  "TCO_LAST_PAYMT" char(7BYTE)
+  "TCO_CLOSE_DATE" char(7BYTE)
+  "TCO_INAG_DATE" char(7BYTE)
+  "TCO_ENT_AFIL" char(1BYTE)
+  "TCO_VISA" char(1BYTE)
+  "TCO_MASTER" char(1BYTE)
+  "TCO_SETUP_DATE" char(7BYTE)
+  "TCO_OFFICER" char(5BYTE)
+  "TCO_MOD_DATE" char(7BYTE)
+  "TCO_MOD_USER" char(5BYTE)
+  "TCO_ELECTRON" char(1BYTE)
+  "TCO_AEROCRED" char(1BYTE)
+  "TCO_MATT_MRCH" char(7BYTE)
+  "TCO_ACCT_NO" char(5BYTE)
+  "TCO_ACCT_BS" char(1BYTE)
+  "TCO_ACCT_US" char(1BYTE)
+  "TCO_ESQ_CARG_COD" char(2BYTE)
+  "TCO_FORM_PAG_CARG" char(1BYTE)
+  "MRCH_MSG" char(30BYTE)
+  "TCO_CTA_CARGO" char(14BYTE)
+  "TCO_ESQ_PREF_US" char(2BYTE)
+  "TCO_FONO2" char(8BYTE)
+  "TCO_REPR_LEGAL" char(26BYTE)
+  "TCO_CARGO_REPR" char(15BYTE)
+  "TCO_CARGO_CONTACT" char(25BYTE)
+  "TCO_CARGO_BCO" char(1BYTE)
+  "TCO_CARGO_SUC" char(2BYTE)
+  "TCO_LINKSER_NM" char(23BYTE)
+  "TCO_PROMOTOR" char(5BYTE)
+  "TCO_ESTADO" char(1BYTE)
+  "TCO_COMERCIO" char(1BYTE)
+  "TCO_PROPIETARIA" char(1BYTE)
+  "TCO_SUC_ADMINIS" char(1BYTE)
+  "TCO_CHEQUE" char(1BYTE)
+  "TCO_TIPO" char(1BYTE)
+  "TCO_NIT" char(12BYTE)
+  "TCO_COM_DIF" char(2BYTE)
+}
+
+Table "TB_CCA_EQUIPOS" {
+  "TMEQ_R8" char(12BYTE)
+  "TMEQ_MRCH" char(7BYTE)
+  "TMEQ_TYPE" char(1BYTE)
+  "TMEQ_DESC" char(24BYTE)
+  "TMEQ_SUPLYR" char(16BYTE)
+  "TMEQ_MODEL_NO" char(12BYTE)
+  "TMEQ_YEAR_MADE" char(4BYTE)
+  "TMEQ_COST" char(7BYTE)
+  "TMEQ_INSTL_DATE" char(7BYTE)
+  "TMEQ_PURCH_DATE" char(7BYTE)
+  "TMEQ_DUENO" char(1BYTE)
+}
+
+Table "TB_CCA_LIQCHE" {
+  "COCHEQ_KEY" char(7BYTE)
+  "COCHEQ_BS_USD" char(1BYTE)
+  "COCHEQ_NAME_S" char(36BYTE)
+  "COCHEQ_BANCO" char(3BYTE)
+  "COCHEQ_NROCUENTA" char(22BYTE)
+  "COCHEQ_DOC_EXPEDIDO" char(2BYTE)
+  "COCHEQ_TIP_CUENTA" char(1BYTE)
+  "COCHEQ_RESERVADO" char(22BYTE)
+  "COCHEQ_OBSERVACION" char(20BYTE)
+  "COCHEQ_FECHA" char(7BYTE)
+  "COCHEQ_OPER" char(5BYTE)
+  "COCHEQ_NIT_TITU_CUEN" char(12BYTE)
+  "COCHEQ_NOMB_TITU_CUEN" char(34BYTE)
+}
+
+Table "TB_CCA_METODO_PAGO" {
+  "TMEP_NRO_COM" char(7BYTE)
+  "TMEP_BANK" char(1BYTE)
+  "TMEP_BRANCH" char(2BYTE)
+  "TMEP_CURRENCY" char(3BYTE)
+  "TMEP_TYPE" char(1BYTE)
+  "TMEP_NRO_CTA" char(16BYTE)
+  "TMEP_LAST_PAYM" char(7BYTE)
+  "TMEP_AMOUNT_CRED" char(11BYTE)
+  "TMEP_CNT_CRED" char(4BYTE)
+  "TMEP_AMOUNT_DEB" char(11BYTE)
+  "TMEP_CNT_DEB" char(4BYTE)
+  "TMEP_USER_ADD" char(5BYTE)
+  "TMEP_DATE_ADD" char(7BYTE)
+  "TMEP_USER_MOD" char(5BYTE)
+  "TMEP_DATE_MOD" char(7BYTE)
+  "TMEP_NRO_CTA_OLD" char(16BYTE)
+}
+
+Table "TB_COMERCIOS_EXCEPCIONALES" {
+  "MATRIZ" varchar2(7BYTE)
+  "NOMBRE" varchar2(100BYTE)
+  "ESTADO" varchar2(20BYTE)
+}
+
+Table "TB_NOFACTMATRIZ" {
+  "NIT" varchar2(20BYTE)
+  "NOMBRE_COMERCIO" varchar2(120BYTE)
+  "ESTADO" number
+  "USUARIO" varchar2(20BYTE)
+  "FECHA" date
+}
+
+Table "TB_PARAM_COMERCIO_MATRIZ" {
+  "NOMBRE_COMERCIO" varchar2(36BYTE)
+  "NUMERO_COMERCIO" varchar2(7BYTE)
+  "HABILITADO" "number(1,0)"
+}
+
+Table "TB_QR_COMERCIOS_COMISION" {
+  "ID_COMERCIO" varchar2(10BYTE)
+  "COMISION" "number(12,2)"
+  "ID_TIPO" "number(8,0)"
+  "ESTADO" "number(2,0)"
+}
+
+Table "TJ_BANCOS_EMISORES" {
+  "BANCO" "number(4,0)"
+  "DESCRIPCION" varchar2(200BYTE)
+  "DENOMINACION" varchar2(20BYTE)
+  "BANCO_CCA" varchar2(1BYTE)
+  "PAIS" "number(38,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "ADQUIRENTE_ID" "number(8,0)"
+  "DOCUMENTO" varchar2(20BYTE)
+}
+
+Table "TJ_BINES_EMISORES" {
+  "BANCO" "number(4,0)"
+  "MARCA" "number(2,0)"
+  "TIPO_TARJETA" "number(2,0)"
+  "BIN_BAJO" varchar2(19BYTE)
+  "BIN_ALTO" varchar2(19BYTE)
+  "DESCRIPCION" varchar2(200BYTE)
+  "LONGITUD" "number(2,0)"
+  "SUCURSAL" "number(5,0)"
+  "TRANSACCIONAL" "number(1,0)"
+  "EMBOCE" "number(38,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "TJ_SUCURSALES_EMISORES" {
+  "BANCO" "number(4,0)"
+  "SUCURSAL" "number(5,0)"
+  "DESCRIPCION" varchar2(50BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "TJ_TARJETAS_EMISORES" {
+  "TARJETA" varchar2(19BYTE)
+  "BANCO" "number(4,0)"
+  "SUCURSAL" "number(5,0)"
+  "ADICIONAL" varchar2(1BYTE)
+  "MARCA" "number(38,0)"
+  "FECHA_ALTA" "number(8,0)"
+  "TIPO_FONDO_EMISOR" "number(38,0)"
+  "TIPO_FONDO" "number(38,0)"
+  "TIPO_TARJETA" "number(2,0)"
+  "FECHA_EXPIRACION" varchar2(4BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "TJ_TIPOS_TARJETAS_EMISORES" {
+  "BANCO" "number(4,0)"
+  "MARCA" "number(38,0)"
+  "TIPO_TARJETA" "number(2,0)"
+  "TIPO_FONDO_EMISOR" "number(38,0)"
+  "DESCRIPCION" varchar2(100BYTE)
+  "TIPO_FONDO" "number(38,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "VI_ARDEF" {
+  "BIN_ALTO" varchar2(9BYTE)
+  "BIN_BAJO" varchar2(9BYTE)
+  "ID_EMISOR" varchar2(6BYTE)
+  "ALGORITMO_VALIDADOR" varchar2(1BYTE)
+  "LONGITUD_TARJETA" varchar2(2BYTE)
+  "INDICADOR_TOKEN" varchar2(1BYTE)
+  "INDICADOR_UNICO_LIMPIEZA" varchar2(1BYTE)
+  "BASEII_CIB" varchar2(6BYTE)
+  "DOMINIO" varchar2(1BYTE)
+  "REGION" varchar2(1BYTE)
+  "PAIS" varchar2(2BYTE)
+  "TICKET_PRINCIPAL" varchar2(1BYTE)
+  "INDICADOR_TECNOLOGIA" varchar2(1BYTE)
+  "REGION_ARDEF" varchar2(1BYTE)
+  "PAIS_ARDEF" varchar2(2BYTE)
+  "NIVEL_COMERCIAL_2" varchar2(1BYTE)
+  "NIVEL_COMERCIAL_MEJOR_3" varchar2(1BYTE)
+  "AVISO_COMERCIAL_POS" varchar2(1BYTE)
+  "EVIDENCIA_VAT" varchar2(1BYTE)
+  "CREDITO_ORIGINAL" varchar2(1BYTE)
+  "NIVEL_PROCESO_CUENTA" varchar2(1BYTE)
+  "TRANSFERENCIA_DINERO_CON_TC" varchar2(1BYTE)
+  "JUEGOS_DE_AZAR_CON_TC" varchar2(1BYTE)
+  "ID_PRODUCTO" varchar2(2BYTE)
+  "TARJETA_COMBINADA" varchar2(1BYTE)
+  "FAST_FUNDS" varchar2(1BYTE)
+  "INDICADOR_VIAJE" varchar2(1BYTE)
+  "ID_PROGRAMA_B2B" varchar2(2BYTE)
+  "INDICADOR_PROGRAMA_PREPAGO" varchar2(1BYTE)
+  "INDICADOR_ACCESO_MULI_CUENTAS" varchar2(1BYTE)
+  "FUENTE_FINANCIAMIENTO_CUENTA" varchar2(1BYTE)
+  "ACUERDO_CONCILIACION" varchar2(1BYTE)
+  "DATOS_CUENTA_VIAJE" varchar2(1BYTE)
+  "USO_REGTRIGIDO_CUENTA" varchar2(1BYTE)
+  "INDICADOR_NNSS" varchar2(1BYTE)
+  "SUBTIPO_PRODUCTO" varchar2(2BYTE)
+  "CAJERO_ALTERNATIVO" varchar2(1BYTE)
+  "LINEA" varchar2(140BYTE)
+  "FECHA_CREACION" date
+  "HORA_CREACION" "number(6,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "HORA_MODIFICACION" "number(6,0)"
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+}
+
+Table "VI_ARDEF_BOL" {
+  "BIN_ALTO" varchar2(9BYTE)
+  "BIN_BAJO" varchar2(9BYTE)
+  "ID_EMISOR" varchar2(6BYTE)
+  "ALGORITMO_VALIDADOR" varchar2(1BYTE)
+  "LONGITUD_TARJETA" varchar2(2BYTE)
+  "INDICADOR_TOKEN" varchar2(1BYTE)
+  "INDICADOR_UNICO_LIMPIEZA" varchar2(1BYTE)
+  "BASEII_CIB" varchar2(6BYTE)
+  "DOMINIO" varchar2(1BYTE)
+  "REGION" varchar2(1BYTE)
+  "PAIS" varchar2(2BYTE)
+  "TICKET_PRINCIPAL" varchar2(1BYTE)
+  "INDICADOR_TECNOLOGIA" varchar2(1BYTE)
+  "REGION_ARDEF" varchar2(1BYTE)
+  "PAIS_ARDEF" varchar2(2BYTE)
+  "NIVEL_COMERCIAL_2" varchar2(1BYTE)
+  "NIVEL_COMERCIAL_MEJOR_3" varchar2(1BYTE)
+  "AVISO_COMERCIAL_POS" varchar2(1BYTE)
+  "EVIDENCIA_VAT" varchar2(1BYTE)
+  "CREDITO_ORIGINAL" varchar2(1BYTE)
+  "NIVEL_PROCESO_CUENTA" varchar2(1BYTE)
+  "TRANSFERENCIA_DINERO_CON_TC" varchar2(1BYTE)
+  "JUEGOS_DE_AZAR_CON_TC" varchar2(1BYTE)
+  "ID_PRODUCTO" varchar2(2BYTE)
+  "TARJETA_COMBINADA" varchar2(1BYTE)
+  "FAST_FUNDS" varchar2(1BYTE)
+  "INDICADOR_VIAJE" varchar2(1BYTE)
+  "ID_PROGRAMA_B2B" varchar2(2BYTE)
+  "INDICADOR_PROGRAMA_PREPAGO" varchar2(1BYTE)
+  "INDICADOR_ACCESO_MULI_CUENTAS" varchar2(1BYTE)
+  "FUENTE_FINANCIAMIENTO_CUENTA" varchar2(1BYTE)
+  "ACUERDO_CONCILIACION" varchar2(1BYTE)
+  "DATOS_CUENTA_VIAJE" varchar2(1BYTE)
+  "USO_REGTRIGIDO_CUENTA" varchar2(1BYTE)
+  "INDICADOR_NNSS" varchar2(1BYTE)
+  "SUBTIPO_PRODUCTO" varchar2(2BYTE)
+  "CAJERO_ALTERNATIVO" varchar2(1BYTE)
+  "LINEA" varchar2(140BYTE)
+  "FECHA_CREACION" date
+  "HORA_CREACION" "number(6,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "HORA_MODIFICACION" "number(6,0)"
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+}
+
+Table "VI_ARDEF_HISTORICO" {
+  "FECHA" date
+  "HORA" "number(6,0)"
+  "BIN_ALTO" varchar2(9BYTE)
+  "BIN_BAJO" varchar2(9BYTE)
+  "ID_EMISOR" varchar2(6BYTE)
+  "ALGORITMO_VALIDADOR" varchar2(1BYTE)
+  "LONGITUD_TARJETA" varchar2(2BYTE)
+  "INDICADOR_TOKEN" varchar2(1BYTE)
+  "INDICADOR_UNICO_LIMPIEZA" varchar2(1BYTE)
+  "BASEII_CIB" varchar2(6BYTE)
+  "DOMINIO" varchar2(1BYTE)
+  "REGION" varchar2(1BYTE)
+  "PAIS" varchar2(2BYTE)
+  "TICKET_PRINCIPAL" varchar2(1BYTE)
+  "INDICADOR_TECNOLOGIA" varchar2(1BYTE)
+  "REGION_ARDEF" varchar2(1BYTE)
+  "PAIS_ARDEF" varchar2(2BYTE)
+  "NIVEL_COMERCIAL_2" varchar2(1BYTE)
+  "NIVEL_COMERCIAL_MEJOR_3" varchar2(1BYTE)
+  "AVISO_COMERCIAL_POS" varchar2(1BYTE)
+  "EVIDENCIA_VAT" varchar2(1BYTE)
+  "CREDITO_ORIGINAL" varchar2(1BYTE)
+  "NIVEL_PROCESO_CUENTA" varchar2(1BYTE)
+  "TRANSFERENCIA_DINERO_CON_TC" varchar2(1BYTE)
+  "JUEGOS_DE_AZAR_CON_TC" varchar2(1BYTE)
+  "ID_PRODUCTO" varchar2(2BYTE)
+  "TARJETA_COMBINADA" varchar2(1BYTE)
+  "FAST_FUNDS" varchar2(1BYTE)
+  "INDICADOR_VIAJE" varchar2(1BYTE)
+  "ID_PROGRAMA_B2B" varchar2(2BYTE)
+  "INDICADOR_PROGRAMA_PREPAGO" varchar2(1BYTE)
+  "INDICADOR_ACCESO_MULI_CUENTAS" varchar2(1BYTE)
+  "FUENTE_FINANCIAMIENTO_CUENTA" varchar2(1BYTE)
+  "ACUERDO_CONCILIACION" varchar2(1BYTE)
+  "DATOS_CUENTA_VIAJE" varchar2(1BYTE)
+  "USO_REGTRIGIDO_CUENTA" varchar2(1BYTE)
+  "INDICADOR_NNSS" varchar2(1BYTE)
+  "SUBTIPO_PRODUCTO" varchar2(2BYTE)
+  "CAJERO_ALTERNATIVO" varchar2(1BYTE)
+  "LINEA" varchar2(140BYTE)
+  "FECHA_CREACION" date
+  "HORA_CREACION" "number(6,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "HORA_MODIFICACION" "number(6,0)"
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+}
+
+Table "VI_AUTORIZACIONES_INCOMING" {
+  "ID_ARCHIVO" "number(38,0)"
+  "FECHA_PROCESO" date
+  "LOTE" "number(38,0)"
+  "SECUENCIA" "number(38,0)"
+  "TARJETA" varchar2(19BYTE)
+  "CODIGO_RESPUESTA" varchar2(6BYTE)
+  "CODIGO_AUTORIZACION" varchar2(9BYTE)
+  "FECHA_TRANSMISION" date
+  "MONTO" "number(26,6)"
+  "MONEDA_FACTURACION" "number(38,0)"
+  "MONEDA_TRANSACCION" "number(38,0)"
+  "TASA_CONVERSION" "number(26,6)"
+  "FECHA_EXPIRACION" date
+  "ID_INSTITUCION" varchar2(18BYTE)
+  "CODIGO_PAIS_INSTITUCION" varchar2(6BYTE)
+  "TIPO_COMERCIO" varchar2(9BYTE)
+  "POS_ENTRY_CODE" varchar2(4BYTE)
+  "NUM_REF_RECUPERACION" "number(26,0)"
+  "TIPO_FONDO" "number(38,0)"
+  "BANCO" "number(4,0)"
+  "FECHA_CREACION" date
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+}
+
+Table "VI_BASEII_INC" {
+  "ID_ARCHIVO" "number(38,0)"
+  "FECHA_PROCESO_ARCHIVO" date
+  "LOTE_ARCHIVO" "number(38,0)"
+  "SECUENCIA_ARCHIVO" "number(38,0)"
+  "TC" char(2BYTE)
+  "TCQ" char(1BYTE)
+  "TCSN" char(1BYTE)
+  "DATA" char(164BYTE)
+  "ESTADO" "number(38,0)"
+  "FECHA_CREACION" date
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+}
+
+Table "VI_BASEII_INC_ARCHIVO" {
+  "ID" "number(38,0)"
+  "NOMBRE" varchar2(200BYTE)
+  "ESTADO" "number(38,0)"
+  "ID_PROCESO" "number(38,0)"
+  "FECHA_PROCESO" date
+  "FECHA_PROCESO_ARCHIVO" date
+  "FECHA_CREACION" date
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+}
+
+Table "VI_BASEII_OUT" {
+  "ID_ARCHIVO" "number(38,0)"
+  "TIPO_OUTGOING" "number(38,0)"
+  "FECHA_PRESENTACION" date
+  "FECHA_PRESENTADA" date
+  "FECHA_REGISTRO" date
+  "LOTE_REGISTRO" "number(38,0)"
+  "SECUENCIA_REGISTRO" "number(38,0)"
+  "MARCA" "number(38,0)"
+  "PRODUCTO" "number(38,0)"
+  "TC" char(2BYTE)
+  "TCQ" char(1BYTE)
+  "TCSN" char(1BYTE)
+  "DATA" char(164BYTE)
+  "LOTE" "number(38,0)"
+  "ESTADO" "number(38,0)"
+  "CODIGO_RECHAZO" varchar2(4BYTE)
+  "DESCRIPCION_RECHAZO" varchar2(200BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+}
+
+Table "VI_BASEII_OUT_ARCHIVO" {
+  "ID" "number(38,0)"
+  "TIPO_OUTGOING" "number(38,0)"
+  "NOMBRE" varchar2(200BYTE)
+  "ESTADO" "number(38,0)"
+  "FECHA_CREACION" date
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "ID_PROCESO" number
+}
+
+Table "VI_BIN_PROPIETARIA_NAL" {
+  "BIN_BAJO" varchar2(9BYTE)
+  "BIN_ALTO" varchar2(9BYTE)
+  "MARCA" "number(38,0)"
+  "TIPO_FONDO" "number(38,0)"
+}
+
+Table "VI_CARGOS_FEE" {
+  "ID_CARGO" "number(19,0)"
+  "ID_MARCA" "number(2,0)"
+  "TIPO_TRANSACCION" varchar2(10BYTE)
+  "SOLICITANTE" varchar2(100BYTE)
+  "FECHA_SOLICITUD" date
+  "FECHA_PRESENTACION" date
+  "ESTADO" "number(2,0)"
+  "DEST_BIN" varchar2(20BYTE)
+  "SRCE_BIN" varchar2(20BYTE)
+  "REASON_CODE" varchar2(10BYTE)
+  "COUNTRY_CODE" varchar2(10BYTE)
+  "EVENT_DATE_MMDD" varchar2(10BYTE)
+  "ACCT_NO" varchar2(50BYTE)
+  "ACCT_NO_E" varchar2(10BYTE)
+  "DEST_AMT" "number(14,2)"
+  "DEST_CURR" varchar2(10BYTE)
+  "SRCE_AMT" "number(14,2)"
+  "SRCE_CURR" varchar2(10BYTE)
+  "MESSAGE_TEXT" varchar2(250BYTE)
+  "SETTL_FLG" varchar2(10BYTE)
+  "TRANS_ID" varchar2(50BYTE)
+  "CENTRAL_PROC_DATE_YDDD" varchar2(10BYTE)
+  "REIM_ATTR" varchar2(10BYTE)
+  "USUARIO_CREACION" varchar2(50BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(50BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "VI_CONFIG_LIQ_ARCHIVOS" {
+  "BANCO" "number(4,0)"
+  "SUCURSAL" "number(5,0)"
+  "ROL" "number(1,0)"
+  "TIPO_FONDO" "number(2,0)"
+  "ID_CONSULTA" "number(38,0)"
+  "NOMBRE" varchar2(10BYTE)
+  "EXTENSION" varchar2(10BYTE)
+  "SALIDA" varchar2(100BYTE)
+  "SFTP" varchar2(1BYTE)
+}
+
+Table "VI_CUADRE_CONFIRMACION" {
+  "ID" "number(38,0)"
+  "ID_SUBPROCESO" "number(38,0)"
+  "FECHA_CUADRE" date
+  "PVI_CANTIDAD" "number(38,0)"
+  "PVI_MONTO" "number(38,2)"
+  "EP110E_CANT_ACEPTADAS" "number(38,0)"
+  "EP110E_MONTO_ACEPTADOS" "number(38,2)"
+  "EP110E_CANT_RECHAZADAS" "number(38,0)"
+  "EP110E_MONTO_RECHAZADOS" "number(38,2)"
+  "DIFERENCIA_CANTIDAD" "number(38,0)"
+  "DIFERENCIA_MONTO" "number(15,2)"
+  "ESTADO" varchar2(20BYTE)
+  "USUARIO" varchar2(30BYTE)
+}
+
+Table "VI_CUADRE_LIQUIDACION" {
+  "ID" "number(38,0)"
+  "ID_SUBPROCESO" number
+  "FECHA_OPERATIVA" date
+  "ID_TIPO_OUTGOING" number
+  "CANTIDAD_EP110E" "number(10,0)"
+  "MONTO_EP110E" "number(18,2)"
+  "CANTIDAD_EP221E" "number(10,0)"
+  "MONTO_EP221E" "number(18,2)"
+  "CANTIDAD_EP204A" "number(10,0)"
+  "MONTO_EP204A" "number(18,2)"
+  "DIFERENCIA_CANTIDAD" "number(10,0)"
+  "DIFERENCIA_MONTO" "number(18,2)"
+  "ESTADO" varchar2(50BYTE)
+  "USUARIO" varchar2(50BYTE)
+  "FECHA_EJECUCION" timestamp(6)
+}
+
+Table "VI_CUADRE_PVI_ARCHIVO" {
+  "ID" "number(38,0)"
+  "VERSION" number
+  "FECHA_CREACION" date
+  "FECHA_PROCESO" date
+  "USUARIO_GENERACION" varchar2(255BYTE)
+  "RUTA_ARCHIVO" varchar2(500BYTE)
+  "TOTAL_MONTO_TXS_BOB" "number(38,2)"
+  "TOTAL_CANTIDAD_TXS_BOB" "number(18,0)"
+  "TOTAL_MONTO_TXS_USD" "number(38,2)"
+  "TOTAL_CANTIDAD_TXS_USD" "number(18,0)"
+  "TOTAL_MONTO_PROPIAS_BOB" "number(38,2)"
+  "TOTAL_CANTIDAD_PROPIAS_BOB" "number(18,0)"
+  "TOTAL_MONTO_PROPIAS_USD" "number(38,2)"
+  "TOTAL_CANTIDAD_PROPIAS_USD" "number(18,0)"
+  "TOTAL_MONTO_ECOMMERCE_BOB" "number(38,2)"
+  "TOTAL_CANTIDAD_ECOMMERCE_BOB" "number(18,0)"
+  "TOTAL_MONTO_ECOMMERCE_USD" "number(38,2)"
+  "TOTAL_CANTIDAD_ECOMMERCE_USD" "number(18,0)"
+  "ID_SUBPROCESO" "number(18,0)"
+}
+
+Table "VI_CUADRE_PVI_DETALLE" {
+  "ID" "number(38,0)"
+  "ID_PVI_ARCHIVO" "number(38,0)"
+  "ID_TIPO_TRANSACCION" "number(38,0)"
+  "COMU_MONEDA_ID" "number(3,0)"
+  "MONTO" "number(38,2)"
+  "CANTIDAD" "number(18,0)"
+}
+
+Table "VI_ENRIQ_PROCESOS" {
+  "ID_PROCESO" number
+  "FECHA_ENRIQ" date
+}
+
+Table "VI_EP100A_ARCHIVO" {
+  "ID_EP100A" "number(38,0)"
+  "ID_SUBPROCESO" "number(18,0)"
+  "NOMBRE_ARCHIVO" varchar2(255BYTE)
+  "FECHA_PROCESO" date
+  "FECHA_SISTEMA" date
+  "NUMERO_RUN" "number(10,0)"
+  "ESTADO_BANNER_CODIGO" varchar2(100BYTE)
+  "OBSERVACIONES" varchar2(1000BYTE)
+  "USUARIO" varchar2(255BYTE)
+}
+
+Table "VI_EP100A_TRANSACCION" {
+  "ID_TRANSACCION" "number(38,0)"
+  "ID_EP100A" "number(38,0)"
+  "NUMERO_LOTE_DESDE" "number(10,0)"
+  "NUMERO_LOTE_HASTA" "number(10,0)"
+  "FECHA_COMPRA" date
+  "TARJETA" varchar2(20CHAR)
+  "MONEDA" varchar2(3CHAR)
+  "MONTO" "number(15,2)"
+  "CODIGO_AUTORIZACION" varchar2(6CHAR)
+  "COMERCIO" varchar2(50CHAR)
+  "CODIGOS_RECHAZO_ARR" sial
+  "MOTIVOS_RECHAZO_ARR" sial
+}
+
+Table "VI_EP110_ARCHIVO" {
+  "ID_EP110" "number(38,0)"
+  "ID_SUBPROCESO" "number(18,0)"
+  "NOMBRE_ARCHIVO" varchar2(255BYTE)
+  "FECHA_PROCESO" date
+  "FECHA_SISTEMA" date
+  "NUMERO_RUN" "number(18,0)"
+  "ARCHIVO_DESDE" "number(18,0)"
+  "ARCHIVO_HASTA" "number(18,0)"
+  "LOTE_DESDE" "number(18,0)"
+  "LOTE_HASTA" "number(18,0)"
+  "ID_TIPO_OUTGOING" "number(18,0)"
+  "MONTO_ACEPTADAS" "number(38,2)"
+  "TOTAL_ACEPTADAS" "number(18,0)"
+  "MONTO_RECHAZADAS" "number(38,2)"
+  "TOTAL_RECHAZADAS" "number(18,0)"
+  "TOTAL_TRANSACCIONES" "number(18,0)"
+  "MONTO_TOTAL" "number(38,2)"
+  "TOTAL_GENERADO_VISA" "number(18,0)"
+  "OBSERVACIONES" varchar2(4000BYTE)
+  "VERSION" number
+  "USUARIO" varchar2(255BYTE)
+  "FECHA_REGISTRO" date
+}
+
+Table "VI_EP110_RESUMEN" {
+  "ID" "number(38,0)"
+  "ID_EP110_ARCHIVO" "number(38,0)"
+  "TIPO_TRANSACCION_ID" "number(18,0)"
+  "TIPO_ORIGEN_ID" "number(18,0)"
+  "COMU_MONEDA_ID" "number(3,0)"
+  "MONTO_ACEPTADO" "number(38,2)"
+  "TRANSACCIONES_ACEPTADAS" "number(18,0)"
+  "MONTO_RECHAZADO" "number(38,2)"
+  "TRANSACCIONES_RECHAZADAS" "number(18,0)"
+  "MONTO_TOTAL" "number(38,2)"
+  "TRANSACCIONES_TOTALES" "number(18,0)"
+}
+
+Table "VI_EP_204A" {
+  "ID" number
+  "TIPO_OUTGOING" "number(38,0)"
+  "TARJETA" char(19BYTE)
+  "MICROFIL" varchar2(23BYTE)
+  "FECHA_COMPRA" date
+  "MONEDA" "number(38,0)"
+  "MONTO" "number(26,6)"
+  "NOMBRE_COMERCIO" varchar2(40BYTE)
+  "FECHA_PROCESO" date
+  "NUMERO_AUTORIZACION" varchar2(6BYTE)
+  "CODIGO_RECHAZO" varchar2(10BYTE)
+  "DESCRIPCION_RECHAZO" varchar2(200BYTE)
+  "FECHA_CPD" date
+  "USUARIO_CREACION" varchar2(50BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(50BYTE)
+  "FECHA_MODIFICACION" date
+  "ID_SUBPROCESO" "number(38,0)"
+}
+
+Table "VI_EP210E_ARCHIVO" {
+  "ID_EP210E" "number(38,0)"
+  "ID_SUBPROCESO" "number(18,0)"
+  "NOMBRE_ARCHIVO" varchar2(255BYTE)
+  "FECHA_SISTEMA" date
+  "FECHA_PROCESO" date
+  "NUMERO_RUN" "number(10,0)"
+  "NUMERO_ARCHIVO" "number(10,0)"
+  "LOTE_DESDE" "number(10,0)"
+  "LOTE_HASTA" "number(10,0)"
+  "BASEII_FILE_ID" varchar2(50BYTE)
+  "MONTO_FINANCIERO" "number(38,2)"
+  "CONTEO_FINANCIERO" "number(10,0)"
+  "CONTEO_NO_FINANCIERO" "number(10,0)"
+  "TOTAL_TRANSACCIONES" "number(10,0)"
+  "MONTO_TOTAL" "number(38,2)"
+  "VERSION" "number(10,0)"
+  "USUARIO_CREACION" varchar2(255BYTE)
+  "FECHA_CREACION" date
+}
+
+Table "VI_EP210E_TRANSACCION_FIN" {
+  "ID" "number(38,0)"
+  "ID_EP210" "number(38,0)"
+  "TIPO_TRANSACCION_ID" "number(10,0)"
+  "TIPO_ORIGEN_ID" "number(10,0)"
+  "COMU_MONEDA_ID" "number(5,0)"
+  "MONTO" "number(38,2)"
+  "DEBITO" varchar2(5BYTE)
+  "CANTIDAD_TRANSACCIONES" "number(10,0)"
+}
+
+Table "VI_EP210E_TRANSACCION_NO_FIN" {
+  "ID" "number(38,0)"
+  "ID_EP210" "number(38,0)"
+  "DESCRIPCION" varchar2(100BYTE)
+  "CANTIDAD" "number(10,0)"
+}
+
+Table "VI_EP_221E" {
+  "ID" number
+  "ID_ARCHIVO_EP" varchar2(24BYTE)
+  "LOTE_DESDE" "number(10,0)"
+  "LOTE_HASTA" "number(10,0)"
+  "EP_DATE" date
+  "TIPO_TRANSACCION" number
+  "TOTAL_MONTO" "number(26,6)"
+  "TOTAL_TRANSACCIONES" "number(15,0)"
+  "FECHA_CPD" date
+  "USUARIO_CREACION" varchar2(50BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(50BYTE)
+  "FECHA_MODIFICACION" date
+  "ID_PROCESO" number
+}
+
+Table "VI_FEE_APLICADOS" {
+  "ID" "number(38,0)"
+  "SIS_TIPO_LOCAL" "number(38,0)"
+  "BANCO_ID" "number(38,0)"
+  "MONEDA" "number(38,0)"
+  "SIS_PRODUCTO" "number(38,0)"
+  "FEE_MOTIVO" varchar2(255BYTE)
+  "FECHA" date
+  "MONTO" "number(13,4)"
+  "USUARIO_CREACION" varchar2(50BYTE)
+  "FECHA_CREACION" timestamp(6)
+  "USUARIO_MODIFICACION" varchar2(50BYTE)
+  "FECHA_MODIFICACION" timestamp(6)
+  "ACTIVO" "number(1,0)"
+}
+
+Table "VI_FEE_MOTIVOS" {
+  "ID" "number(38,0)"
+  "DESCRIPCION" varchar2(255BYTE)
+  "ES_PERSONALIZADO" char(1BYTE)
+  "USUARIO_CREACION" varchar2(255BYTE)
+  "FECHA_CREACION" timestamp(6)
+}
+
+Table "VI_LIQUIDACIONES_ADQ" {
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "SIS_MARCA" "number(38,0)"
+  "SIS_PRODUCTO" "number(38,0)"
+  "FECHA_LOCAL" date
+  "HORA_LOCAL" "number(6,0)"
+  "SIS_BANCO_ADQ" "number(4,0)"
+  "SIS_SUCURSAL_ADQ" "number(5,0)"
+  "SIS_MICROFIL" varchar2(23BYTE)
+  "TARJETA" varchar2(19BYTE)
+  "TARJETA_TOKEN" varchar2(19BYTE)
+  "COMERCIO" varchar2(15BYTE)
+  "TERMINAL" varchar2(8BYTE)
+  "NOMBRE_COMERCIO" varchar2(44BYTE)
+  "NUMERO_AUTORIZACION" varchar2(6BYTE)
+  "MCC" "number(4,0)"
+  "MONEDA" "number(38,0)"
+  "MONTO" "number(26,6)"
+  "POS_ENTRY_CODE" "number(38,0)"
+  "PCODE" "number(6,0)"
+  "SIS_TIPO_LOCAL" "number(38,0)"
+  "SIS_PORCENTAJE_RETENCION_COMERCIO" "number(26,6)"
+  "SIS_RETENCION_COMERCIO" "number(26,6)"
+  "SIS_BIN_TOKEN" "number(38,0)"
+  "TIPO_LIQUIDACION" "number(1,0)"
+  "COMISION_EMI" "number(26,6)"
+  "COMISION_ADQ" "number(26,6)"
+  "COMISION_PRO" "number(26,6)"
+  "TIPO_TX_LIQ_ADQ" "number(1,0)"
+  "SIS_BANCO_EMI" "number(4,0)"
+  "SIS_SUCURSAL_EMI" "number(5,0)"
+  "ID_PROCESO" "number(38,0)"
+  "SIS_FECHA_LIQUIDADA" date
+  "CASH_BACK" "number(26,8)"
+  "TC" varchar2(2BYTE)
+  "CODIGO_USO" varchar2(1BYTE)
+  "CODIGO_RAZON" varchar2(2BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "MONTO_DESTINO" "number(26,8)"
+  "MONEDA_DESTINO" "number(4,0)"
+  "CODIGO_RESPUESTA" "number(5,0)"
+}
+
+Table "VI_LIQUIDACIONES_EMI" {
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "ROL" varchar2(1BYTE)
+  "ID_ARCHIVO" "number(38,0)"
+  "SIS_MARCA" "number(38,0)"
+  "SIS_PRODUCTO" "number(38,0)"
+  "FECHA_LOCAL" date
+  "HORA_LOCAL" "number(6,0)"
+  "SIS_BANCO_ADQ" "number(4,0)"
+  "SIS_SUCURSAL_ADQ" "number(5,0)"
+  "SIS_MICROFIL" varchar2(23BYTE)
+  "TARJETA" varchar2(19BYTE)
+  "TARJETA_TOKEN" varchar2(19BYTE)
+  "COMERCIO" varchar2(15BYTE)
+  "TERMINAL" varchar2(8BYTE)
+  "NOMBRE_COMERCIO" varchar2(41BYTE)
+  "NUMERO_AUTORIZACION" varchar2(6BYTE)
+  "MCC" "number(4,0)"
+  "MONEDA" "number(38,0)"
+  "MONTO" "number(26,6)"
+  "POS_ENTRY_CODE" varchar2(4BYTE)
+  "PCODE" "number(6,0)"
+  "SIS_TIPO_LOCAL" "number(38,0)"
+  "SIS_PORCENTAJE_RETENCION_COMERCIO" "number(26,6)"
+  "SIS_RETENCION_COMERCIO" "number(26,6)"
+  "SIS_BIN_TOKEN" "number(38,0)"
+  "SIS_TIPO_LIQUIDACION" "number(1,0)"
+  "COMISION_EMI" "number(26,6)"
+  "TIPO_TX_LIQ_ADQ" "number(1,0)"
+  "SIS_BANCO_EMI" "number(4,0)"
+  "SIS_SUCURSAL_EMI" "number(5,0)"
+  "ID_PROCESO" "number(38,0)"
+  "SIS_FECHA_LIQUIDADA" date
+  "CASH_BACK" "number(26,8)"
+  "TC" varchar2(2BYTE)
+  "CODIGO_USO" varchar2(1BYTE)
+  "CODIGO_RAZON" varchar2(2BYTE)
+  "ATRIBUTO_REEMBOLSO" varchar2(1BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "PAIS" varchar2(3BYTE)
+  "CODIGO_RESPUESTA" "number(5,0)"
+  "MONTO_DESTINO" "number(26,8)"
+  "MONEDA_DESTINO" "number(4,0)"
+  "POS_CONDITION_CODE" "number(4,0)"
+}
+
+Table "VI_PARAMETROS" {
+  "ID" "number(38,0)"
+  "CLAVE" varchar2(100BYTE)
+  "NOMBRE" varchar2(200BYTE)
+  "TIPO_VALOR" varchar2(20BYTE)
+  "VALOR_ENTERO" number
+  "VALOR_DECIMAL" "number(18,6)"
+  "VALOR_TEXTO" varchar2(4000BYTE)
+  "VALOR_FECHA" date
+  "VALOR_BOOLEANO" "number(1,0)"
+  "SEGMENTO" varchar2(20BYTE)
+  "ACTIVO" "number(1,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" timestamp(6)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" timestamp(6)
+}
+
+Table "VI_TIPO_BANDERA" {
+  "MONEDA" "number(38,0)"
+  "TIPO_LOCAL" "number(38,0)"
+  "ADQ_EMI" varchar2(1BYTE)
+  "TIPO_OUTGOING" "number(1,0)"
+  "BANDERA" varchar2(1BYTE)
+}
+
+Table "VI_TIPO_ORIGEN" {
+  "ID_TIPO_ORIGEN" "number(38,0)"
+  "NOMBRE" varchar2(100BYTE)
+}
+
+Table "VI_TIPO_OUTGOING" {
+  "ID" "number(38,0)"
+  "NOMBRE" varchar2(200BYTE)
+}
+
+Table "VI_TIPO_TC" {
+  "TIPO_TRANSACCION" "number(4,0)"
+  "CATEGORIA" varchar2(50BYTE)
+  "TIPO_TC" varchar2(10BYTE)
+  "TIPO_POS_ENV" varchar2(1BYTE)
+  "CAPACIDAD_TERMINAL" varchar2(1BYTE)
+}
+
+Table "VI_TIPO_TRANSACCION" {
+  "ID_TIPO_TRANSACCION" "number(38,0)"
+  "NOMBRE" varchar2(100BYTE)
+}
+
+Table "VI_TRANSACCIONES_INCOMING" {
+  "ID_ARCHIVO" "number(38,0)"
+  "FECHA_PROCESO" date
+  "LOTE" "number(38,0)"
+  "SECUENCIA" "number(38,0)"
+  "TARJETA" varchar2(19BYTE)
+  "MICROFIL" varchar2(23BYTE)
+  "FECHA_COMPRA" date
+  "MONTO_DESTINO" "number(26,6)"
+  "MONEDA_DESTINO" "number(38,0)"
+  "MONTO_ORIGEN" "number(26,6)"
+  "MONEDA_ORIGEN" "number(38,0)"
+  "NOMBRE_COMERCIO" varchar2(25BYTE)
+  "CIUDAD_COMERCIO" varchar2(13BYTE)
+  "PAIS_COMERCIO" varchar2(3BYTE)
+  "TIPO_LIQUIDACION" varchar2(3BYTE)
+  "NUMERO_AUTORIZACION" varchar2(6BYTE)
+  "NUMERO_COMERCIO" varchar2(15BYTE)
+  "TERMINAL" varchar2(8BYTE)
+  "TOKENIZADA" "number(9,0)"
+  "POS_ENTRY_CODE" varchar2(4BYTE)
+  "MCC" varchar2(8BYTE)
+  "CASH_BACK" "number(26,0)"
+  "BANCO_EMISOR" "number(4,0)"
+  "SUCURSAL_EMISOR" "number(5,0)"
+  "SIS_MIEMBRO" "number(38,0)"
+  "CODIGO_USO" varchar2(15BYTE)
+  "CODIGO_RAZON" varchar2(15BYTE)
+  "BANDERA_LIQUIDACION" varchar2(15BYTE)
+  "ATRIBUTO_REEMBOLSO" varchar2(15BYTE)
+  "TIPO_FONDO" "number(15,0)"
+  "FECHA_CREACION" date
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+}
+
+Table "VI_VAO_CONCILIACION" {
+  "SIS_FECHA_REGISTRO" date
+  "SIS_LOTE_REGISTRO" "number(38,0)"
+  "SIS_SECUENCIA_REGISTRO" "number(38,0)"
+  "CUOTA" "number(4,0)"
+  "ID_MOVTOS_CUENTAS" "number(38,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+  "ID_PROCESO" "number(38,0)"
+  "ID_SUBPROCESO" "number(38,0)"
+}
+
+Table "VI_VSS_PARAMETROS" {
+  "BANCO" "number(4,0)"
+  "SRE_CODIGO" varchar2(10BYTE)
+  "SRE_NOMBRE" varchar2(20BYTE)
+  "MONEDA" varchar2(3BYTE)
+  "TIPO_LIQUIDACION" varchar2(30BYTE)
+}
+
+Table "VZ_AUTORIZACION" {
+  "MTI" "number(38,0)"
+  "FECHA_LOCAL" date
+  "HORA_LOCAL" "number(38,0)"
+  "NUMERO_COMERCIO" varchar2(15BYTE)
+  "TARJETA" varchar2(19BYTE)
+  "MONEDA" "number(38,0)"
+  "MONTO" "number(26,6)"
+  "AUTORIZACION" varchar2(6BYTE)
+  "TERMINAL" varchar2(8BYTE)
+  "PAIS" "number(38,0)"
+  "TIPO_TRANSACCION" "number(38,0)"
+  "CODIGO_RESPUESTA" "number(38,0)"
+  "CODIGO_RAZON" "number(38,0)"
+  "SHCERROR" "number(38,0)"
+  "ORIGTRACE" "number(38,0)"
+  "CHIP_INDEX" char(20BYTE)
+  "SITE_ID" "number(38,0)"
+  "COMENTARIOS" varchar2(200BYTE)
+  "ESTADO" "number(38,0)"
+  "NUMERO_REFERENCIA" char(12BYTE)
+  "NOMBRE_COMERCIO" char(40BYTE)
+  "PCODE" "number(38,0)"
+  "MCC" "number(38,0)"
+  "FECHA_REGISTRO" date
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "VZ_CONSOLIDADO" {
+  "FECHA_PRESENTACION" date
+  "CODIGO_AGRUPADOR" "number(38,0)"
+  "COMERCIO" varchar2(15BYTE)
+  "MONEDA" "number(38,0)"
+  "ESTADO" "number(38,0)"
+  "FECHA_REGISTRO" date
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "VZ_DETALLE" {
+  "FECHA_PRESENTACION" date
+  "CODIGO_AGRUPADOR" "number(38,0)"
+  "CHIP_INDEX" char(20BYTE)
+  "SITE_ID" "number(38,0)"
+  "TIPO_TRANSACCION" "number(38,0)"
+  "MONEDA_ORI" "number(38,0)"
+  "MONTO_ORI" "number(26,6)"
+  "MONTO" "number(26,6)"
+  "FECHA_REGISTRO" date
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "VZ_ESTADO" {
+  "ID" "number(38,0)"
+  "DESCRIPCION" varchar2(200BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "VZ_PROCESO_SECUENCIA" {
+  "FECHA" date
+  "COMERCIO" varchar2(15BYTE)
+  "SECUENCIA" "number(38,0)"
+  "TERMINAL" varchar2(8BYTE)
+  "MONEDA" varchar2(3BYTE)
+  "MONTO" varchar2(12BYTE)
+  "TARJETA" varchar2(19BYTE)
+  "FECHA_EXP" varchar2(4BYTE)
+  "CLIENTE" varchar2(200BYTE)
+  "AUTORIZACION" varchar2(6BYTE)
+  "CODIGO_RESPUESTA" varchar2(4BYTE)
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_MODIFICACION" date
+}
+
+Table "VZ_RESPUESTA" {
+  "CODIGO" varchar2(2BYTE)
+  "DESCRIPCION" varchar2(255BYTE)
+}
+
+Table "CO_SUCURSALES" {
+  "COMERCIO" "number(15,0)"
+  "SUCURSAL" "number(15,0)"
+  "MATRIZ" "number(1,0)"
+  "DESCRIPCION" varchar2(200BYTE)
+  "TIPO_SUCURSAL" "number(3,0)"
+  "SUCURSAL_CENTRALIZADORA" "number(15,0)"
+  "DIAS_PAGO" "number(3,0)"
+  "FORMA_PAGO" "number(3,0)"
+  "NOMBRE_LINKSER" varchar2(200BYTE)
+  "TIPO_AUTORIZACION" "number(3,0)"
+  "CCA_MATT_MRCH" "number(7,0)"
+  "CCA_ACCT_NO" varchar2(5BYTE)
+  "CCA_COM_DIF" "number(2,0)"
+  "MIGRADO" "number(1,0)"
+  "ESTADO" "number(3,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+}
+
+Table "CO_CUENTAS_COMERCIO" {
+  "COMERCIO" "number(15,0)"
+  "SUCURSAL" "number(15,0)"
+  "MONEDA" "number(3,0)"
+  "MONEDA_LIQ" "number(3,0)"
+  "TIPO_SERVICIO" "number(3,0)"
+  "BANCO" number
+  "AGENCIA" number
+  "TIPO_CUENTA" "number(3,0)"
+  "CUENTA" varchar2(30BYTE)
+  "TIPO_DOCUMENTO" "number(3,0)"
+  "DOCUMENTO" varchar2(16BYTE)
+  "DOCUMENTO_EXPEDIDO" varchar2(2BYTE)
+  "NOMBRE_TITULAR" varchar2(100BYTE)
+  "ESTADO" "number(3,0)"
+  "USUARIO_CREACION" varchar2(20BYTE)
+  "USUARIO_MODIFICACION" varchar2(20BYTE)
+  "FECHA_CREACION" date
+  "FECHA_MODIFICACION" date
+}
+
+Ref: "CA_CONTROVERSIAS_TXS"."ID_CONTROVERSIA" > "CA_CONTROVERSIAS"."ID"
+Ref: "CA_TRANSACCIONES_DISCOVER"."SIS_FECHA_REGISTRO" > "CA_TRANSACCIONES"."SIS_FECHA_REGISTRO"
+Ref: "CA_TRANSACCIONES_MASTERCARD"."SIS_FECHA_REGISTRO" > "CA_TRANSACCIONES"."SIS_FECHA_REGISTRO"
+Ref: "CA_TRANSACCIONES_PROPIETARIA"."SIS_FECHA_REGISTRO" > "CA_TRANSACCIONES"."SIS_FECHA_REGISTRO"
+Ref: "CA_TRANSACCIONES_VISA"."SIS_FECHA_REGISTRO" > "CA_TRANSACCIONES"."SIS_FECHA_REGISTRO"
+Ref: "CO_ACUERDOS_PARTICULARES"."COMERCIO" > "CO_SUCURSALES"."COMERCIO"
+Ref: "CO_CHEQUE"."BANCO" > "COMU_AGENCIAS"."CODIGO_BANCO"
+Ref: "CO_CHEQUE"."COMERCIO" > "CO_SUCURSALES"."COMERCIO"
+Ref: "CO_COMERCIOS"."EJECUTIVO_COMERCIAL" > "CO_EJECUTIVOS"."EJECUTIVO"
+Ref: "CO_CONTACTOS"."COMERCIO" > "CO_SUCURSALES"."COMERCIO"
+Ref: "CO_CONTACTOS_MEDIOS"."COMERCIO" > "CO_CONTACTOS"."COMERCIO"
+Ref: "CO_CUENTAS_COMERCIO"."BANCO" > "COMU_AGENCIAS"."CODIGO_BANCO"
+Ref: "CO_CUENTAS_COMERCIO"."COMERCIO" > "CO_SUCURSALES"."COMERCIO"
+Ref: "CO_DIRECCIONES"."COMERCIO" > "CO_SUCURSALES"."COMERCIO"
+Ref: "CO_EJECUTIVOS"."DEPARTAMENTO" > "COMU_DEPARTAMENTOS"."DEPARTAMENTO"
+Ref: "CO_IATA_AEROLINEAS"."COMERCIO" > "CO_SUCURSALES"."COMERCIO"
+Ref: "CO_MONEDAS_LIQUIDACION"."MOTIVO_OPERACION_ID" > "CO_MOTIVOS_OPERACION"."ID_MOTIVO"
+Ref: "CO_MONEDAS_LIQUIDACION"."COMERCIO" > "CO_SUCURSALES"."COMERCIO"
+Ref: "COMU_GRUPO_ELIMINACION_REL"."ID_GRUPO_RELACIONADO" > "COMU_GRUPO_ELIMINACION"."ID_GRUPO_ELIMINACION"
+Ref: "COMU_GRUPO_ELIMINACION_REL"."ID_GRUPO_ELIMINACION" > "COMU_GRUPO_ELIMINACION"."ID_GRUPO_ELIMINACION"
+Ref: "COMU_MUNICIPIOS"."COD_PROVINCIA" > "COMU_PROVINCIAS"."COD_PROVINCIA"
+Ref: "COMU_PROCESO_ELIMINACION"."ID_GRUPO_ELIMINACION" > "COMU_GRUPO_ELIMINACION"."ID_GRUPO_ELIMINACION"
+Ref: "COMU_PROCESS_FILE"."ID_PARENT_FILE" > "COMU_PROCESS_FILE"."ID_FILE"
+Ref: "COMU_PROVINCIAS"."COD_DEPARTAMENTO" > "COMU_DEPARTAMENTOS"."DEPARTAMENTO"
+Ref: "COMU_SEGUIMIENTO_PROCESOS"."ID_ESTADO" > "COMU_ESTADOS"."ID"
+Ref: "COMU_SEGUIMIENTO_PROCESOS"."ID_MARCA" > "CA_MARCAS"."MARCA"
+Ref: "COMU_SEGUIMIENTO_SUB_PROCESOS"."ID_PROCESO" > "COMU_SEGUIMIENTO_PROCESOS"."ID"
+Ref: "COMU_SEGUIMIENTO_SUB_PROCESOS"."ID_ESTADO" > "COMU_ESTADOS"."ID"
+Ref: "COMU_TIPOS_SUB_PROCESOS"."ID_PROCESO" > "COMU_TIPOS_PROCESOS"."ID"
+Ref: "CO_SECCIONES"."COMERCIO" > "CO_COMERCIOS"."COMERCIO"
+Ref: "CO_SECCIONES_SUCURSALES"."COMERCIO" > "CO_SUCURSALES"."COMERCIO"
+Ref: "CO_SECCIONES_SUCURSALES"."COD_SECCION" > "CO_SECCIONES"."COD_SECCION"
+Ref: "CO_SUCURSALES"."COMERCIO" > "CO_COMERCIOS"."COMERCIO"
+Ref: "CO_SUCURSALES_ECOMMERCE"."COMERCIO" > "CO_SUCURSALES"."COMERCIO"
+Ref: "CO_TERMINALES"."COD_TECNOLOGIA" > "CO_TECNOLOGIAS"."COD_TECNOLOGIA"
+Ref: "DCI_ACQ_CHIP_DETAIL"."ID_TRANSACTION" > "DCI_ACQ_TRANSACTION"."ID_TRANSACTION"
+Ref: "DCI_ACQ_TRANSACTION"."ID_RECAP" > "DCI_ACQ_RECAP"."ID_RECAP"
+Ref: "DL_ELIMINACION_PROCESOS_DETALLE"."ID_LOTE_ELIMINACION" > "DL_PROCESOS_ELIMINADOS"."ID_LOTE_ELIMINACION"
+Ref: "MC_IPM_TRANSACTION"."ROOT_TRANSACTION_ID" > "MC_IPM_TRANSACTION"."IPM_TRANSACTION_ID"
+Ref: "MC_MDS_SETTLEMENT_CONTROL"."SIS_FECHA_REGISTRO" > "CA_TRANSACCIONES"."SIS_FECHA_REGISTRO"
+Ref: "MC_MDS_SIAL_PENDING"."SIS_FECHA_REGISTRO" > "CA_TRANSACCIONES"."SIS_FECHA_REGISTRO"
+Ref: "MC_MDS_SIAL_PENDING"."ID_T464_TRANSACTION" > "MC_T464_TRANSACTION"."ID_T464_TRANSACTION"
+Ref: "MC_T464_TRANSACTION"."ID_SETTLEMENT_SUMMARY" > "MC_T464_SETTLEMENT_SUMMARY"."ID_SETTLEMENT_SUMMARY"
+Ref: "VI_CUADRE_CONFIRMACION"."ID_SUBPROCESO" > "COMU_SEGUIMIENTO_SUB_PROCESOS"."ID"
+Ref: "VI_CUADRE_LIQUIDACION"."ID_TIPO_OUTGOING" > "VI_TIPO_OUTGOING"."ID"
+Ref: "VI_CUADRE_PVI_ARCHIVO"."ID_SUBPROCESO" > "COMU_SEGUIMIENTO_SUB_PROCESOS"."ID"
+Ref: "VI_CUADRE_PVI_DETALLE"."ID_PVI_ARCHIVO" > "VI_CUADRE_PVI_ARCHIVO"."ID"
+Ref: "VI_EP100A_ARCHIVO"."ID_SUBPROCESO" > "COMU_SEGUIMIENTO_SUB_PROCESOS"."ID"
+Ref: "VI_EP100A_TRANSACCION"."ID_EP100A" > "VI_EP100A_ARCHIVO"."ID_EP100A"
+Ref: "VI_EP110_ARCHIVO"."ID_TIPO_OUTGOING" > "VI_TIPO_OUTGOING"."ID"
+Ref: "VI_EP110_RESUMEN"."ID_EP110_ARCHIVO" > "VI_EP110_ARCHIVO"."ID_EP110"
+Ref: "VI_EP110_RESUMEN"."TIPO_ORIGEN_ID" > "VI_TIPO_ORIGEN"."ID_TIPO_ORIGEN"
+Ref: "VI_EP110_RESUMEN"."TIPO_TRANSACCION_ID" > "VI_TIPO_TRANSACCION"."ID_TIPO_TRANSACCION"
+Ref: "VI_EP_204A"."ID_SUBPROCESO" > "COMU_SEGUIMIENTO_SUB_PROCESOS"."ID"
+Ref: "VI_EP210E_ARCHIVO"."ID_SUBPROCESO" > "COMU_SEGUIMIENTO_SUB_PROCESOS"."ID"
+Ref: "VI_EP210E_TRANSACCION_FIN"."TIPO_ORIGEN_ID" > "VI_TIPO_ORIGEN"."ID_TIPO_ORIGEN"
+Ref: "VI_EP210E_TRANSACCION_FIN"."TIPO_TRANSACCION_ID" > "VI_TIPO_TRANSACCION"."ID_TIPO_TRANSACCION"
+Ref: "VI_EP210E_TRANSACCION_FIN"."ID_EP210" > "VI_EP210E_ARCHIVO"."ID_EP210E"
+Ref: "VI_EP210E_TRANSACCION_NO_FIN"."ID_EP210" > "VI_EP210E_ARCHIVO"."ID_EP210E"
+Ref: "VI_EP_221E"."ID_PROCESO" > "COMU_SEGUIMIENTO_SUB_PROCESOS"."ID"
+Ref: "VI_FEE_APLICADOS"."MONEDA" > "COMU_MONEDAS"."MONEDA"
+Ref: "VI_FEE_APLICADOS"."SIS_PRODUCTO" > "CA_PRODUCTOS"."PRODUCTO"
+Ref: "VI_FEE_APLICADOS"."SIS_TIPO_LOCAL" > "CA_TIPOS_LOCALES"."TIPO_LOCAL"
+
+TableGroup "ACQ" [color: #FF6B6B] {
+  "ACQ_ENTITY"
+  "ACQ_ENTITY_ADDRESS"
+}
+
+TableGroup "AUX" [color: #FFA94D] {
+  "AUX_CA_CUOTAS_BKP"
+  "AUX_CUOTA_PENDIENTES"
+}
+
+TableGroup "CA" [color: #FFD43B] {
+  "CA_ATM_BISA"
+  "CA_ATM_NF_BISA"
+  "CA_BIN_ADQ"
+  "CA_BIN_POS_ATM_ADQ"
+  "CA_BIN_PROCESADORES"
+  "CA_CATEGORIA_TRANSACCION"
+  "CA_COMISIONES_NF"
+  "CA_CONF_ARCHIVO_ATM"
+  "CA_CONFIG_CORRECCIONES"
+  "CA_CONFIG_DIA_CAPTURA"
+  "CA_CONTROVERSIAS"
+  "CA_CONTROVERSIAS_TXS"
+  "CA_CUOTAS"
+  "CA_CUOTAS_TOTALES"
+  "CA_CYBERSOURCE_TC33A"
+  "CA_CYBERSOURCE_TRANSACCIONES"
+  "CA_ESTADO_PROCESO"
+  "CA_IATA_CSI"
+  "CA_IATA_TRANSACCIONES"
+  "CA_ICA"
+  "CA_LOTES"
+  "CA_MARCA_DESTINO"
+  "CA_MARCAS"
+  "CA_POS_BATCH_FORZOSO"
+  "CA_PROCESO_DETALLE"
+  "CA_PROCESOS"
+  "CA_PROCESOS_HORA"
+  "CA_PROCESOS_SQL"
+  "CA_PRODUCTOS"
+  "CA_TERMINALES_VIRTUALES"
+  "CA_TIPOS_CAPTURA"
+  "CA_TIPOS_FONDOS"
+  "CA_TIPOS_FONDOS_EMISORES"
+  "CA_TIPOS_LOCALES"
+  "CA_TIPOS_TERMINALES_VIRTUALES"
+  "CA_TIPOS_TRANSACCION"
+  "CA_TRANSACCIONES"
+  "CA_TRANSACCIONES_DISCOVER"
+  "CA_TRANSACCIONES_FALTANTES"
+  "CA_TRANSACCIONES_MASTERCARD"
+  "CA_TRANSACCIONES_NF"
+  "CA_TRANSACCIONES_PROPIETARIA"
+  "CA_TRANSACCIONES_VISA"
+  "CA_TRANSACCIONES_VISA_RECHAZOS"
+  "CA_TXS_TARDIAS_HIST"
+}
+
+TableGroup "CF" [color: #69DB7C] {
+  "CF_FACTURAS"
+  "CF_PROCESOS"
+}
+
+TableGroup "CL" [color: #38D9A9] {
+  "CL_CIERRE_COMERCIOS"
+  "CL_DIAS_NO_HABILES"
+  "CL_LIQUIDACION_CONSOLIDADO"
+  "CL_POSTEO_DETALLE"
+  "CL_POSTEO_FALLIDO"
+  "CL_PROCESOS"
+}
+
+TableGroup "CO" [color: #20C997] {
+  "CO_ACUERDOS_PARTICULARES"
+  "CO_ACUERDOS_POR_DEFECTOS"
+  "CO_AGENCIAS"
+  "CO_AUX_COM_DIF"
+  "CO_AUX_COM_NO_MIGRADOS"
+  "CO_CHEQUE"
+  "CO_COMERCIOS"
+  "CO_CONTACTOS"
+  "CO_CONTACTOS_MEDIOS"
+  "CO_CUENTAS_COMERCIO"
+  "CO_DIRECCIONES"
+  "CO_EJECUTIVOS"
+  "CO_ESTADOS_TRANSICION"
+  "CO_GRUPOS_E_COMMERCE"
+  "CO_HIST_ACUERDOS_PARTICULARES"
+  "CO_HIST_CHEQUE"
+  "CO_HIST_CUENTAS_COMERCIO"
+  "CO_HIST_ESTADOS_COMERCIOS"
+  "CO_HIST_ESTADOS_PUNTOS_VENTA"
+  "CO_HIST_ESTADOS_SUCURSALES"
+  "CO_HIST_MONEDAS_LIQUIDACION"
+  "CO_HIST_SECCIONES"
+  "CO_IATA_AEROLINEAS"
+  "CO_MASTER_ADDRESS"
+  "CO_MCC"
+  "CO_MODELO_TECNOLOGIA"
+  "CO_MONEDAS_LIQUIDACION"
+  "CO_MOTIVOS_OPERACION"
+  "CO_MULTICOMERCIO"
+  "CO_MULTICOMERCIO_HIST"
+  "CO_NOMBRE_ARCHIVO_CCA"
+  "CO_PLAZA_CIUDAD_CCA"
+  "CO_PUNTOS_DE_VENTAS"
+  "CO_REPORTES_COMERCIO"
+  "CO_SECCIONES"
+  "CO_SECCIONES_SUCURSALES"
+  "CO_SUCURSALES"
+  "CO_SUCURSALES_ECOMMERCE"
+  "CO_SYNC_CCA_HIST"
+  "CO_TECNOLOGIAS"
+  "CO_TERMINALES"
+  "CO_TERMINALES_MODELOS"
+  "CO_TERMINAL_ID"
+}
+
+TableGroup "COMU" [color: #339AF0] {
+  "COMU_ADQUIRENTES"
+  "COMU_AGENCIAS"
+  "COMU_BANCOS"
+  "COMU_BANCOS_CASHBACK"
+  "COMU_CONSULTAS"
+  "COMU_CUENTAS_ADQUIRENTES"
+  "COMU_DEPARTAMENTOS"
+  "COMU_ESTADOS"
+  "COMU_FECHAS"
+  "COMU_GRUPO_ELIMINACION"
+  "COMU_GRUPO_ELIMINACION_REL"
+  "COMU_HISTORICO"
+  "COMU_MARCAS_TASA_CAMBIO"
+  "COMU_MONEDAS"
+  "COMU_MUNICIPIOS"
+  "COMU_PAISES"
+  "COMU_PARAMETROS"
+  "COMU_PARAMETROS_MARCAS"
+  "COMU_PROCESO_ELIMINACION"
+  "COMU_PROCESS_BATCH_CONTROL"
+  "COMU_PROCESS_FILE"
+  "COMU_PROVINCIAS"
+  "COMU_REPORT_TEMPLATE"
+  "COMU_SEGUIMIENTO_PROCESOS"
+  "COMU_SEGUIMIENTO_SUB_PROCESOS"
+  "COMU_TASAS_CAMBIO"
+  "COMU_TIPOS_PROCESOS"
+  "COMU_TIPOS_SUB_PROCESOS"
+  "COMU_VISTAS_PARAMETROS"
+}
+
+TableGroup "DCI" [color: #4DABF7] {
+  "DCI_ACQ_CHIP_DETAIL"
+  "DCI_ACQ_RECAP"
+  "DCI_ACQ_RECAP_CONTROL"
+  "DCI_ACQ_RECAP_SETTLEMENT"
+  "DCI_ACQ_RECAP_SUSPEND_REJECTED"
+  "DCI_ACQ_SUSPEND_REJECTED_RECORD"
+  "DCI_ACQ_TRANSACTION"
+  "DCI_CHARGE_TYPE"
+  "DCI_CURRENCY_CODE"
+  "DCI_CYCLE_RANGE"
+  "DCI_DISPUTE_DETAIL"
+  "DCI_DISPUTE_ORIGINAL_DETAIL"
+  "DCI_EXCHANGE_RATE"
+  "DCI_FEE_DETAIL"
+  "DCI_GEO_CODE"
+  "DCI_IIC"
+  "DCI_IMR_MERCHANT"
+  "DCI_INTES"
+  "DCI_MCC"
+  "DCI_PTA_RATE"
+  "DCI_TYPE_CHARGE"
+}
+
+TableGroup "DL" [color: #845EF7] {
+  "DL_ELIMINACION_PROCESOS_DETALLE"
+  "DL_HIST_COMU_PROCESOS_MARCAS"
+  "DL_HIST_CONFIR_DINERS"
+  "DL_HIST_CONFIR_MASTERCARD"
+  "DL_HIST_CONFIR_VISA"
+  "DL_HIST_INCOMING_MASTERCARD"
+  "DL_HIST_INCOMING_MDS"
+  "DL_HIST_INCOMING_PROPIETARIA"
+  "DL_HIST_INCOMING_VISA"
+  "DL_HIST_LIQUIDACIONES_COMERCIO"
+  "DL_HIST_LIQUIDACIONES_MARCAS"
+  "DL_HIST_OUTGOING_DINNER"
+  "DL_HIST_OUTGOING_MASTERCARD"
+  "DL_HIST_OUTGOING_VISA"
+  "DL_PROCESOS_ELIMINADOS"
+}
+
+TableGroup "FACREP" [color: #5F3DC4] {
+  "FACREP_PSWD"
+}
+
+TableGroup "MAIL" [color: #BE4BDB] {
+  "MAIL_ADJUNTOS"
+  "MAIL_CORREO"
+}
+
+TableGroup "MASTER" [color: #D6336C] {
+  "MASTER_ADDRESS"
+}
+
+TableGroup "MC" [color: #F06595] {
+  "MC_ACQ_BIN_SERVICE"
+  "MC_ACQUIRER_BIN"
+  "MC_BUS_SERVICE_ENFORCEMENT"
+  "MC_CAB_PROGRAM"
+  "MC_CARD_PRODUCT"
+  "MC_CARGOS_FEE"
+  "MC_DEFAULT_BUS_SERVICE"
+  "MC_EXCHANGE_RATE"
+  "MC_INTCHG_AMOUNT"
+  "MC_INTCHG_FEE_GROUPS"
+  "MC_IPM_TRANSACTION"
+  "MC_IRD_PRODUCT_LNK"
+  "MC_ISS_ACC_RANGE_CP"
+  "MC_ISSUE_ACCOUNT_RANGE"
+  "MC_LINKSER_IRD_POLICY"
+  "MC_MCC"
+  "MC_MDS_SETTLEMENT_CONTROL"
+  "MC_MDS_SIAL_PENDING"
+  "MC_TABLA_RANGO_CUENTAS"
+  "MC_TABLA_RANGO_CUENTAS_BOL"
+  "MC_TABLA_RANGO_CUENTAS_HIST"
+  "MC_TIMELINESS_CODE"
+  "MC_T464_SETTLEMENT_SUMMARY"
+  "MC_T464_TRANSACTION"
+}
+
+TableGroup "PRO" [color: #FF8787] {
+  "PRO_BASEII_INC"
+  "PRO_BASEII_INC_ARCHIVO"
+  "PRO_FEE_APLICADOS"
+  "PRO_TRANSACCIONES_INCOMING"
+}
+
+TableGroup "QR" [color: #FA5252] {
+  "QR_CUENTAS_PARTICIPANTES"
+  "QR_PAGO_CONSOLIDADO"
+  "QR_PAGO_DETALLE"
+  "QR_PARTICIPANTES"
+}
+
+TableGroup "REPORTES" [color: #E8590C] {
+  "REPORTES_CONFIG"
+}
+
+TableGroup "RUTAS" [color: #F76707] {
+  "RUTAS_VISA_SETTLEMETN"
+}
+
+TableGroup "SIN" [color: #74B816] {
+  "SIN_PARAMETRIZACION_PERIODO"
+  "SIN_TRANSACCIONES_ENVIADAS"
+  "SIN_TRANSACCIONES_ENVIADAS_DET"
+  "SIN_TRANSACCIONES_ESTADOS"
+  "SIN_TRANSACCIONES_REV_DET"
+}
+
+TableGroup "STAGING" [color: #82C91E] {
+  "STAGING_MATCH"
+}
+
+TableGroup "ST" [color: #A9E34B] {
+  "ST_SETTLEMENT_ADJUSTMENTS"
+  "ST_SETTLEMENT_ISSUER_ACQUIRER"
+  "ST_SETTLEMENT_TRANSACTION"
+}
+
+TableGroup "TB" [color: #15AABF] {
+  "TB_CAPT_COMERCIO_POS"
+  "TB_CAPT_MATRIZ_POS"
+  "TB_CCA_COMERCIOS"
+  "TB_CCA_EQUIPOS"
+  "TB_CCA_LIQCHE"
+  "TB_CCA_METODO_PAGO"
+  "TB_COMERCIOS_EXCEPCIONALES"
+  "TB_NOFACTMATRIZ"
+  "TB_PARAM_COMERCIO_MATRIZ"
+  "TB_QR_COMERCIOS_COMISION"
+}
+
+TableGroup "TJ" [color: #1098AD] {
+  "TJ_BANCOS_EMISORES"
+  "TJ_BINES_EMISORES"
+  "TJ_SUCURSALES_EMISORES"
+  "TJ_TARJETAS_EMISORES"
+  "TJ_TIPOS_TARJETAS_EMISORES"
+}
+
+TableGroup "VI" [color: #1971C2] {
+  "VI_ARDEF"
+  "VI_ARDEF_BOL"
+  "VI_ARDEF_HISTORICO"
+  "VI_AUTORIZACIONES_INCOMING"
+  "VI_BASEII_INC"
+  "VI_BASEII_INC_ARCHIVO"
+  "VI_BASEII_OUT"
+  "VI_BASEII_OUT_ARCHIVO"
+  "VI_BIN_PROPIETARIA_NAL"
+  "VI_CARGOS_FEE"
+  "VI_CONFIG_LIQ_ARCHIVOS"
+  "VI_CUADRE_CONFIRMACION"
+  "VI_CUADRE_LIQUIDACION"
+  "VI_CUADRE_PVI_ARCHIVO"
+  "VI_CUADRE_PVI_DETALLE"
+  "VI_ENRIQ_PROCESOS"
+  "VI_EP100A_ARCHIVO"
+  "VI_EP100A_TRANSACCION"
+  "VI_EP110_ARCHIVO"
+  "VI_EP110_RESUMEN"
+  "VI_EP_204A"
+  "VI_EP210E_ARCHIVO"
+  "VI_EP210E_TRANSACCION_FIN"
+  "VI_EP210E_TRANSACCION_NO_FIN"
+  "VI_EP_221E"
+  "VI_FEE_APLICADOS"
+  "VI_FEE_MOTIVOS"
+  "VI_LIQUIDACIONES_ADQ"
+  "VI_LIQUIDACIONES_EMI"
+  "VI_PARAMETROS"
+  "VI_TIPO_BANDERA"
+  "VI_TIPO_ORIGEN"
+  "VI_TIPO_OUTGOING"
+  "VI_TIPO_TC"
+  "VI_TIPO_TRANSACCION"
+  "VI_TRANSACCIONES_INCOMING"
+  "VI_VAO_CONCILIACION"
+  "VI_VSS_PARAMETROS"
+}
+
+TableGroup "VZ" [color: #1864AB] {
+  "VZ_AUTORIZACION"
+  "VZ_CONSOLIDADO"
+  "VZ_DETALLE"
+  "VZ_ESTADO"
+  "VZ_PROCESO_SECUENCIA"
+  "VZ_RESPUESTA"
+}

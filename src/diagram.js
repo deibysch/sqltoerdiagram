@@ -10,6 +10,12 @@ import { computeLineHops } from './line-hops.js';
 import { COMMENT_MODES, CARD, commentsOf, commentFor, layoutCommentCard } from './comments.js';
 import { inferLinks as inferLinksCore } from './infer-links.js';
 
+// The view zooms out to MIN_ZOOM, or further on a diagram too big to fit the view
+// at that: as far as half the scale it fits at, but never past FLOOR_ZOOM.
+const MIN_ZOOM = 0.08;
+const FLOOR_ZOOM = 0.005;
+const MAX_ZOOM = 4;
+
 export class Diagram {
   constructor(canvas) {
     this.canvas = canvas;
@@ -1604,7 +1610,7 @@ export class Diagram {
         const a = tpos(e.touches[0]), b = tpos(e.touches[1]);
         const dist = Math.hypot(a.sx - b.sx, a.sy - b.sy) || 1;
         const mx = (a.sx + b.sx) / 2, my = (a.sy + b.sy) / 2;
-        const newScale = clamp(this.cam.scale * (dist / pinch.dist), 0.08, 4);
+        const newScale = clamp(this.cam.scale * (dist / pinch.dist), Math.min(this.minScale(), this.cam.scale), MAX_ZOOM);
         const k = newScale / this.cam.scale;
         this.cam.x = mx - (mx - this.cam.x) * k;          // zoom around the pinch midpoint
         this.cam.y = my - (my - this.cam.y) * k;
@@ -3100,8 +3106,22 @@ export class Diagram {
     datalist?.remove();
   }
 
+  /** How far out the view may zoom: MIN_ZOOM, or past it as far as the whole diagram needs. */
+  minScale() {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const grow = (b) => {
+      x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
+      x1 = Math.max(x1, b.x + b.w); y1 = Math.max(y1, b.y + b.h);
+    };
+    for (const t of this.model.tables) if (Number.isFinite(t.x)) grow(t);
+    for (const a of this.annotations) if (Number.isFinite(a.x) && a.w > 0) grow(a);
+    if (!(x1 > x0 && y1 > y0)) return MIN_ZOOM;
+    const fits = Math.min(this.viewW / (x1 - x0), this.viewH / (y1 - y0));
+    return clamp(fits / 2, FLOOR_ZOOM, MIN_ZOOM);
+  }
+
   _zoomAt(sx, sy, factor) {
-    const newScale = clamp(this.cam.scale * factor, 0.08, 4);
+    const newScale = clamp(this.cam.scale * factor, Math.min(this.minScale(), this.cam.scale), MAX_ZOOM);
     const k = newScale / this.cam.scale;
     this.cam.x = sx - (sx - this.cam.x) * k;
     this.cam.y = sy - (sy - this.cam.y) * k;
@@ -3140,7 +3160,7 @@ export class Diagram {
     const scale = clamp(Math.min(
       (this.viewW - padding * 2) / bw,
       (this.viewH - padding * 2) / bh,
-    ), 0.08, 1.5);
+    ), FLOOR_ZOOM, 1.5);
     this.cam.scale = scale;
     this.cam.x = (this.viewW - bw * scale) / 2 - x0 * scale;
     this.cam.y = (this.viewH - bh * scale) / 2 - y0 * scale;
