@@ -482,7 +482,7 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
     };
     const j = {
       kind: 'improve', key, session: s,
-      phase: 'measuring', round: 0, evaluated: 0, total: 0, triesBefore: s.tries,
+      phase: 'measuring', back: 0, evaluated: 0, total: 0, triesBefore: s.tries,
       onCanvas: signature,  // what Improve last put on the canvas
       recorded: false,      // the undo step back to where it started is taken
       chains: new Map(),    // chain -> the layout it reported last
@@ -501,7 +501,7 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
           for (const sig of m.signatures) s.settled.add(sig);
           track(j, m);
         } else if (m.type === 'progress') {
-          Object.assign(j, { phase: m.phase, round: m.round, evaluated: m.evaluated, total: m.total });
+          Object.assign(j, { phase: m.phase, back: m.back, evaluated: m.evaluated, total: m.total });
           s.nextSeed = m.seed;
           s.tries = j.triesBefore + m.tries;
         }
@@ -586,7 +586,7 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
       : 'nothing better yet';
     const doing = j.phase === 'exploring' ? `trying other layouts (${nf.format(s.tries)} so far)`
       : j.phase === 'measuring' ? 'drawing the real lines of a layout'
-      : `swapping neighbours, round ${j.round + 1}: ${nf.format(j.evaluated)} of ${nf.format(j.total)}`;
+      : `${j.back ? `past a dead end, ${count(j.back, 'step', 'steps')} back` : 'swapping neighbours'}: ${nf.format(j.evaluated)} of ${nf.format(j.total)}`;
     // the last ten seconds of patience are counted down
     const left = j.betterAt == null ? Infinity : patience().ms - (performance.now() - j.betterAt);
     const ending = left <= 10e3 ? ` · stopping in ${Math.max(1, Math.ceil(left / 1000))} s unless it finds better` : '';

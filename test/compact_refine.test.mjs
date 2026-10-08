@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { compactInput, compactAttempt, measureRealLines, applyCompactResult } from '../src/compact-search-core.js';
-import { refineContext, neighbourPairs, placeSwap, placeMove, candidateMoves, evaluateMove, createImproveJob, localJudge } from '../src/compact-refine.js';
+import { refineContext, neighbourPairs, placeSwap, placeMove, candidateMoves, evaluateMove, createImproveJob, localJudge, improveSteps } from '../src/compact-refine.js';
 import { compactSpacing, fitGroupBox } from '../src/group-layout-compact.js';
 import { parallelJudge, createRefineHelper } from '../src/refine-parallel.js';
 import { rankScore } from '../src/layout-goals.js';
@@ -367,9 +367,89 @@ test('a layout Improve reached goes on the diagram with its group boxes and its 
   assert.strictEqual(d.edgeAnchors.size, input.relations.length);
 });
 
+// --- past a dead end ------------------------------------------------------------
+
+/**
+ * Improve on schema(12, 0, 1) without exploring, its best layout refined past
+ * its dead ends right away or not at all: what it reported, and every judgement
+ * it asked for, with the chain that asked.
+ */
+const deepenedOf = (options) => once(() => {
+  const { input, start } = firstLayout(schema(12, 0, 1));
+  const ctx = refineContext(input);
+  const judge = localJudge(ctx);
+  const reports = [], asked = [];
+  const steps = improveSteps(ctx, start, { maxTries: 0, ...options });
+  for (let next = steps.next(); !next.done;) {
+    const m = next.value;
+    if (m.type === 'route') next = steps.next(judge.route(m.positions));
+    else if (m.type === 'evaluate') {
+      asked.push(m);
+      next = steps.next(judge.evaluate(m.state, m.moves));
+    } else {
+      reports.push(m);
+      next = steps.next();
+    }
+  }
+  return { input, reports, asked };
+});
+const DEEPENED = deepenedOf({ deepenAfter: 0 });
+const NOT_DEEPENED = deepenedOf({ tabuSteps: 0 });
+const realScore = (input, entry) => rankScore(entry.measurement.metrics, { goal: input.goal, shape: input.shape });
+const signature = (state) => state.positions.map(p => `${p[1]},${p[2]}`).join(';');
+
+test('the best layout is refined further past its dead ends, and here comes out better', () => {
+  const on = DEEPENED(), off = NOT_DEEPENED();
+  const chains = (r) => new Set(r.asked.map(m => m.chain));
+  assert.deepStrictEqual([...chains(on)], [0, 1], 'a chain of its own');
+  assert.deepStrictEqual([...chains(off)], [0]);
+  assert.ok(on.asked.some(m => m.chain === 1 && m.back > 0), 'it stepped back');
+  assert.ok(!on.asked.some(m => m.chain === 0 && m.back > 0), 'the first chain stops at its dead end');
+  // it starts where the first chain ended, without measuring or reporting it again
+  assert.strictEqual(signature(on.asked.find(m => m.chain === 1).state), lastBest(off.reports).signature);
+  assert.strictEqual(on.reports.filter(m => m.type === 'measured').length, 1);
+  const [a, b] = [realScore(on.input, lastBest(on.reports)), realScore(off.input, lastBest(off.reports))];
+  assert.ok(a < b, `${a} against ${b}`);
+});
+
+test('refined past its dead ends, a chain ends on the best layout it reached, not where its last step back left it', () => {
+  const { reports } = DEEPENED();
+  const settled = reports.filter(m => m.type === 'settled').at(-1);
+  assert.strictEqual(settled.chain, 1);
+  assert.strictEqual(settled.result.signature, lastBest(reports).signature);
+  assert.deepStrictEqual(settled.result.measurement.metrics, lastBest(reports).measurement.metrics);
+});
+
+test('past its dead ends, a chain never comes back to a layout it has been at', () => {
+  const states = DEEPENED().asked.filter(m => m.chain === 1).map(m => m.state)
+    .filter((state, k, all) => k === 0 || state !== all[k - 1]);
+  assert.strictEqual(new Set(states.map(signature)).size, states.length);
+});
+
+test('a move is made as judged from the layout it is made from, and not every move is judged after each', () => {
+  const asked = DEEPENED().asked.filter(m => m.chain === 1);
+  const all = asked[0].moves.length;
+  let made = 0;
+  for (let k = 1; k < asked.length; k++) {
+    const before = asked[k - 1].state, after = asked[k].state;
+    if (before === after) continue;
+    made++;
+    const changed = after.positions.filter((p, i) => p[1] !== before.positions[i][1] || p[2] !== before.positions[i][2]).length;
+    const judged = asked.filter(m => m.state === before).flatMap(m => m.moves);
+    assert.ok(judged.some(m => m.tables.length === changed
+      && m.tables.every(([i, x, y]) => after.positions[i][1] === x && after.positions[i][2] === y)), `move ${made} judged from where it was made`);
+  }
+  assert.ok(made > 5, `${made} moves made`);
+  // a judgement holds while nothing near it changes
+  const judged = asked.reduce((n, m) => n + m.moves.length, 0);
+  assert.ok(judged < all * made, `${judged} judgements for ${made} moves of ${all} each`);
+});
+
 test('exploring measures the most promising of each few starting points, and refines it unless it is far behind', () => {
   const { input, start } = firstLayout(schema(14, 2, 23));
-  const reports = runAll(createImproveJob({ kind: 'improve', input, start, options: { firstSeed: 5, maxTries: 8 } }));
+  // the best refined past its dead ends only once exploring finds nothing (tested above)
+  const options = { firstSeed: 5, maxTries: 8, deepenAfter: Infinity };
+  const reports = runAll(createImproveJob({ kind: 'improve', input, start, options }));
 
   const tried = reports.filter(m => m.type === 'progress' && m.phase === 'exploring');
   assert.deepStrictEqual(tried.map(m => [m.tries, m.seed]), [1, 2, 3, 4, 5, 6, 7, 8].map(n => [n, 5 + n]));

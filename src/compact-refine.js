@@ -21,10 +21,15 @@
 // swaps without rip-up halved their time for one crossing more at the end (82
 // against 81), and synthetic schemas came out the same either way.
 //
-// A round tries every table with its nearest neighbour in each of the four
-// directions, within its own group. It takes the swap that improves the most,
-// tries the other improving ones again from there, and rounds go on until one
-// finds nothing. Routing the whole diagram again between rounds, to undo the
+// Every table is tried with its nearest neighbour in each of the four
+// directions, within its own group, and the swap that improves the most is made,
+// until none does. A swap's judgement holds for as long as nothing near it
+// changes: once one is made, 72% to 81% of the others judged exactly as before
+// (35 tables in 6 groups, 60 in 10), and the rest came near it. So a swap is
+// judged again only when it must be: when it is placed anew; when it was better
+// from an earlier layout, before the best is made; once none is better, when a
+// swap made since came near it; and before the chain ends, every one judged from
+// an earlier layout. Routing the whole diagram again between swaps, to undo the
 // drift of lines re-routed a few at a time, bought one crossing on the real
 // schema for 68 s, and nothing elsewhere, so it is not done. Measured from
 // Balanced's first arrangement, on one core: 35 tables without groups, lines
@@ -51,10 +56,19 @@
 //
 // It refines the layout on the canvas first, then explores: other starting points
 // judged by the estimate, the most promising measured and refined in turn, since
-// a better start often refines into a better end. That goes on until it is
-// stopped. The moves of a round are independent of each other, so in a worker
-// with cores to spare helpers judge them (refine-parallel.js), with the same
-// result as here.
+// a better start often refines into a better end. Once exploring stops finding
+// better, the best layout is refined further, past its dead ends: at a layout no
+// move makes better, it makes the one that makes it least worse and goes on from
+// there, with the moves it made lately tabu, and so is any that takes it back to
+// a layout it has been at, unless it betters the best (tabu search, as Taillard's
+// for the quadratic assignment problem, which placing tables in slots is). It
+// ends on the best it reached, after a few steps back in a row without bettering
+// it. Stepping back in every chain instead cost the time exploring would have
+// found better layouts with: on 12 synthetic schemas, given 60 s each, the end
+// was 4.3% worse on average, and worse on 8. That goes on until it is stopped.
+// The moves judged at once are independent of each other, so in a worker with
+// cores to spare helpers judge them (refine-parallel.js), with the same result
+// as here.
 
 import { getDiagramEdges, organizeLinesShortestPath } from './line-organizer.js';
 import { getTableAnchor, buildOrthogonalPoints, segmentIntersectsBox } from './routing.js';
@@ -62,13 +76,14 @@ import { rankScore } from './layout-goals.js';
 import { collectGroupsCompact, compactLayoutMetrics, compactSpacing, fitGroupBox } from './group-layout-compact.js';
 import { diagramFrom, measureRealLines, realLinesOf, compactAttempt } from './compact-search-core.js';
 
-const MAX_ROUNDS = 8;
+const MAX_ROUNDS = 1000;    // times a chain looks over its moves, at most
 const MAX_PUSHED = 8;        // tables a swap may push out of its way
 const MAX_PUSHED_GROUPS = 3; // groups two groups trading places may push out of theirs
 const CLEAR_SHARE = 0.6;     // closer than this share of the gap between tables (gutter between groups), one is in the way
 const GROUP_CLEAR = 24;      // px a group box keeps from another group box
 const TABLE_CLEAR = 16;      // ... and from a table outside it
 const HIT_MARGIN = 8;        // a line this close to a table that moved is routed again
+const TOUCH_MARGIN = 20;     // px: a move this close to one made is judged again
 // A refine has gained up to 23% from one start (35 tables in 6 groups), so a
 // layout that measures further than this behind the best so far is only measured.
 const REACH = 1.3;
@@ -81,6 +96,14 @@ const GROUP_SWAP_SLACK = 1.05;
 // starting points the estimate ranks layouts about as the real lines do (rank
 // correlation 0.83 to 0.98), so the best of a few is the one worth measuring.
 const EXPLORE_BATCH = 4;
+// Once this many rounds of exploring in a row have found nothing better, the best
+// layout is refined further, past its dead ends (tabu search) ...
+const DEEPEN_AFTER = 2;
+// ... stepping back up to this many times in a row without bettering it ...
+const TABU_STEPS = 4;
+// ... and never making a move again within this many moves of making it, unless
+// that betters the best.
+const TABU_TENURE = 5;
 
 const DIRECTIONS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 
@@ -234,9 +257,7 @@ function promising(ctx, state, move) {
   if (move.pair.kind !== 'groups') return true;
   const estimate = (positions) => rankScore(compactLayoutMetrics(diagramFrom(ctx.input, positions)), ctx.objective);
   if (!estimates.has(state)) estimates.set(state, estimate(state.positions));
-  const positions = state.positions.map(p => p.slice());
-  for (const [i, x, y] of move.tables) positions[i] = [positions[i][0], x, y];
-  return estimate(positions) <= estimates.get(state) * GROUP_SWAP_SLACK + 0.5;
+  return estimate(movedPositions(state, move)) <= estimates.get(state) * GROUP_SWAP_SLACK + 0.5;
 }
 
 /** The move a candidate (candidateMoves) makes from `state`, or null when there is no room for it. */
@@ -467,33 +488,72 @@ function linesToRoute(d, moved) {
 /**
  * Judge a move (placeSwap) by the real lines: route again only the lines it
  * touches, once each, the others held where `state` has them. Returns its score
- * and metrics and, for every line routed, [key, anchors, waypoints], null for none.
+ * and metrics, for every line routed [key, anchors, waypoints], null for none,
+ * and the `area` it touches: boxes around its tables, where they stood and where
+ * they go, and around the lines it routed, before and after.
  */
 export function evaluateMove(ctx, state, move) {
   const d = stateDiagram(ctx, state);
+  const area = [];
   const moved = move.tables.map(([i, x, y]) => {
     const t = d.model.tables[i];
+    area.push([t.x, t.y, t.x + t.w, t.y + t.h], [x, y, x + t.w, y + t.h]);
     t.x = x;
     t.y = y;
     return t;
   });
   const keys = linesToRoute(d, moved);
+  for (const key of keys) {
+    const pts = d.edgeWaypoints.get(key);
+    if (pts?.length) area.push(boxAround(pts));
+  }
   // no key at all would route every line
   if (keys.length) {
     organizeLinesShortestPath(d, keys, { recordHistory: false, forceStyle: false, keepOthers: true, quick: true, ripUpPasses: 0 });
+    const routed = new Set(keys);
+    for (const e of getDiagramEdges(d)) if (routed.has(e.key)) area.push(boxAround(routeOf(d, e)));
   }
   const { metrics } = realLinesOf(d);
   return {
     score: rankScore(metrics, ctx.objective),
     metrics,
     lines: keys.map(key => [key, d.edgeAnchors.get(key) || null, d.edgeWaypoints.get(key) || null]),
+    area,
   };
+}
+
+/** The box around some points, as [left, top, right, bottom]. */
+function boxAround(pts) {
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+}
+
+/** Whether two areas (evaluateMove) come within TOUCH_MARGIN of each other. */
+function touches(a, b) {
+  const m = TOUCH_MARGIN;
+  return a.some(p => b.some(q => p[0] - m < q[2] && q[0] - m < p[2] && p[1] - m < q[3] && q[1] - m < p[3]));
+}
+
+/** What tells a move from the others: the same pair of tables or groups, or the same group turned the same way. */
+function moveKey(pair) {
+  return pair.kind === 'flip' ? `flip ${pair.g} ${pair.axis}` : `${pair.kind || 'tables'} ${pair.a} ${pair.b}`;
+}
+
+/** What tells a move placed from one layout from the others: the move, and where it puts every table it moves. */
+function placedKey(move) {
+  return `${moveKey(move.pair)}:${move.tables.map(t => t.join(',')).join(';')}`;
+}
+
+/** The positions of `state` once `move` is made. */
+function movedPositions(state, move) {
+  const positions = state.positions.map(p => p.slice());
+  for (const [i, x, y] of move.tables) positions[i] = [positions[i][0], x, y];
+  return positions;
 }
 
 /** `state` once `move` is made, with the lines evaluateMove() routed for it. */
 function applyMove(ctx, state, move, result) {
-  const positions = state.positions.map(p => p.slice());
-  for (const [i, x, y] of move.tables) positions[i] = [positions[i][0], x, y];
+  const positions = movedPositions(state, move);
   const anchors = new Map(state.anchors);
   const waypoints = new Map(state.waypoints);
   for (const [key, a, pts] of result.lines) {
@@ -547,23 +607,35 @@ function entryOf(ctx, state, orientation) {
  *
  * It refines `start` first, then explores: EXPLORE_BATCH other starting points
  * (seeds, from `firstSeed` on) judged by the estimate, the most promising of them
- * measured and, unless it measures too far behind, refined; and again. A layout
- * marked `settled` is only measured, since refining it again finds nothing.
+ * measured and, unless it measures too far behind, refined; and again. Once
+ * `deepenAfter` rounds of exploring in a row find nothing better, the best is
+ * refined further in a chain of its own, past up to `tabuSteps` dead ends in a
+ * row (0 never), and again whenever a new best has come up. A layout marked
+ * `settled` is only measured, since refining it again finds nothing.
  */
-export function* improveSteps(ctx, start, { firstSeed = 1, maxTries = Infinity, maxRounds = MAX_ROUNDS } = {}) {
+export function* improveSteps(ctx, start, {
+  firstSeed = 1, maxTries = Infinity, maxRounds = MAX_ROUNDS, tabuSteps = TABU_STEPS, deepenAfter = DEEPEN_AFTER,
+} = {}) {
   let best = null;
+  let bestOrientation = 'LR';
   let tries = 0;
   let seed = firstSeed;
   let chains = 0;
   const seen = new Set();
 
-  function* improveFrom(layout) {
+  // A chain: `layout` refined until no move makes it better, or, with `steps`,
+  // past that many dead ends in a row. `deepening` the best layout, which has
+  // been measured and reported already.
+  function* improveFrom(layout, { steps = 0, deepening = false } = {}) {
     const chain = chains++;
     const from = startFrom(ctx, layout);
     // the best so far, or else a layout still worth picking
     const report = (state) => {
       const type = !best || state.score < best.score - 0.5 ? 'best' : 'candidate';
-      if (type === 'best') best = state;
+      if (type === 'best') {
+        best = state;
+        bestOrientation = from.orientation;
+      }
       return { type, chain, result: entryOf(ctx, state, from.orientation) };
     };
     seen.add(from.signature);
@@ -575,42 +647,125 @@ export function* improveSteps(ctx, start, { firstSeed = 1, maxTries = Infinity, 
       measurement = yield { type: 'route', positions: from.positions };
     }
     let state = stateFrom(ctx, from, measurement);
-    yield { type: 'measured', signature: from.signature, measurement };
-    if (best && state.score > best.score * REACH) return;
-    yield report(state);
-    if (layout.settled) return;
+    if (!deepening) {
+      yield { type: 'measured', signature: from.signature, measurement };
+      if (best && state.score > best.score * REACH) return;
+      yield report(state);
+      if (layout.settled) return;
+    }
+
+    let top = state;                // the best of this chain
+    let back = 0;                   // steps back since it last bettered it
+    let made = 0;                   // moves made
+    const madeAt = new Map();       // move -> when it was last made
+    const visited = new Set([signatureOf(state.positions)]);
+    // What each move placed as it is now came to when it was last judged:
+    // { delta, area, result, from, touched }. `result` is good to make it with
+    // while `from` is still the state; `touched` once a move made since came
+    // near it, which may have changed what it comes to.
+    const known = new Map();
+    // A move that betters the chain's best is always open. Any other is tabu when
+    // it was made lately, or when it takes the chain back where it has been.
+    const tabu = (move, score) => score >= top.score - 0.5
+      && (made - (madeAt.get(moveKey(move.pair)) ?? -Infinity) <= TABU_TENURE
+        || visited.has(signatureOf(movedPositions(state, move))));
+    const make = (move, result) => {
+      state = applyMove(ctx, state, move, result);
+      madeAt.set(moveKey(move.pair), made++);
+      visited.add(signatureOf(state.positions));
+      for (const k of known.values()) if (!k.touched && touches(k.area, result.area)) k.touched = true;
+    };
 
     for (let round = 0; round < maxRounds; round++) {
-      let accepted = 0;
-      let pairs = candidateMoves(ctx, state);
-      for (;;) {
-        const moves = pairs.map(p => placeMove(ctx, state, p)).filter(m => m && promising(ctx, state, m));
-        if (!moves.length) break;
-        const results = yield { type: 'evaluate', state, moves, round, tries, seed };
-        const improving = results
-          .map((r, i) => [r, i])
-          .filter(([r]) => r.score < state.score - 0.5)
-          .sort((x, y) => x[0].score - y[0].score || x[1] - y[1]);
-        if (!improving.length) break;
-        const [result, i] = improving[0];
-        state = applyMove(ctx, state, moves[i], result);
-        accepted++;
-        yield report(state);
-        // the other improving moves, placed and judged again from here
-        pairs = improving.slice(1).map(([, k]) => moves[k].pair);
+      const moves = candidateMoves(ctx, state).map(p => placeMove(ctx, state, p)).filter(Boolean);
+      const keys = moves.map(placedKey);
+      const all = moves.map((_, i) => i);
+      const at = (i) => known.get(keys[i]);
+      const current = (i) => at(i).from === state;
+      function* judge(list) {
+        const results = yield { type: 'evaluate', state, moves: list.map(i => moves[i]), chain, round, back, tries, seed };
+        list.forEach((i, k) => known.set(keys[i], {
+          delta: results[k].score - state.score, area: results[k].area, result: results[k], from: state, touched: false,
+        }));
       }
-      if (!accepted) break;
+      // two groups trading places that the estimate finds much worse are left out
+      for (const i of all) {
+        if (!known.has(keys[i]) && !promising(ctx, state, moves[i])) {
+          known.set(keys[i], { delta: Infinity, area: [], from: state, touched: false });
+        }
+      }
+      // a move placed where it never was is judged
+      const unknown = all.filter(i => !known.has(keys[i]));
+      if (unknown.length) yield* judge(unknown);
+
+      const open = all
+        .map(i => [state.score + at(i).delta, i])
+        .filter(([score, i]) => score < Infinity && !tabu(moves[i], score))
+        .sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+      const better = open.filter(([score]) => score < state.score - 0.5).map(([, i]) => i);
+      // those that were better from an earlier layout are judged again from this one
+      const recheck = better.filter(i => !current(i));
+      if (recheck.length) {
+        yield* judge(recheck);
+        continue;
+      }
+      if (better.length) {
+        const i = better[0];
+        make(moves[i], at(i).result);
+        if (state.score < top.score - 0.5) {
+          top = state;
+          back = 0;
+          yield report(state);
+        }
+        continue;
+      }
+      // Nothing better: those a move made since came near are judged again, then
+      // before the chain ends, every other one judged from an earlier layout.
+      const touched = all.filter(i => at(i).touched && at(i).delta < Infinity);
+      if (touched.length) {
+        yield* judge(touched);
+        continue;
+      }
+      if (!open.length || back >= steps) {
+        const stale = all.filter(i => !current(i));
+        if (!stale.length) break;
+        for (const i of stale) if (at(i).delta === Infinity) known.delete(keys[i]);
+        const again = stale.filter(i => known.has(keys[i]));
+        if (again.length) yield* judge(again);
+        continue;
+      }
+      // a dead end: the move that makes the lines least worse, to go on from there
+      const i = open[0][1];
+      if (!current(i)) {
+        yield* judge([i]);
+        continue;
+      }
+      make(moves[i], at(i).result);
+      back++;
     }
     yield {
       type: 'settled',
       chain,
-      signatures: [from.signature, signatureOf(state.positions)],
-      result: entryOf(ctx, state, from.orientation),
+      signatures: [from.signature, signatureOf(top.positions)],
+      result: entryOf(ctx, top, from.orientation),
     };
   }
 
   yield* improveFrom(start);
-  while (tries < maxTries) {
+  let fruitless = 0;       // rounds of exploring since the best last changed
+  let deepened = null;     // the best layout last refined past its dead ends
+  for (;;) {
+    if (tabuSteps && fruitless >= deepenAfter && best !== deepened) {
+      yield* improveFrom({
+        positions: best.positions, groupBoxes: best.groupBoxes, orientation: bestOrientation,
+        measurement: { metrics: best.metrics, lines: { anchors: best.anchors, waypoints: best.waypoints } },
+      }, { steps: tabuSteps, deepening: true });
+      deepened = best;
+      fruitless = 0;
+      continue;
+    }
+    if (tries >= maxTries) break;
+    const before = best;
     let pick = null;
     for (let k = 0; k < EXPLORE_BATCH && tries < maxTries; k++) {
       const attempt = compactAttempt(ctx.input, seed++);
@@ -619,6 +774,7 @@ export function* improveSteps(ctx, start, { firstSeed = 1, maxTries = Infinity, 
       if (!seen.has(attempt.signature) && (!pick || attempt.score < pick.score)) pick = attempt;
     }
     if (pick) yield* improveFrom({ positions: pick.positions, groupBoxes: pick.groupBoxes, orientation: 'LR' });
+    fruitless = best === before ? fruitless + 1 : 0;
   }
 }
 
@@ -649,7 +805,7 @@ export function createImproveJob(message, makeJudge = localJudge) {
   const steps = improveSteps(ctx, message.start, message.options);
   let next = steps.next();
   let batch = null;
-  let where = { round: 0, tries: 0, seed: message.options?.firstSeed ?? 1 };
+  let where = { round: 0, back: 0, tries: 0, seed: message.options?.firstSeed ?? 1 };
   const progress = (phase, evaluated = 0, total = 0) => ({ type: 'progress', phase, ...where, evaluated, total });
 
   const judgeSome = () => {
@@ -672,7 +828,7 @@ export function createImproveJob(message, makeJudge = localJudge) {
       if (batch) return judgeSome();
       const request = next.value;
       if (request.type === 'evaluate') {
-        where = { round: request.round, tries: request.tries, seed: request.seed };
+        where = { round: request.round, back: request.back, tries: request.tries, seed: request.seed };
         batch = { state: request.state, moves: request.moves, results: [] };
         return judgeSome();
       }
@@ -682,7 +838,7 @@ export function createImproveJob(message, makeJudge = localJudge) {
           return progress('measuring');
         });
       }
-      if (request.type === 'progress') where = { round: request.round, tries: request.tries, seed: request.seed };
+      if (request.type === 'progress') where = { round: request.round, back: 0, tries: request.tries, seed: request.seed };
       next = steps.next();
       return request;
     },
