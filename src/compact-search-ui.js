@@ -586,7 +586,7 @@ export function createCompactSearch({ diagram, host, getSpacing, getShape, after
       : 'nothing better yet';
     const doing = j.phase === 'exploring' ? `trying other layouts (${nf.format(s.tries)} so far)`
       : j.phase === 'measuring' ? 'drawing the real lines of a layout'
-      : `swapping neighbouring tables, round ${j.round + 1}: ${nf.format(j.evaluated)} of ${nf.format(j.total)}`;
+      : `swapping neighbours, round ${j.round + 1}: ${nf.format(j.evaluated)} of ${nf.format(j.total)}`;
     // the last ten seconds of patience are counted down
     const left = j.betterAt == null ? Infinity : patience().ms - (performance.now() - j.betterAt);
     const ending = left <= 10e3 ? ` · stopping in ${Math.max(1, Math.ceil(left / 1000))} s unless it finds better` : '';

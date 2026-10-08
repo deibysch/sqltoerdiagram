@@ -1,7 +1,7 @@
 // Improve, the one button of the panel of "Optimize for": it looks for a better
-// layout until it is stopped, judging every layout by the real lines. Its core is
-// refining: neighbouring tables trade places wherever the real lines come out
-// better.
+// layout for as long as it keeps finding one (the panel stops it after a while
+// without), judging every layout by the real lines. Its core is refining:
+// neighbouring tables trade places wherever the real lines come out better.
 //
 // The layout and the search judge an arrangement by a cheap estimate, every line
 // straight from centre to centre. Between two whole arrangements it ranks them
@@ -37,10 +37,22 @@
 // against is pushed out of its way, inside its own group, as long as no group
 // box runs into another.
 //
+// With groups, whole groups move too, each with its tables as they stand inside
+// it: two neighbouring group boxes trade places by the same rule, pushing whole
+// any group they now press against (a few at most), unless a box would then run
+// into a table outside it; and a group turns over, left for right or top for
+// bottom, within its own bounds. Tables swapping places can only shorten the
+// lines inside a group and to its edge; lines from group to group, most of them
+// on a real schema, need the groups themselves to move. Balanced has placed the
+// groups by the estimate already, so trading two of them nearly always makes the
+// lines worse, by a lot, and costs a whole group's lines to judge; the estimate
+// agrees with the real lines about which ones, so only those it does not find
+// much worse are judged. It is no guide to turning a group over, which is cheap.
+//
 // It refines the layout on the canvas first, then explores: other starting points
 // judged by the estimate, the most promising measured and refined in turn, since
 // a better start often refines into a better end. That goes on until it is
-// stopped. The swaps of a round are independent of each other, so in a worker
+// stopped. The moves of a round are independent of each other, so in a worker
 // with cores to spare helpers judge them (refine-parallel.js), with the same
 // result as here.
 
@@ -52,13 +64,19 @@ import { diagramFrom, measureRealLines, realLinesOf, compactAttempt } from './co
 
 const MAX_ROUNDS = 8;
 const MAX_PUSHED = 8;        // tables a swap may push out of its way
-const CLEAR_SHARE = 0.6;     // closer than this share of the gap between tables, a table is in the way
+const MAX_PUSHED_GROUPS = 3; // groups two groups trading places may push out of theirs
+const CLEAR_SHARE = 0.6;     // closer than this share of the gap between tables (gutter between groups), one is in the way
 const GROUP_CLEAR = 24;      // px a group box keeps from another group box
 const TABLE_CLEAR = 16;      // ... and from a table outside it
 const HIT_MARGIN = 8;        // a line this close to a table that moved is routed again
 // A refine has gained up to 23% from one start (35 tables in 6 groups), so a
 // layout that measures further than this behind the best so far is only measured.
 const REACH = 1.3;
+// Two groups trading places are judged by the real lines only when the estimate
+// finds the layout at most this much worse: on the schemas measured, one the
+// estimate found 2.5% worse shortened the real lines, and none found worse by
+// more than 5% did.
+const GROUP_SWAP_SLACK = 1.05;
 // Other starting points tried by the estimate for each one measured: across
 // starting points the estimate ranks layouts about as the real lines do (rank
 // correlation 0.83 to 0.98), so the best of a few is the one worth measuring.
@@ -153,21 +171,19 @@ function stateFrom(ctx, layout, measurement) {
 }
 
 /**
- * Each table with its nearest neighbour in each of the four directions, in the
- * same group: the pairs a round tries to swap, each once, with the axis they
- * share ('x' for a row, 'y' for a column).
+ * Each box with its nearest other box in each of the four directions, among those
+ * `pairable(a, b)` allows: each pair once, with the axis they share ('x' for a
+ * row, 'y' for a column).
  */
-export function neighbourPairs(ctx, positions) {
-  const boxes = boxesOf(ctx, positions);
+function nearestPairs(boxes, pairable) {
   const c = boxes.map(b => [b.x + b.w / 2, b.y + b.h / 2]);
   const seen = new Set();
   const pairs = [];
   for (let a = 0; a < boxes.length; a++) {
-    if (ctx.skip[a]) continue;
     for (const [dx, dy] of DIRECTIONS) {
       let best = -1, bestD = Infinity;
       for (let b = 0; b < boxes.length; b++) {
-        if (b === a || ctx.skip[b] || ctx.container[b] !== ctx.container[a]) continue;
+        if (b === a || !pairable(a, b)) continue;
         const along = (c[b][0] - c[a][0]) * dx + (c[b][1] - c[a][1]) * dy;
         const across = Math.abs((c[b][0] - c[a][0]) * dy - (c[b][1] - c[a][1]) * dx);
         if (along <= 0 || across > along) continue;
@@ -181,6 +197,53 @@ export function neighbourPairs(ctx, positions) {
     }
   }
   return pairs.sort((p, q) => p.a - q.a || p.b - q.b);
+}
+
+/**
+ * Each table with its nearest neighbour in each of the four directions, in the
+ * same group: the pairs of tables a round tries to swap.
+ */
+export function neighbourPairs(ctx, positions) {
+  const pairable = (a, b) => !ctx.skip[a] && !ctx.skip[b] && ctx.container[a] === ctx.container[b];
+  return nearestPairs(boxesOf(ctx, positions), pairable);
+}
+
+/**
+ * Everything a round tries: every table with its neighbours (neighbourPairs),
+ * and with groups, every group box with its neighbours ({ kind: 'groups' }) and
+ * every group of two tables or more turned over either way ({ kind: 'flip' }).
+ */
+export function candidateMoves(ctx, state) {
+  const moves = neighbourPairs(ctx, state.positions);
+  if (ctx.implicit) return moves;
+  for (const pair of nearestPairs(state.groupBoxes, () => true)) moves.push({ kind: 'groups', ...pair });
+  ctx.groups.forEach((g, gi) => {
+    if (g.members.length > 1) for (const axis of ['x', 'y']) moves.push({ kind: 'flip', g: gi, axis });
+  });
+  return moves;
+}
+
+// the estimate of each state, for promising()
+const estimates = new WeakMap();
+
+/**
+ * Whether a move is worth judging by the real lines: always, but for two groups
+ * trading places, which the estimate must not find much worse (GROUP_SWAP_SLACK).
+ */
+function promising(ctx, state, move) {
+  if (move.pair.kind !== 'groups') return true;
+  const estimate = (positions) => rankScore(compactLayoutMetrics(diagramFrom(ctx.input, positions)), ctx.objective);
+  if (!estimates.has(state)) estimates.set(state, estimate(state.positions));
+  const positions = state.positions.map(p => p.slice());
+  for (const [i, x, y] of move.tables) positions[i] = [positions[i][0], x, y];
+  return estimate(positions) <= estimates.get(state) * GROUP_SWAP_SLACK + 0.5;
+}
+
+/** The move a candidate (candidateMoves) makes from `state`, or null when there is no room for it. */
+export function placeMove(ctx, state, candidate) {
+  if (candidate.kind === 'groups') return placeGroupSwap(ctx, state, candidate);
+  if (candidate.kind === 'flip') return placeFlip(ctx, state, candidate);
+  return placeSwap(ctx, state, candidate);
 }
 
 /**
@@ -277,6 +340,104 @@ export function placeSwap(ctx, state, pair) {
   if (!touched || !groupsClear(ctx, state, boxes, base, slot, touched)) return null;
   const tables = [...touched].sort((x, y) => x - y).map(i => [i, boxes[i].x, boxes[i].y]);
   return { pair, tables };
+}
+
+/**
+ * Groups a and b trade places, each with its tables as they stand inside it.
+ * Along the axis the two boxes share, the pair keeps its span, and across it
+ * each is centred where the other was, as two tables do (placeSwap), and any
+ * group they now press against is pushed out of their way (makeRoomForGroups).
+ * Returns the move, or null when there is no room for it.
+ */
+function placeGroupSwap(ctx, state, pair) {
+  const base = boxesOf(ctx, state.positions);
+  const boxes = base.map(b => ({ ...b }));
+  const { a, b, axis } = pair;
+  const [pos, size, cross, crossSize] = axis === 'x' ? ['x', 'w', 'y', 'h'] : ['y', 'h', 'x', 'w'];
+  const [first, second] = state.groupBoxes[a][pos] <= state.groupBoxes[b][pos] ? [a, b] : [b, a];
+  const F = state.groupBoxes[first], S = state.groupBoxes[second];
+  const shifts = [
+    [second, F[pos] - S[pos], Math.round(F[cross] + F[crossSize] / 2 - S[crossSize] / 2) - S[cross]],
+    [first, S[pos] + S[size] - F[size] - F[pos], Math.round(S[cross] + S[crossSize] / 2 - F[crossSize] / 2) - F[cross]],
+  ];
+  for (const [gi, along, over] of shifts) {
+    for (const i of ctx.groups[gi].members) {
+      boxes[i][pos] += along;
+      boxes[i][cross] += over;
+    }
+  }
+  const slotOf = ctx.groups.map((_, gi) => gi);
+  slotOf[a] = b;
+  slotOf[b] = a;
+  const groupsMoved = makeRoomForGroups(ctx, state, boxes, slotOf, [a, b]);
+  if (!groupsMoved) return null;
+  const touched = [...groupsMoved].flatMap(gi => ctx.groups[gi].members);
+  const slot = boxes.map((_, i) => i);
+  if (!groupsClear(ctx, state, boxes, base, slot, touched)) return null;
+  return { pair, tables: touched.sort((x, y) => x - y).map(i => [i, boxes[i].x, boxes[i].y]) };
+}
+
+/**
+ * Make room for the groups in `moved`, whose tables already stand where they go
+ * in `boxes`: every other group whose box one of them now comes closer to than
+ * part of the gutter, and closer than both the two groups stood and the two
+ * places they stand in stood, is pushed away whole along whichever axis takes
+ * the shorter push, back to that gap (the gutter at most). What it pushes makes
+ * room in turn. `slotOf[g]` is the group that stood where group g stands now.
+ * Returns the groups that moved, or null when too many had to.
+ */
+function makeRoomForGroups(ctx, state, boxes, slotOf, moved) {
+  const boxOf = (gi) => fitGroupBox(ctx.groups[gi].members.map(i => boxes[i]), ctx.sp);
+  const clear = Math.round(ctx.sp.gutter * CLEAR_SHARE);
+  const queue = [...moved];
+  const touched = new Set(moved);
+  let pushes = 0;
+  while (queue.length) {
+    const p = queue.shift();
+    const P = boxOf(p);
+    for (let q = 0; q < ctx.groups.length; q++) {
+      if (q === p) continue;
+      const Q = boxOf(q);
+      const own = apart(state.groupBoxes[p], state.groupBoxes[q]);
+      const before = Math.min(own, apart(state.groupBoxes[slotOf[p]], state.groupBoxes[slotOf[q]]));
+      // never closer than groupsClear lets two groups come
+      const least = Math.min(GROUP_CLEAR, own);
+      if (apart(P, Q) >= Math.max(least, Math.min(clear, before)) - 0.5) continue;
+      const want = Math.max(least, Math.min(ctx.sp.gutter, Math.max(before, 0)));
+      const right = Q.x + Q.w / 2 >= P.x + P.w / 2, down = Q.y + Q.h / 2 >= P.y + P.h / 2;
+      const shiftX = right ? P.x + P.w + want - Q.x : P.x - want - (Q.x + Q.w);
+      const shiftY = down ? P.y + P.h + want - Q.y : P.y - want - (Q.y + Q.h);
+      const [dx, dy] = Math.abs(shiftX) <= Math.abs(shiftY) ? [Math.round(shiftX), 0] : [0, Math.round(shiftY)];
+      for (const i of ctx.groups[q].members) {
+        boxes[i].x += dx;
+        boxes[i].y += dy;
+      }
+      touched.add(q);
+      queue.push(q);
+      if (touched.size > moved.length + MAX_PUSHED_GROUPS || ++pushes > 50) return null;
+    }
+  }
+  return touched;
+}
+
+/**
+ * A group turned over, left for right (axis 'x') or top for bottom ('y'): each
+ * table goes where its mirror image stood, within the same bounds, so the box
+ * stays put. Returns the move, or null when no table moves.
+ */
+function placeFlip(ctx, state, flip) {
+  const boxes = boxesOf(ctx, state.positions);
+  const [pos, size] = flip.axis === 'x' ? ['x', 'w'] : ['y', 'h'];
+  const members = ctx.groups[flip.g].members;
+  const lo = Math.min(...members.map(i => boxes[i][pos]));
+  const hi = Math.max(...members.map(i => boxes[i][pos] + boxes[i][size]));
+  const tables = [];
+  for (const i of [...members].sort((x, y) => x - y)) {
+    const at = lo + hi - boxes[i][pos] - boxes[i][size];
+    if (at === boxes[i][pos]) continue;
+    tables.push(flip.axis === 'x' ? [i, at, boxes[i].y] : [i, boxes[i].x, at]);
+  }
+  return tables.length ? { pair: flip, tables } : null;
 }
 
 /** The route a line has in `d`, as the canvas draws it. */
@@ -421,9 +582,9 @@ export function* improveSteps(ctx, start, { firstSeed = 1, maxTries = Infinity, 
 
     for (let round = 0; round < maxRounds; round++) {
       let accepted = 0;
-      let pairs = neighbourPairs(ctx, state.positions);
+      let pairs = candidateMoves(ctx, state);
       for (;;) {
-        const moves = pairs.map(p => placeSwap(ctx, state, p)).filter(Boolean);
+        const moves = pairs.map(p => placeMove(ctx, state, p)).filter(m => m && promising(ctx, state, m));
         if (!moves.length) break;
         const results = yield { type: 'evaluate', state, moves, round, tries, seed };
         const improving = results
@@ -435,7 +596,7 @@ export function* improveSteps(ctx, start, { firstSeed = 1, maxTries = Infinity, 
         state = applyMove(ctx, state, moves[i], result);
         accepted++;
         yield report(state);
-        // the other improving swaps, placed and judged again from here
+        // the other improving moves, placed and judged again from here
         pairs = improving.slice(1).map(([, k]) => moves[k].pair);
       }
       if (!accepted) break;

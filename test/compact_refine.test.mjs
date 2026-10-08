@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { compactInput, compactAttempt, measureRealLines, applyCompactResult } from '../src/compact-search-core.js';
-import { refineContext, neighbourPairs, placeSwap, evaluateMove, createImproveJob, localJudge } from '../src/compact-refine.js';
+import { refineContext, neighbourPairs, placeSwap, placeMove, candidateMoves, evaluateMove, createImproveJob, localJudge } from '../src/compact-refine.js';
+import { compactSpacing, fitGroupBox } from '../src/group-layout-compact.js';
 import { parallelJudge, createRefineHelper } from '../src/refine-parallel.js';
 import { rankScore } from '../src/layout-goals.js';
 import { measureTable } from '../src/renderer.js';
@@ -175,6 +176,110 @@ test('a swap that would push a group box into another group is not made', () => 
   assert.ok(placeSwap(refineContext(compactInput(e, SETTINGS)), farState, { a: 0, b: 1, axis: 'x' }));
 });
 
+// --- whole groups ---------------------------------------------------------------
+
+/** Tables in groups, each group boxed as the layout boxes it. */
+function grouped(list, groups, relations = []) {
+  const d = boxes(list, relations, []);
+  const pad = compactSpacing('comfortable');
+  d.annotations = Object.entries(groups).map(([id, keys]) => ({
+    id, type: 'group', text: id, color: 'blue', tables: keys,
+    ...fitGroupBox(d.model.tables.filter(t => keys.includes(t.key)), pad),
+  }));
+  return d;
+}
+const stateOf = (d) => ({
+  positions: d.model.tables.map(t => [t.key, t.x, t.y]),
+  groupBoxes: d.annotations.filter(a => a.type === 'group'),
+});
+
+test('two groups trade places, each with its tables as they stand inside it', () => {
+  const d = grouped([['a', 0, 0, 100, 60], ['b', 0, 100, 100, 60], ['c', 300, 0, 200, 80]], { g1: ['a', 'b'], g2: ['c'] });
+  const input = compactInput(d, SETTINGS);
+  const move = placeMove(refineContext(input), stateOf(d), { kind: 'groups', a: 0, b: 1, axis: 'x' });
+  // g2 now starts where g1 did and g1 ends where g2 did, each centred on the other's row
+  assert.deepStrictEqual(move.tables, [[0, 400, -40], [1, 400, 60], [2, 0, 40]]);
+  const positions = stateOf(d).positions.map(([k], i) => [k, ...move.tables.find(t => t[0] === i).slice(1)]);
+  assertNoOverlap(positions, input);
+});
+
+test('a group swap pushes a third group it would run into out of the way, whole', () => {
+  // g1 is taller than g2: in g2's place it reaches down into g3
+  const list = [['a', 0, 0, 100, 60], ['b', 0, 100, 100, 60], ['c', 300, 0, 200, 80], ['d', 300, 190, 200, 60]];
+  const d = grouped(list, { g1: ['a', 'b'], g2: ['c'], g3: ['d'] });
+  const input = compactInput(d, SETTINGS);
+  const move = placeMove(refineContext(input), stateOf(d), { kind: 'groups', a: 0, b: 1, axis: 'x' });
+  const moved = new Map(move.tables.map(([i, x, y]) => [i, [x, y]]));
+  assert.ok(moved.get(3)[1] > 190 && moved.get(3)[0] === 300, 'g3 goes down, straight');
+  const positions = stateOf(d).positions.map(([k, x, y], i) => [k, ...(moved.get(i) || [x, y])]);
+  assertNoOverlap(positions, input);
+  const pad = compactSpacing('comfortable');
+  const box = (keys) => fitGroupBox(positions.filter(([k]) => keys.includes(k)).map(([k, x, y]) => {
+    const t = input.tables.find(t => t.key === k);
+    return { x, y, w: t.w, h: t.h };
+  }), pad);
+  const [g1, g3] = [box(['a', 'b']), box(['d'])];
+  assert.ok(g3.y >= g1.y + g1.h, 'g3 clear of g1');
+
+  // with a table outside every group right below g3, there is no room to push it into
+  const blocked = grouped([...list, ['e', 300, 330, 200, 60]], { g1: ['a', 'b'], g2: ['c'], g3: ['d'] });
+  assert.strictEqual(placeMove(refineContext(compactInput(blocked, SETTINGS)), stateOf(blocked), { kind: 'groups', a: 0, b: 1, axis: 'x' }), null);
+});
+
+test('a group turns over inside its own bounds, and not at all where that changes nothing', () => {
+  const d = grouped([['a', 0, 0, 100, 60], ['b', 160, 0, 60, 60]], { g1: ['a', 'b'] });
+  const ctx = refineContext(compactInput(d, SETTINGS));
+  assert.deepStrictEqual(placeMove(ctx, stateOf(d), { kind: 'flip', g: 0, axis: 'x' }).tables, [[0, 120, 0], [1, 0, 0]]);
+  assert.strictEqual(placeMove(ctx, stateOf(d), { kind: 'flip', g: 0, axis: 'y' }), null, 'one row, same height: nothing to turn');
+});
+
+test('groups move only where there are groups', () => {
+  const loose = boxes([['a', 0, 0, 100, 60], ['b', 200, 0, 100, 60]]);
+  assert.ok(candidateMoves(refineContext(compactInput(loose, SETTINGS)), stateOf(loose)).every(m => !m.kind));
+  const d = grouped([['a', 0, 0, 100, 60], ['b', 0, 100, 100, 60], ['c', 300, 0, 200, 80]], { g1: ['a', 'b'], g2: ['c'] });
+  const kinds = candidateMoves(refineContext(compactInput(d, SETTINGS)), stateOf(d)).map(m => m.kind || 'tables');
+  assert.deepStrictEqual([...new Set(kinds)], ['tables', 'groups', 'flip']);
+  assert.strictEqual(kinds.filter(k => k === 'flip').length, 2, 'only the group of two tables turns over, either way');
+});
+
+const rel = (f, t) => ({ fromTable: f, toTable: t, fromCols: ['a_id'], toCols: ['id'] });
+/** Groups g1, g2 and g3 in a row, left to right, two tables each. */
+const threeInARow = (relations) => grouped(
+  [['a1', 0, 0, 180, 100], ['a2', 0, 160, 180, 100], ['b1', 400, 0, 180, 100], ['b2', 400, 160, 180, 100],
+    ['c1', 800, 0, 180, 100], ['c2', 800, 160, 180, 100]],
+  { g1: ['a1', 'a2'], g2: ['b1', 'b2'], g3: ['c1', 'c2'] },
+  relations);
+
+test('Improve brings together two groups that talk to each other across a third', () => {
+  const d = threeInARow([rel('a1', 'c1'), rel('a2', 'c2'), rel('c1', 'a2'), rel('c2', 'a1'), rel('b1', 'b2')]);
+  const input = compactInput(d, SETTINGS);
+  const reports = runAll(improve(input, stateOf(d)));
+  const first = reports.find(m => m.type === 'measured').measurement.metrics;
+  const best = lastBest(reports);
+  const centre = (keys) => {
+    const xs = best.positions.filter(([k]) => keys.includes(k)).map(([, x]) => x);
+    return (Math.min(...xs) + Math.max(...xs) + 180) / 2;
+  };
+  assert.ok(Math.abs(centre(['a1', 'a2']) - centre(['c1', 'c2'])) < 800, 'g1 and g3 end up nearer than across g2');
+  assert.ok(best.measurement.metrics.length < first.length, `lines ${first.length} -> ${best.measurement.metrics.length}`);
+});
+
+test('two groups trade places by the real lines only where the estimate does not find it worse', () => {
+  const d = threeInARow([rel('a1', 'b1'), rel('a2', 'b2'), rel('b1', 'a2')]);
+  const input = compactInput(d, SETTINGS);
+  const leave = { kind: 'groups', a: 1, b: 2, axis: 'x' };
+  assert.ok(placeMove(refineContext(input), stateOf(d), leave), 'g2 and g3 have room to trade places');
+
+  const judged = [];
+  const recording = (ctx) => {
+    const local = localJudge(ctx);
+    return { ...local, evaluate: (state, moves) => { judged.push(...moves.map(m => m.pair)); return local.evaluate(state, moves); } };
+  };
+  runAll(improve(input, stateOf(d), 0, recording));
+  assert.ok(judged.length, 'something was judged');
+  assert.ok(!judged.some(p => p.kind === 'groups' && p.a === 1 && p.b === 2), 'g2 leaving g1 for g3 is not judged');
+});
+
 // --- judging a swap by the real lines ------------------------------------------
 
 test('a swap routes again only the lines of the tables that moved, and those now in their way', () => {
@@ -263,7 +368,7 @@ test('a layout Improve reached goes on the diagram with its group boxes and its 
 });
 
 test('exploring measures the most promising of each few starting points, and refines it unless it is far behind', () => {
-  const { input, start } = firstLayout(schema(14, 2, 21));
+  const { input, start } = firstLayout(schema(14, 2, 23));
   const reports = runAll(createImproveJob({ kind: 'improve', input, start, options: { firstSeed: 5, maxTries: 8 } }));
 
   const tried = reports.filter(m => m.type === 'progress' && m.phase === 'exploring');

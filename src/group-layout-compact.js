@@ -257,9 +257,9 @@ function spacingScale(spacing) {
 }
 
 /**
- * The padding of a group box and the gap between two tables side by side, at
- * `spacing`: what this layout leaves, for whatever moves its tables afterwards
- * (compact-refine.js).
+ * The padding of a group box, the gap between two tables side by side and the
+ * gutter between two group boxes, at `spacing`: what this layout leaves, for
+ * whatever moves its tables afterwards (compact-refine.js).
  */
 export function compactSpacing(spacing) {
   const S = spacingScale(spacing);
@@ -268,6 +268,7 @@ export function compactSpacing(spacing) {
     padTop: Math.round(GL_PAD_TOP * S.pad),
     padBottom: Math.round(GL_PAD_BOTTOM * S.pad),
     gap: Math.round(GL_INNER.nodesep * S.gap),
+    gutter: Math.round(GL_GUTTER * S.gutter),
   };
 }
 
