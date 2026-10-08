@@ -112,11 +112,14 @@ test('arrangeGroupsCompact untangles far better than filling groups by list orde
     return d;
   })());
 
-  // Measured: 10 -> 5 crossings, 34 -> 23 vertices, and 9196 -> 6953px of line.
+  // Measured: 10 -> 3 crossings, 34 -> 28 vertices, and 9196 -> 7501px of line.
+  // Groups as near square as their lines allow cost this diagram vertices (23
+  // when they could be 2:1) and gave 16 others 17% shorter real lines with
+  // crossings, and canvases 27% smaller.
   assert.ok(after.crossings <= before.crossings / 2,
     `crossings should at least halve (${before.crossings} -> ${after.crossings})`);
-  assert.ok(after.vertices < before.vertices * 0.75,
-    `vertices should drop clearly (${before.vertices} -> ${after.vertices})`);
+  assert.ok(after.vertices < before.vertices * 0.9,
+    `vertices should drop (${before.vertices} -> ${after.vertices})`);
   assert.ok(after.length < before.length * 1.2,
     `line length must not balloon (${before.length} -> ${after.length})`);
 });
@@ -315,6 +318,64 @@ test('arrangeGroupsCompact keeps the canvas compact and screen-shaped', () => {
   const tableArea = d.model.tables.reduce((s, t) => s + t.w * t.h, 0);
   const density = tableArea / (w * h);
   assert.ok(density > 0.15, `canvas is too sparse: only ${(density * 100).toFixed(1)}% is table`);
+});
+
+/**
+ * A big group of 30 tables of mixed sizes with only two lines among them, three
+ * small groups that talk to each other, and one small group with no line at all.
+ */
+function hardlyLinked() {
+  const tables = [];
+  const groups = { big: [], a: [], b: [], c: [], alone: [] };
+  const add = (group, key, columns, nameLength) => {
+    tables.push({
+      key, name: key, x: 0, y: 0,
+      columns: Array.from({ length: columns }, (_, i) => ({ name: (i ? 'c'.repeat(nameLength) + i : 'id'), type: 'bigint' })),
+    });
+    groups[group].push(key);
+  };
+  for (let i = 0; i < 30; i++) add('big', `big_${i}`, 2 + (i * 7) % 13, 4 + (i * 5) % 17);
+  for (const g of ['a', 'b', 'c', 'alone']) for (let i = 0; i < 3; i++) add(g, `${g}_${i}`, 3 + i, 6);
+  const rel = (f, t) => ({ fromTable: f, toTable: t, fromCols: ['c1'], toCols: ['id'] });
+  const relations = [rel('big_1', 'big_2'), rel('big_3', 'big_4'), rel('a_0', 'b_0'), rel('b_1', 'c_0'), rel('c_1', 'a_1'),
+    rel('a_2', 'a_0'), rel('b_2', 'b_0'), rel('c_2', 'c_0'), rel('alone_1', 'alone_0')];
+  const annotations = Object.entries(groups).map(([id, keys]) => ({ id, type: 'group', text: id, color: 'blue', tables: keys, x: 0, y: 0, w: 100, h: 100 }));
+  return {
+    model: { tables, relations }, annotations, manualLinks: [], hidden: new Set(),
+    edgeAnchors: new Map(), edgeWaypoints: new Map(), edgeRoutings: new Map(), diagramLevel: 'physical',
+    markDirty() {}, onLayoutChange() {}, onHistorySnapshot() {}, getSnapshot() { return {}; },
+    setAnnotations(a) { this.annotations = a; },
+  };
+}
+
+test('a group of tables that hardly link is laid out as a block, not a single column', () => {
+  // Dagre puts tables without a line between them side by side: 30 of them
+  // made a column 30 tables tall, and a schema of such groups a canvas Fit could
+  // not show.
+  const d = hardlyLinked();
+  arrangeGroupsCompact(d);
+  const box = d.annotations.find(a => a.id === 'big');
+  const members = d.model.tables.filter(t => t.key.startsWith('big_'));
+  const ratio = Math.max(box.w / box.h, box.h / box.w);
+  assert.ok(ratio < 2, `about square, got ${box.w}x${box.h}`);
+  const stacked = members.reduce((s, t) => s + t.h, 0);
+  assert.ok(box.h < stacked / 3, `${box.h}px tall against ${stacked}px of tables stacked`);
+  // tables of about the same width share a column, so the box is mostly table
+  const fill = members.reduce((s, t) => s + t.w * t.h, 0) / (box.w * box.h);
+  assert.ok(fill > 0.45, `tables fill ${(fill * 100).toFixed(0)}% of the box`);
+});
+
+test('arrangeGroupsCompact leaves no group stranded across a hole from the others', () => {
+  // The grid of groups sizes each cell to its biggest box, so a small group in
+  // a big one sat far from everything; with nothing to pull it, it stayed there.
+  const d = hardlyLinked();
+  arrangeGroupsCompact(d);
+  const boxes = d.annotations.filter(a => a.type === 'group');
+  const apart = (a, b) => Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w), b.y - (a.y + a.h), a.y - (b.y + b.h));
+  for (const a of boxes) {
+    const nearest = Math.min(...boxes.filter(b => b !== a).map(b => apart(a, b)));
+    assert.ok(nearest <= 2 * 90, `${a.id} is ${nearest}px from the nearest group`);
+  }
 });
 
 test('arrangeGroupsCompact shortens lines rather than merely untangling them', () => {
