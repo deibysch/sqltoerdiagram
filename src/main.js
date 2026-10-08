@@ -383,19 +383,33 @@ diagram.onHiddenChange = () => { syncHiddenChip(); saveLayoutDebounced(); };
 
 canvas.addEventListener('contextmenu', (e) => {
   e.preventDefault();
-  if (diagram.toolMode === 'pan') {
-    hideCtx();
-    return;
-  }
   const r = canvas.getBoundingClientRect();
   const sx = e.clientX - r.left, sy = e.clientY - r.top;
   const w = diagram.screenToWorld(sx, sy);
   const t = diagram.tableAt(sx, sy);
-  const vHit = diagram.vertexAt(sx, sy);
-  const edge = diagram.edgeAt(sx, sy);
+  // the hand tool only looks: of the menu, it keeps what moves the view
+  const viewing = diagram.toolMode === 'pan';
+  if (viewing && !t) {
+    hideCtx();
+    return;
+  }
+  const vHit = viewing ? null : diagram.vertexAt(sx, sy);
+  const edge = viewing ? null : diagram.edgeAt(sx, sy);
   const items = [];
 
-  if (vHit && vHit.isWaypoint) {
+  if (t && !(vHit && vHit.isWaypoint)) {
+    // the selection when the table is part of it, else the table alone
+    const multi = diagram.selected.has(t) && diagram.selected.size > 1;
+    const keys = multi ? [...diagram.selected].map(x => x.key) : [t.key];
+    items.push({ label: multi ? `Center the ${keys.length} selected` : 'Center on table', act: () => diagram.showTables(keys) });
+    items.push({
+      label: multi ? 'Center them with their relations' : 'Center with its relations',
+      act: () => diagram.showTables(keys, { relations: true }),
+    });
+  }
+  if (viewing) {
+    // nothing else
+  } else if (vHit && vHit.isWaypoint) {
     diagram.selectedEdgeKey = vHit.key;
     diagram.markDirty();
     items.push({
@@ -491,8 +505,8 @@ canvas.addEventListener('contextmenu', (e) => {
       items.push({ label: 'Remove manual link', act: () => diagram.removeManualLink(edge.manualLink) });
     }
   }
-  if (diagram.hiddenCount() > 0) items.push({ label: `Show all hidden (${diagram.hiddenCount()})`, act: () => diagram.showAllHidden() });
-  if (diagram.manualLinkCount() > 0) items.push({ label: `Clear manual links (${diagram.manualLinkCount()})`, act: () => diagram.clearManualLinks() });
+  if (!viewing && diagram.hiddenCount() > 0) items.push({ label: `Show all hidden (${diagram.hiddenCount()})`, act: () => diagram.showAllHidden() });
+  if (!viewing && diagram.manualLinkCount() > 0) items.push({ label: `Clear manual links (${diagram.manualLinkCount()})`, act: () => diagram.clearManualLinks() });
   if (!items.length) { hideCtx(); return; }
   ctxMenu.innerHTML = '';
   for (const it of items) {
@@ -550,6 +564,8 @@ const tpMeta = tablesPanel.querySelector('.tp-meta');
 const tpHideAll = tablesPanel.querySelector('.tp-bulk[data-act="hide"]');
 const tpShowAll = tablesPanel.querySelector('.tp-bulk[data-act="show"]');
 const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+// a table with lines out to three others: centre with its relations
+const RELATED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="4.5" cy="5" r="2"/><circle cx="19.5" cy="5" r="2"/><circle cx="12" cy="21" r="2"/><path d="M6 6.5l3.8 3.4M18 6.5l-3.8 3.4M12 15v4"/></svg>';
 const EYEOFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 18 18"/><path d="M10.6 5.1A10.9 10.9 0 0 1 12 5c7 0 11 7 11 7a18.5 18.5 0 0 1-2.2 3"/><path d="M6.6 6.6A18.5 18.5 0 0 0 1 12s4 7 11 7a10.9 10.9 0 0 0 4-.7"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
 
 function fuzzy(q, s) {
@@ -584,11 +600,14 @@ function renderTables() {
     cb.addEventListener('change', () => diagram.selectByKey(t.key, cb.checked));
     const name = document.createElement('button');
     name.className = 'tp-name'; name.textContent = t.name; name.title = 'Center on ' + t.name;
-    name.addEventListener('click', () => diagram.centerOn(t.key));
+    name.addEventListener('click', () => diagram.showTables([t.key]));
+    const related = document.createElement('button');
+    related.className = 'tp-icon'; related.innerHTML = RELATED; related.title = 'Center with its relations';
+    related.addEventListener('click', () => diagram.showTables([t.key], { relations: true }));
     const eye = document.createElement('button');
-    eye.className = 'tp-hide'; eye.innerHTML = hidden ? EYEOFF : EYE; eye.title = hidden ? 'Show' : 'Hide';
+    eye.className = 'tp-icon'; eye.innerHTML = hidden ? EYEOFF : EYE; eye.title = hidden ? 'Show' : 'Hide';
     eye.addEventListener('click', () => diagram.setTableHidden(t.key, !hidden));
-    row.append(cb, name, eye);
+    row.append(cb, name, related, eye);
     tpList.appendChild(row);
   }
   if (!rows.length) {

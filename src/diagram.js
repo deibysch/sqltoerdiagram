@@ -2491,6 +2491,51 @@ export class Diagram {
     this.markDirty();
   }
 
+  // Bring tables into view, centred: as close as 100% while they all fit, or as
+  // close as the view already was if they fit at that. With `relations`, every
+  // table one of them has a line with comes into the frame too, hidden ones
+  // aside. A single table is pinned, so its lines stand out. Returns whether
+  // there was anything to show.
+  showTables(keys, { relations = false } = {}) {
+    const want = new Set(keys.map(k => k.toLowerCase()));
+    for (const t of this.model.tables) {
+      if (want.has(t.key.toLowerCase()) && this.hidden.has(t.key)) this.setTableHidden(t.key, false);
+    }
+    if (relations) {
+      const near = new Set();
+      const link = (a, b) => {
+        if (want.has(a)) near.add(b);
+        if (want.has(b)) near.add(a);
+      };
+      for (const r of this.model.relations) link(r.fromTable.toLowerCase(), r.toTable.toLowerCase());
+      for (const l of this.manualLinks) link(l.from.table.toLowerCase(), l.to.table.toLowerCase());
+      for (const t of this.model.tables) {
+        if (near.has(t.key.toLowerCase()) && !this.hidden.has(t.key)) want.add(t.key.toLowerCase());
+      }
+    }
+    const ts = this.model.tables.filter(t => want.has(t.key.toLowerCase()) && Number.isFinite(t.x));
+    if (!ts.length) return false;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const t of ts) {
+      x0 = Math.min(x0, t.x); y0 = Math.min(y0, t.y);
+      x1 = Math.max(x1, t.x + t.w); y1 = Math.max(y1, t.y + t.h);
+    }
+    const pad = 60;
+    const fits = Math.min((this.viewW - pad * 2) / (x1 - x0), (this.viewH - pad * 2) / (y1 - y0));
+    const readable = Math.min(fits, 1);
+    const scale = clamp(this.cam.scale >= readable && this.cam.scale <= fits ? this.cam.scale : readable, FLOOR_ZOOM, MAX_ZOOM);
+    this.cam.scale = scale;
+    this.cam.x = this.viewW / 2 - (x0 + x1) / 2 * scale;
+    this.cam.y = this.viewH / 2 - (y0 + y1) / 2 * scale;
+    if (keys.length === 1) {
+      const t = ts.find(x => x.key.toLowerCase() === keys[0].toLowerCase());
+      if (t) this._setPin(t);
+    }
+    this.markDirty();
+    this.onZoom?.(scale);
+    return true;
+  }
+
   // ---- manual links ----
   // a connector dot under the cursor (to start a link), or null
   _connectorAt(sx, sy) {

@@ -187,12 +187,12 @@ a.btn { text-decoration: none; color: var(--text); }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .tp-name:hover { color: var(--accent); }
-.tp-hide {
+.tp-icon {
   flex: none; width: 26px; height: 26px; display: grid; place-items: center;
   background: none; border: 0; border-radius: 6px; color: var(--muted); cursor: pointer;
 }
-.tp-hide:hover { background: var(--border); color: var(--text); }
-.tp-hide svg { width: 15px; height: 15px; }
+.tp-icon:hover { background: var(--border); color: var(--text); }
+.tp-icon svg { width: 15px; height: 15px; }
 .tp-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }
 
 /* "N hidden · Show all" restore chip */
