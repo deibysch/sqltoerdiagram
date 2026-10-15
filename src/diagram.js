@@ -436,15 +436,19 @@ export class Diagram {
       const k = this.linking;
       const dx = Math.max(28, Math.abs(k.cx - k.wx) * 0.4);
       ctx.save();
-      ctx.setLineDash([6 / cam.scale, 5 / cam.scale]);
-      ctx.strokeStyle = theme.edgeHi; ctx.lineWidth = 2 / cam.scale;
+      const minScreenPx = 0.8;
+      const linkW = Math.max(2, minScreenPx / cam.scale);
+      const strokeMult = linkW / 2;
+      ctx.setLineDash([6 * strokeMult, 5 * strokeMult]);
+      ctx.strokeStyle = theme.edgeHi; ctx.lineWidth = linkW;
       ctx.beginPath();
       ctx.moveTo(k.wx, k.wy);
       ctx.bezierCurveTo(k.wx + (k.side === 'right' ? dx : -dx), k.wy, k.cx, k.cy, k.cx, k.cy);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.fillStyle = theme.edgeHi;
-      dot(ctx, k.wx, k.wy, 4 / cam.scale);
+      const linkDotR = Math.max(4, 2 / cam.scale);
+      dot(ctx, k.wx, k.wy, linkDotR);
       ctx.restore();
     }
 
@@ -1065,19 +1069,25 @@ export class Diagram {
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
-    ctx.lineWidth = width / cam.scale;
-    if (dashed) ctx.setLineDash([6 / cam.scale, 5 / cam.scale]);
+    // Connection lines scale statically in world units so they thin down as you zoom out,
+    // with a minimum screen thickness guard (0.8px) so they stay visible even when zoomed far out.
+    const minScreenPx = 0.8;
+    const effectiveWidth = Math.max(width, minScreenPx / cam.scale);
+    ctx.lineWidth = effectiveWidth;
+    if (dashed) {
+      const dashScale = Math.max(1, minScreenPx / (cam.scale * width));
+      ctx.setLineDash([6 * dashScale, 5 * dashScale]);
+    }
     ctx.beginPath();
     drawRoutePath(ctx, routingStyle, p1, p2, waypoints, 8, seg.obstacles, seg.laneOffset || 0, this._hops?.get(seg.key));
     ctx.stroke();
     if (dashed) ctx.setLineDash([]);
 
     if (card && this.connectorStyle !== 'none') {
-      // Markers sit just outside each table, pointing along the line. Their shape
-      // is measured in diagram units, so it grows and shrinks with the tables as
-      // you zoom, like the rest of the drawing; only the stroke stays a hairline.
+      // Markers sit just outside each table, pointing along the line. Both their shape
+      // and stroke width scale statically in world units with the diagram.
       const s = 1;
-      const mw = Math.max(width, 1.4) / cam.scale;
+      const mw = Math.max(Math.max(width, 1.4), minScreenPx / cam.scale);
       let nx1 = p1.nx, ny1 = p1.ny;
       if ((nx1 === undefined || nx1 === null || (nx1 === 0 && ny1 === 0)) && (waypoints?.length || p2)) {
         const nextPt = waypoints?.length ? waypoints[0] : p2;
@@ -1095,8 +1105,9 @@ export class Diagram {
       drawMarker(ctx, p1.x, p1.y, nx1 ?? 1, ny1 ?? 0, card.from, s, mw);
       drawMarker(ctx, p2.x, p2.y, nx2 ?? -1, ny2 ?? 0, card.to, s, mw);
     } else {
-      dot(ctx, p1.x, p1.y, 3 / cam.scale);
-      dot(ctx, p2.x, p2.y, 3 / cam.scale);
+      const dotR = Math.max(3, 1.5 / cam.scale);
+      dot(ctx, p1.x, p1.y, dotR);
+      dot(ctx, p2.x, p2.y, dotR);
     }
 
     // If edge is selected or hovered, draw handles
