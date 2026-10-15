@@ -909,7 +909,15 @@ export class Diagram {
     const cull = { x0: vx0, y0: vy0, x1: vx1, y1: vy1 };
     const focus = this.focus;
     const focusKey = focus ? focus.key : null;
-    const fadeAlpha = this.pinned ? 0.05 : 0.16;   // pinned fades harder than transient hover
+    const selectedTableKeys = new Set();
+    if (focusKey) selectedTableKeys.add(focusKey.toLowerCase());
+    if (this.selected && this.selected.size > 0) {
+      for (const t of this.selected) {
+        if (t?.key) selectedTableKeys.add(t.key.toLowerCase());
+      }
+    }
+    const hasSelection = selectedTableKeys.size > 0 || !!this.selectedEdgeKey || !!this.hoverEdge;
+    const fadeAlpha = (this.pinned || (this.selected && this.selected.size > 0)) ? 0.05 : 0.16;   // pinned or selected tables fade harder
     const highlighted = [];
     const lettered = [];   // every drawn edge, for the words that go on top of them
     const queued = [];     // ... and for the crossings, which need every line first
@@ -1024,9 +1032,10 @@ export class Diagram {
 
       const isSelectedEdge = this.selectedEdgeKey === e.key;
       const isHoveredEdge = this.hoverEdge?.key === e.key;
-      const connected = (focusKey && (seg.fromKey === focusKey || seg.toKey === focusKey)) || isSelectedEdge || isHoveredEdge;
+      const isTableEdge = selectedTableKeys.has(seg.fromKey) || selectedTableKeys.has(seg.toKey);
+      const connected = isTableEdge || isSelectedEdge || isHoveredEdge;
 
-      if (focusKey || this.selectedEdgeKey || this.hoverEdge) {
+      if (hasSelection) {
         if (connected) { highlighted.push(seg); continue; }
         queued.push({ seg, color: edgeColor, width: 1.2, alpha: fadeAlpha, dashed: e.manual });
         lettered.push({ seg, alpha: fadeAlpha, focused: false });
@@ -1045,13 +1054,14 @@ export class Diagram {
     // known — otherwise the answer would depend on drawing order.
     this._hops = computeLineHops([...queued.map(q => q.seg), ...highlighted]);
 
-    for (const q of queued) this._strokeRoute(q.seg, q.color, q.width, q.alpha, q.dashed, false, false);
+    for (const q of queued) this._strokeRoute(q.seg, q.color, q.width, q.alpha, q.dashed, false, false, false);
     for (const seg of highlighted) {
       const isSelectedEdge = this.selectedEdgeKey === seg.key;
       const isHoveredEdge = this.hoverEdge?.key === seg.key;
+      const isTableEdge = selectedTableKeys.has(seg.fromKey) || selectedTableKeys.has(seg.toKey);
       const hiColor = (this.edgeColorMode === 'single' && !this.edgeColors.get(seg.key)) ? theme.edgeHi : seg.color;
-      const width = isSelectedEdge ? 3.0 : 2.5;
-      this._strokeRoute(seg, hiColor, width, 1.0, seg.manual, isSelectedEdge, isHoveredEdge);
+      const width = isSelectedEdge ? 3.2 : (isTableEdge ? 2.8 : 2.5);
+      this._strokeRoute(seg, hiColor, width, 1.0, seg.manual, isSelectedEdge, isHoveredEdge, true);
     }
     // The words are not drawn here: a table painted later would cover them, and
     // a line often runs behind one. _drawEdgeTextLayer picks them up once the
@@ -1063,19 +1073,27 @@ export class Diagram {
     this._pendingPills = highlighted;
   }
 
-  _strokeRoute(seg, color, width, alpha, dashed, isSelectedEdge = false, isHoveredEdge = false) {
+  _strokeRoute(seg, color, width, alpha, dashed, isSelectedEdge = false, isHoveredEdge = false, isDynamic = false) {
     const { ctx, cam } = this;
     const { p1, p2, waypoints, routingStyle, card, isOrthogonal } = seg;
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
-    // Connection lines scale statically in world units so they thin down as you zoom out,
-    // with a minimum screen thickness guard (0.8px) so they stay visible even when zoomed far out.
+
+    // Normal unselected lines stay static in world units so they thin down as you zoom out
+    // (with a 0.8px min screen thickness safeguard).
+    // When 1/X edges or 1/X tables are selected (isDynamic = true), the highlighted lines
+    // return to dynamic screen-space sizing (or grow even more) so they stand out prominently.
     const minScreenPx = 0.8;
-    const effectiveWidth = Math.max(width, minScreenPx / cam.scale);
+    const effectiveWidth = isDynamic
+      ? Math.max(width, (isSelectedEdge ? 3.4 : 2.6) / cam.scale)
+      : Math.max(width, minScreenPx / cam.scale);
+
     ctx.lineWidth = effectiveWidth;
     if (dashed) {
-      const dashScale = Math.max(1, minScreenPx / (cam.scale * width));
+      const dashScale = isDynamic
+        ? Math.max(1, 2.0 / (cam.scale * width))
+        : Math.max(1, minScreenPx / (cam.scale * width));
       ctx.setLineDash([6 * dashScale, 5 * dashScale]);
     }
     ctx.beginPath();
@@ -1084,10 +1102,10 @@ export class Diagram {
     if (dashed) ctx.setLineDash([]);
 
     if (card && this.connectorStyle !== 'none') {
-      // Markers sit just outside each table, pointing along the line. Both their shape
-      // and stroke width scale statically in world units with the diagram.
       const s = 1;
-      const mw = Math.max(Math.max(width, 1.4), minScreenPx / cam.scale);
+      const mw = isDynamic
+        ? Math.max(Math.max(width, 1.8), 2.2 / cam.scale)
+        : Math.max(Math.max(width, 1.4), minScreenPx / cam.scale);
       let nx1 = p1.nx, ny1 = p1.ny;
       if ((nx1 === undefined || nx1 === null || (nx1 === 0 && ny1 === 0)) && (waypoints?.length || p2)) {
         const nextPt = waypoints?.length ? waypoints[0] : p2;
@@ -1105,7 +1123,9 @@ export class Diagram {
       drawMarker(ctx, p1.x, p1.y, nx1 ?? 1, ny1 ?? 0, card.from, s, mw);
       drawMarker(ctx, p2.x, p2.y, nx2 ?? -1, ny2 ?? 0, card.to, s, mw);
     } else {
-      const dotR = Math.max(3, 1.5 / cam.scale);
+      const dotR = isDynamic
+        ? Math.max(4, 3.0 / cam.scale)
+        : Math.max(3, 1.5 / cam.scale);
       dot(ctx, p1.x, p1.y, dotR);
       dot(ctx, p2.x, p2.y, dotR);
     }
